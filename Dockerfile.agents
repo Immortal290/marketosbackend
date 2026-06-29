@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies if required (e.g. build-essential for compiling custom packages)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Python modules (agents, core, schemas, utils)
+COPY agents/ ./agents/
+COPY core/ ./core/
+COPY schemas/ ./schemas/
+COPY utils/ ./utils/
+
+# Expose the voice daemon port (matching DAEMON_PORT in voice_daemon.py)
+EXPOSE 8765
+
+# Command to run the main agents supervisor or voice daemon
+# Change this CMD depending on which agent entry point you want to boot on Railway
+CMD ["python", "-m", "agents.voice.voice_daemon"]

@@ -1,0 +1,14 @@
+langchain-core
+langchain-google-genai
+langchain-anthropic
+langchain-openai
+fastapi
+uvicorn
+redis
+google-genai
+pyngrok
+audioop-lts
+python-dotenv
+pydantic
+kafka-python
+aiokafka
