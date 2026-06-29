@@ -18,7 +18,7 @@ const startServer = async () => {
     logger.info('Connected to PostgreSQL via Prisma');
 
     // Connect to Kafka
-    // await connectKafka();
+    await connectKafka();
 
     // Setup Socket.io
     initSocket(server);
