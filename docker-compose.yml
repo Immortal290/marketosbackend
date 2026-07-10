@@ -1,0 +1,100 @@
+# ─── MarketOS — Full Stack Docker Compose ────────────────────────────────────
+#
+#  Services:
+#    frontend  → nginx serving static HTML/CSS/JS   → http://localhost:8080
+#    backend   → Node.js / Express API + Socket.io  → http://localhost:3000
+#    db        → PostgreSQL 15                       → localhost:5432
+#    redis     → Redis 7                             → localhost:6379
+#
+#  Usage:
+#    docker compose up --build          # first run
+#    docker compose up -d               # background
+#    docker compose down -v             # stop + remove volumes
+#    docker compose logs -f backend     # tail backend logs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: marketos_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB:-marketos}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-marketos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: marketos_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Node.js / Express) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./marketos-backend
+      dockerfile: Dockerfile
+    container_name: marketos_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV:               production
+      PORT:                   3000
+      DATABASE_URL:           postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketos}?schema=public
+      REDIS_HOST:             redis
+      REDIS_PORT:             6379
+      JWT_SECRET:             ${JWT_SECRET:-super_secret_jwt_key_change_in_production}
+      JWT_EXPIRES_IN:         ${JWT_EXPIRES_IN:-1d}
+      JWT_REFRESH_SECRET:     ${JWT_REFRESH_SECRET:-super_secret_refresh_key_change_in_production}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      ALLOWED_ORIGINS:        ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Frontend (nginx static) ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./marketos-frontend
+      dockerfile: Dockerfile
+    container_name: marketos_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# ── Named volumes ──────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:

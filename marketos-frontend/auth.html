@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MarketOS — Sign In</title>
+  <meta name="description" content="Sign in or create your MarketOS account to access the AI-powered marketing platform." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body>
+  <!-- Background particles -->
+  <div class="bg-grid"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <div class="auth-wrapper">
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="url(#lg1)"/>
+          <path d="M8 22L13 12l5 8 4-6 4 8" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs><linearGradient id="lg1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
+          </linearGradient></defs>
+        </svg>
+      </div>
+      <span class="brand-name">MarketOS</span>
+    </div>
+
+    <div class="card">
+      <!-- Tabs -->
+      <div class="tabs" role="tablist">
+        <button id="tab-signin" class="tab active" role="tab" aria-selected="true" onclick="switchTab('signin')">Sign In</button>
+        <button id="tab-signup" class="tab" role="tab" aria-selected="false" onclick="switchTab('signup')">Sign Up</button>
+        <div class="tab-indicator" id="tab-indicator"></div>
+      </div>
+
+      <!-- Sign In Form -->
+      <form id="form-signin" class="auth-form" novalidate onsubmit="handleSignIn(event)">
+        <h1 class="form-title">Welcome back</h1>
+        <p class="form-subtitle">Enter your credentials to access your workspace</p>
+
+        <div class="field">
+          <label for="signin-email">Email address</label>
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4l6 5 6-5M2 4h12v8H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input id="signin-email" type="email" placeholder="you@company.com" autocomplete="email" required />
+          </div>
+          <span class="field-error" id="err-signin-email"></span>
+        </div>
+
+        <div class="field">
+          <label for="signin-password">Password</label>
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <input id="signin-password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" class="toggle-pw" onclick="togglePw('signin-password', this)" aria-label="Toggle password">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+          <span class="field-error" id="err-signin-password"></span>
+        </div>
+
+        <div id="signin-alert" class="alert hidden"></div>
+
+        <button id="signin-btn" type="submit" class="btn-primary">
+          <span class="btn-text">Sign In</span>
+          <svg class="btn-spinner hidden" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="60" stroke-dashoffset="45" stroke-linecap="round"/></svg>
+        </button>
+      </form>
+
+      <!-- Sign Up Form -->
+      <form id="form-signup" class="auth-form hidden" novalidate onsubmit="handleSignUp(event)">
+        <h1 class="form-title">Create account</h1>
+        <p class="form-subtitle">Start your AI-powered marketing journey</p>
+
+        <div class="row-2">
+          <div class="field">
+            <label for="signup-fname">First name</label>
+            <div class="input-wrap">
+              <input id="signup-fname" type="text" placeholder="John" autocomplete="given-name" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="signup-lname">Last name</label>
+            <div class="input-wrap">
+              <input id="signup-lname" type="text" placeholder="Doe" autocomplete="family-name" />
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="signup-workspace">Workspace / Company name</label>
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4"/></svg>
+            <input id="signup-workspace" type="text" placeholder="Acme Corp" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="signup-email">Email address</label>
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4l6 5 6-5M2 4h12v8H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input id="signup-email" type="email" placeholder="you@company.com" autocomplete="email" required />
+          </div>
+          <span class="field-error" id="err-signup-email"></span>
+        </div>
+
+        <div class="field">
+          <label for="signup-password">Password <span class="label-hint">(min 8 characters)</span></label>
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <input id="signup-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+            <button type="button" class="toggle-pw" onclick="togglePw('signup-password', this)" aria-label="Toggle password">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+          <div class="pw-strength" id="pw-strength">
+            <div class="pw-bar" id="pw-bar"></div>
+          </div>
+          <span class="field-error" id="err-signup-password"></span>
+        </div>
+
+        <div id="signup-alert" class="alert hidden"></div>
+
+        <button id="signup-btn" type="submit" class="btn-primary">
+          <span class="btn-text">Create Account</span>
+          <svg class="btn-spinner hidden" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="60" stroke-dashoffset="45" stroke-linecap="round"/></svg>
+        </button>
+
+        <p class="terms">By creating an account you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.</p>
+      </form>
+    </div>
+
+    <p class="footer-note">© 2026 MarketOS · Enterprise AI Marketing Platform</p>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>
