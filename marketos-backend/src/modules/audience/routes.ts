@@ -299,7 +299,6 @@ router.delete('/segments/:id', (req: Request, res: Response) => {
 /* ─────────────────────────── LEAD SCORES ───────────────────────────── */
 
 import { AgentsService } from '../agents/service';
-const agentsService = new AgentsService();
 
 // ... existing code until lead scores ...
 
@@ -321,6 +320,7 @@ const agentsService = new AgentsService();
  *         description: Unauthorized
  */
 router.get('/lead-scores', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;
@@ -359,6 +359,7 @@ router.get('/lead-scores', (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.get('/personas', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;
@@ -389,6 +390,7 @@ router.get('/personas', (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.get('/lifecycle', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;

@@ -7,7 +7,6 @@ uvicorn
 redis
 google-genai
 pyngrok
-audioop-lts
 python-dotenv
 pydantic
 kafka-python

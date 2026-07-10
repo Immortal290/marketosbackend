@@ -81,7 +81,6 @@ router.get('/kpis', controller.getKpis);
 router.get('/activity', controller.getActivityFeed);
 
 import { AgentsService } from '../agents/service';
-const agentsService = new AgentsService();
 
 // ... existing router definitions ...
 
@@ -115,6 +114,7 @@ const agentsService = new AgentsService();
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/agents', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   res.status(200).json({
     success: true,
     data: agentsService.getAllAgents(),
@@ -139,6 +139,7 @@ router.get('/agents', (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.get('/alerts', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const alerts = [];
   
@@ -182,6 +183,7 @@ router.get('/alerts', (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.get('/campaign-health', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const performanceMultiplier = activeAgents.length / agents.length || 0.5;

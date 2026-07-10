@@ -127,7 +127,6 @@ router.post('/custom', (req: Request, res: Response) => {
 });
 
 import { AgentsService } from '../agents/service';
-const agentsService = new AgentsService();
 
 // ... existing code until executive reports ...
 
@@ -149,6 +148,7 @@ const agentsService = new AgentsService();
  *         description: Unauthorized
  */
 router.get('/executive', (req: Request, res: Response) => {
+  const agentsService = new AgentsService();
   const agents = agentsService.getAllAgents();
   const reportingAgent = agents.find(a => a.type === 'REPORTING');
   

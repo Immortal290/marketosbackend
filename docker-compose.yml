@@ -52,8 +52,8 @@ services:
   # ── Backend (Node.js / Express) ─────────────────────────────────────────────
   backend:
     build:
-      context: ./marketos-backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: marketos-backend/Dockerfile
     container_name: marketos_backend
     restart: unless-stopped
     ports:
@@ -69,6 +69,7 @@ services:
       JWT_REFRESH_SECRET:     ${JWT_REFRESH_SECRET:-super_secret_refresh_key_change_in_production}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       ALLOWED_ORIGINS:        ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      KAFKA_BROKER:           redpanda:9092
     depends_on:
       db:
         condition: service_healthy
@@ -80,6 +81,56 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # ── Kafka (Redpanda) ────────────────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v24.1.1
+    container_name: marketos_redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 256M
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --default-log-level=warn
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+    ports:
+      - "18082:18082"
+      - "19092:19092"
+      - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ── AI Agents (Python) ──────────────────────────────────────────────────────
+  agents:
+    build:
+      context: .
+      dockerfile: Dockerfile.agents
+    container_name: marketos_agents
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    # Boot the supervisor agent by default
+    command: ["python", "-m", "agents.supervisor.supervisor_agent"]
 
   # ── Frontend (nginx static) ─────────────────────────────────────────────────
   frontend:
@@ -98,3 +149,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  redpanda_data:
