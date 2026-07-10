@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neo-bg: #fdf6e3;
+  --neo-surface: #ffffff;
+  --neo-ink: #000000;
+  --neo-yellow: #ffde00;
+  --neo-pink: #ff4fcb;
+  --neo-cyan: #00e0ff;
+  --neo-lime: #a6ff00;
+  --neo-red: #ff3b30;
+  --neo-green: #00c853;
+  
+  --neo-border-width: 3px;
+  --neo-shadow: 6px 6px 0 0 var(--neo-ink);
+  --neo-shadow-sm: 4px 4px 0 0 var(--neo-ink);
+  --neo-shadow-lg: 8px 8px 0 0 var(--neo-ink);
+}
+
+.theme-pastel {
+  --neo-bg: #faf9f6;
+  --neo-surface: #ffffff;
+  --neo-ink: #334155;
+  --neo-yellow: #fef08a;
+  --neo-pink: #fbcfe8;
+  --neo-cyan: #bae6fd;
+  --neo-lime: #d9f99d;
+  --neo-red: #fca5a5;
+  --neo-green: #86efac;
+
+  --neo-border-width: 1px;
+  --neo-shadow: 2px 2px 0 0 var(--neo-ink);
+  --neo-shadow-sm: 1px 1px 0 0 var(--neo-ink);
+  --neo-shadow-lg: 4px 4px 0 0 var(--neo-ink);
+}
+
+@layer base {
+  body {
+    background-color: var(--neo-bg);
+    color: var(--neo-ink);
+    background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  ::selection {
+    background-color: var(--neo-pink);
+  }
+}
+
+/* neo-marquee */
+@keyframes neo-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.neo-marquee {
+  overflow: hidden;
+  width: 100%;
+}
+.neo-marquee__track {
+  display: flex;
+  width: max-content;
+  animation: neo-marquee 28s linear infinite;
+}
+.neo-marquee:hover .neo-marquee__track {
+  animation-play-state: paused;
+}
