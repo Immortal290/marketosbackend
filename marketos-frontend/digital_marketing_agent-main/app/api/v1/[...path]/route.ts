@@ -3,15 +3,24 @@ import { NextRequest, NextResponse } from "next/server";
 // Dynamic routing for all API requests
 export const dynamic = "force-dynamic";
 
+// ── Backend URL resolution (priority order) ─────────────────────────────────
+// Set NEXT_PUBLIC_API_BASE_URL in the Railway frontend service's Variables tab
+// to your backend's public Railway URL, e.g.:
+//   https://marketosbackend-production.up.railway.app
+//
+// Railway Private Networking (internal) also works if enabled:
+//   http://marketos-backend.railway.internal:3000
+// Enable it in Railway → Project Settings → Private Networking
 const BACKEND_CANDIDATES = [
+  process.env.NEXT_PUBLIC_API_BASE_URL,   // ← Set this in Railway frontend Variables
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
-  process.env.NEXT_PUBLIC_BACKEND_URL,
   process.env.API_URL,
-  "http://marketos-backend.railway.internal:3000",
+  "http://marketos-backend.railway.internal:3000",  // Railway private network
   "http://localhost:3000",
   "http://localhost:8000"
 ].filter((url): url is string => Boolean(url) && typeof url === "string");
+
 
 async function handleRequest(req: NextRequest, { params }: { params: { path?: string[] } }) {
   const pathSegments = params?.path || [];
