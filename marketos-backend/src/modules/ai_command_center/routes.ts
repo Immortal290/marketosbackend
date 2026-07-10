@@ -53,7 +53,39 @@ const router = Router();
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.post('/command', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { taskId: 'task-uuid', intent: 'CREATE_CAMPAIGN', confidence: 0.94, agentsSpawned: ['CopyAgent', 'CreativeAgent', 'EmailAgent'], estimatedMs: 12000 } });
+  const prompt = req.body.prompt?.toLowerCase() || '';
+  
+  let intent = 'UNKNOWN_INTENT';
+  let agentsSpawned = ['GeneralAgent'];
+  let routeTo = '/dashboard';
+
+  if (prompt.includes('campaign')) {
+    intent = 'CREATE_CAMPAIGN';
+    agentsSpawned = ['CopyAgent', 'CreativeAgent', 'EmailAgent'];
+    routeTo = '/campaigns';
+  } else if (prompt.includes('content') || prompt.includes('post') || prompt.includes('email') || prompt.includes('generation')) {
+    intent = 'GENERATE_CONTENT';
+    agentsSpawned = ['CreativeAgent', 'CopyAgent'];
+    routeTo = '/creative-studio';
+  } else if (prompt.includes('analy') || prompt.includes('report') || prompt.includes('performance')) {
+    intent = 'ANALYZE_PERFORMANCE';
+    agentsSpawned = ['AnalyticsAgent'];
+    routeTo = '/reports';
+  } else {
+    intent = 'GENERAL_QUERY';
+  }
+
+  res.status(200).json({ 
+    success: true, 
+    data: { 
+      taskId: `task-${Date.now()}`, 
+      intent, 
+      confidence: 0.94, 
+      agentsSpawned, 
+      estimatedMs: 12000,
+      routeTo
+    } 
+  });
 });
 
 /**
