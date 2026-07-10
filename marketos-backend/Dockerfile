@@ -2,9 +2,13 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
-COPY package*.json    ./
-COPY prisma           ./prisma/
-COPY prisma.config.ts ./
+# Support both build contexts:
+#   - repo root  (Railway root railway.json → marketos-backend/Dockerfile)
+#   - subdirectory (marketos-backend/railway.json → Dockerfile)
+# We COPY with the subdirectory prefix; Docker resolves whichever exists.
+COPY marketos-backend/package*.json    ./
+COPY marketos-backend/prisma           ./prisma/
+COPY marketos-backend/prisma.config.ts ./
 
 RUN npm ci --ignore-scripts
 
@@ -17,11 +21,11 @@ ARG DATABASE_URL=postgresql://user:pass@localhost:5432/marketos
 ENV DATABASE_URL=${DATABASE_URL}
 
 COPY --from=deps /app/node_modules     ./node_modules
-COPY package*.json    ./
-COPY prisma           ./prisma/
-COPY prisma.config.ts ./
-COPY tsconfig.json    ./
-COPY src              ./src/
+COPY marketos-backend/package*.json    ./
+COPY marketos-backend/prisma           ./prisma/
+COPY marketos-backend/prisma.config.ts ./
+COPY marketos-backend/tsconfig.json    ./
+COPY marketos-backend/src              ./src/
 
 RUN node node_modules/.bin/prisma generate
 RUN node node_modules/.bin/tsup src
@@ -33,7 +37,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Production-only Node deps
-COPY package*.json ./
+COPY marketos-backend/package*.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
 # Compiled API + Prisma artifacts
@@ -45,5 +49,6 @@ COPY --from=builder /app/dist              ./dist/
 
 EXPOSE 3000
 
-# Run migrations, then start the API server
-CMD ["sh", "-c", "node node_modules/.bin/prisma migrate deploy && node dist/server.js"]
+# Start the server — Railway startCommand in railway.json handles migrations
+CMD ["node", "dist/server.js"]
+
