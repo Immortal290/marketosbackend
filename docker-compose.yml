@@ -52,8 +52,8 @@ services:
   # ── Backend (Node.js / Express) ─────────────────────────────────────────────
   backend:
     build:
-      context: .
-      dockerfile: marketos-backend/Dockerfile
+      context: ./marketos-backend
+      dockerfile: Dockerfile
     container_name: marketos_backend
     restart: unless-stopped
     ports:
