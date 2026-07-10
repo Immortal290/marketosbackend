@@ -361,7 +361,10 @@ const swaggerOptions: swaggerJSDoc.Options = {
     },
     security: [{ bearerAuth: [] }],
   },
-  apis: ['./src/app.ts', './src/modules/**/*.ts'],
+  // NOTE: apis array points to source files for JSDoc scanning.
+  // In production (Docker), src/ does not exist — only dist/ does.
+  // We define the full OpenAPI spec inline above, so no file scanning is needed.
+  apis: [],
 };
 
 const swaggerSpec = swaggerJSDoc(swaggerOptions);
