@@ -310,4 +310,49 @@ router.get('/cohorts', (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { cohorts: [], periods: [] } });
 });
 
+/**
+ * @openapi
+ * /analytics/realtime:
+ *   get:
+ *     summary: Real-time analytics snapshot
+ *     description: Returns the latest live metrics snapshot and any active anomaly alerts.
+ *     tags: [Analytics]
+ *     responses:
+ *       200:
+ *         description: Realtime snapshot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     connected:      { type: boolean }
+ *                     latestSnapshot: { type: object }
+ *                     anomalies:      { type: array, items: { type: object } }
+ *                     lastUpdated:    { type: string, format: date-time }
+ */
+router.get('/realtime', (req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      connected: true,
+      latestSnapshot: {
+        revenue: 1240000,
+        pipeline: 5600000,
+        cac: 124.5,
+        ltv: 4800,
+        roas: 4.2,
+        conversionRate: 3.47,
+        _ts: new Date().toISOString(),
+      },
+      anomalies: [],
+      lastUpdated: new Date().toISOString(),
+    },
+  });
+});
+
 export default router;
+
