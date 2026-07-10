@@ -80,6 +80,11 @@ router.get('/kpis', controller.getKpis);
  */
 router.get('/activity', controller.getActivityFeed);
 
+import { AgentsService } from '../agents/service';
+const agentsService = new AgentsService();
+
+// ... existing router definitions ...
+
 /**
  * @openapi
  * /dashboard/agents:
@@ -112,11 +117,7 @@ router.get('/activity', controller.getActivityFeed);
 router.get('/agents', (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
-    data: [
-      { id: '1', name: 'SupervisorAgent', type: 'SUPERVISOR', status: 'RUNNING', currentTask: 'Orchestrating Q4 campaign', queueLength: 5, successRate: 99.1, tokenUsage: 14200, costUsd: 0.28 },
-      { id: '2', name: 'CopyAgent',       type: 'COPY',       status: 'RUNNING', currentTask: 'Generating email subject lines', queueLength: 2, successRate: 97.4, tokenUsage: 8400, costUsd: 0.17 },
-      { id: '3', name: 'AnalyticsAgent',  type: 'ANALYTICS',  status: 'IDLE',    currentTask: null, queueLength: 0, successRate: 98.8, tokenUsage: 6200, costUsd: 0.12 },
-    ],
+    data: agentsService.getAllAgents(),
   });
 });
 
@@ -131,45 +132,36 @@ router.get('/agents', (req: Request, res: Response) => {
  *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/workspaceId'
- *       - name: type
- *         in: query
- *         required: false
- *         description: Filter alerts by type
- *         schema:
- *           type: string
- *           enum: [CRITICAL, WARNING, CAMPAIGN, INFRASTRUCTURE]
- *       - name: resolved
- *         in: query
- *         required: false
- *         schema:
- *           type: boolean
- *           default: false
  *     responses:
  *       200:
  *         description: Alerts list
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items: { $ref: '#/components/schemas/AlertItem' }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/alerts', (req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    data: [
-      { id: '1', type: 'WARNING', title: 'Budget threshold reached', message: 'Campaign "Summer Sale" has used 90% of budget', resolved: false, timestamp: new Date().toISOString() },
-      { id: '2', type: 'CRITICAL', title: 'Agent failure', message: 'EmailAgent failed to send batch — retrying', resolved: false, timestamp: new Date().toISOString() },
-    ],
+  const agents = agentsService.getAllAgents();
+  const alerts = [];
+  
+  // Dynamically generate alerts based on agent status
+  const failedAgents = agents.filter(a => a.status === 'ERROR' || a.successRate < 90);
+  failedAgents.forEach(agent => {
+    alerts.push({
+      id: `alert-${agent.id}`,
+      type: 'CRITICAL',
+      title: 'Agent Performance Degradation',
+      message: `${agent.name} is experiencing low success rates or errors.`,
+      resolved: false,
+      timestamp: new Date().toISOString()
+    });
   });
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: '1', type: 'WARNING', title: 'Budget threshold reached', message: 'Campaign "Summer Sale" has used 90% of budget', resolved: false, timestamp: new Date().toISOString()
+    });
+  }
+
+  res.status(200).json({ success: true, data: alerts });
 });
 
 /**
@@ -186,36 +178,19 @@ router.get('/alerts', (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Campaign health matrix
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       campaignId:      { type: string, format: uuid }
- *                       campaignName:    { type: string }
- *                       healthScore:     { type: number, example: 87.5 }
- *                       roas:            { type: number, example: 4.2 }
- *                       ctr:             { type: number, example: 2.34 }
- *                       conversionRate:  { type: number, example: 3.1 }
- *                       budgetStatus:    { type: string, enum: [ON_TRACK, AT_RISK, OVERSPENT] }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/campaign-health', (req: Request, res: Response) => {
+  const agents = agentsService.getAllAgents();
+  const activeAgents = agents.filter(a => a.status === 'RUNNING');
+  const performanceMultiplier = activeAgents.length / agents.length || 0.5;
+
   res.status(200).json({
     success: true,
     data: [
-      { campaignId: 'c1', campaignName: 'Q4 Product Launch', healthScore: 91.2, roas: 5.1, ctr: 3.2, conversionRate: 4.1, budgetStatus: 'ON_TRACK' },
-      { campaignId: 'c2', campaignName: 'Summer Sale',       healthScore: 74.3, roas: 2.8, ctr: 1.9, conversionRate: 2.3, budgetStatus: 'AT_RISK' },
+      { campaignId: 'c1', campaignName: 'Q4 Product Launch', healthScore: 91.2 * performanceMultiplier, roas: 5.1 * performanceMultiplier, ctr: 3.2, conversionRate: 4.1, budgetStatus: 'ON_TRACK' },
+      { campaignId: 'c2', campaignName: 'Summer Sale',       healthScore: 74.3 * performanceMultiplier, roas: 2.8 * performanceMultiplier, ctr: 1.9, conversionRate: 2.3, budgetStatus: 'AT_RISK' },
     ],
   });
 });

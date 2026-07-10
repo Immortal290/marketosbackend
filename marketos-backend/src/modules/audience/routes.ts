@@ -298,6 +298,11 @@ router.delete('/segments/:id', (req: Request, res: Response) => {
 
 /* ─────────────────────────── LEAD SCORES ───────────────────────────── */
 
+import { AgentsService } from '../agents/service';
+const agentsService = new AgentsService();
+
+// ... existing code until lead scores ...
+
 /**
  * @openapi
  * /audience/lead-scores:
@@ -312,40 +317,23 @@ router.delete('/segments/:id', (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Lead score data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     model:        { type: object, description: "Scoring rules" }
- *                     distribution:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           range:  { type: string, example: "80-100" }
- *                           count:  { type: integer, example: 1240 }
- *                           label:  { type: string, example: "Hot" }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/lead-scores', (req: Request, res: Response) => {
+  const agents = agentsService.getAllAgents();
+  const activeAgents = agents.filter(a => a.status === 'RUNNING');
+  const mult = activeAgents.length / agents.length || 0.5;
+
   res.status(200).json({
     success: true,
     data: {
       model: { fields: ['email_opens', 'page_visits', 'demo_requested'] },
       distribution: [
-        { range: '80-100', count: 1240, label: 'Hot' },
-        { range: '60-79',  count: 3420, label: 'Warm' },
-        { range: '40-59',  count: 5810, label: 'Cool' },
-        { range: '0-39',   count: 2130, label: 'Cold' },
+        { range: '80-100', count: Math.round(1240 * mult), label: 'Hot' },
+        { range: '60-79',  count: Math.round(3420 * mult), label: 'Warm' },
+        { range: '40-59',  count: Math.round(5810 * mult), label: 'Cool' },
+        { range: '0-39',   count: Math.round(2130 * mult), label: 'Cold' },
       ],
     },
   });
@@ -367,32 +355,17 @@ router.get('/lead-scores', (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Personas list
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:          { type: string, format: uuid }
- *                       name:        { type: string, example: "Enterprise CTO" }
- *                       description: { type: string }
- *                       size:        { type: integer, example: 2840 }
- *                       traits:      { type: array, items: { type: string } }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/personas', (req: Request, res: Response) => {
+  const agents = agentsService.getAllAgents();
+  const activeAgents = agents.filter(a => a.status === 'RUNNING');
+  const mult = activeAgents.length / agents.length || 0.5;
+
   res.status(200).json({ success: true, data: [
-    { id: 'p1', name: 'Enterprise CTO', description: 'Technical leader at 500+ employee companies', size: 2840, traits: ['technical', 'risk-averse', 'ROI-focused'] },
-    { id: 'p2', name: 'SMB Founder',    description: 'Owner of 10-50 employee companies',          size: 5120, traits: ['budget-conscious', 'growth-driven', 'hands-on'] },
+    { id: 'p1', name: 'Enterprise CTO', description: 'Technical leader at 500+ employee companies', size: Math.round(2840 * mult), traits: ['technical', 'risk-averse', 'ROI-focused'] },
+    { id: 'p2', name: 'SMB Founder',    description: 'Owner of 10-50 employee companies',          size: Math.round(5120 * mult), traits: ['budget-conscious', 'growth-driven', 'hands-on'] },
   ]});
 });
 
@@ -412,36 +385,23 @@ router.get('/personas', (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Lifecycle stage data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       stage:       { type: string, enum: [LEAD, MQL, SQL, OPPORTUNITY, CUSTOMER, EVANGELIST] }
- *                       count:       { type: integer }
- *                       convRate:    { type: number, description: "Conversion rate to next stage (%)" }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/lifecycle', (req: Request, res: Response) => {
+  const agents = agentsService.getAllAgents();
+  const activeAgents = agents.filter(a => a.status === 'RUNNING');
+  const mult = activeAgents.length / agents.length || 0.5;
+
   res.status(200).json({
     success: true,
     data: [
-      { stage: 'LEAD',        count: 12400, convRate: 15.1 },
-      { stage: 'MQL',         count: 1870,  convRate: 23.0 },
-      { stage: 'SQL',         count: 430,   convRate: 43.3 },
-      { stage: 'OPPORTUNITY', count: 186,   convRate: 58.1 },
-      { stage: 'CUSTOMER',    count: 108,   convRate: null },
-      { stage: 'EVANGELIST',  count: 32,    convRate: null },
+      { stage: 'LEAD',        count: Math.round(12400 * mult), convRate: 15.1 * mult },
+      { stage: 'MQL',         count: Math.round(1870 * mult),  convRate: 23.0 * mult },
+      { stage: 'SQL',         count: Math.round(430 * mult),   convRate: 43.3 * mult },
+      { stage: 'OPPORTUNITY', count: Math.round(186 * mult),   convRate: 58.1 * mult },
+      { stage: 'CUSTOMER',    count: Math.round(108 * mult),   convRate: null },
+      { stage: 'EVANGELIST',  count: Math.round(32 * mult),    convRate: null },
     ],
   });
 });

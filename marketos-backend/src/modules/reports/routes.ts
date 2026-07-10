@@ -126,6 +126,11 @@ router.post('/custom', (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { reportId: 'rpt-uuid', status: 'GENERATING', estimatedMs: 15000 } });
 });
 
+import { AgentsService } from '../agents/service';
+const agentsService = new AgentsService();
+
+// ... existing code until executive reports ...
+
 /**
  * @openapi
  * /reports/executive:
@@ -140,24 +145,19 @@ router.post('/custom', (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Executive reports list
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items: { $ref: '#/components/schemas/Report' }
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 router.get('/executive', (req: Request, res: Response) => {
+  const agents = agentsService.getAllAgents();
+  const reportingAgent = agents.find(a => a.type === 'REPORTING');
+  
+  const isAgentActive = reportingAgent && reportingAgent.status === 'RUNNING';
+  const reportStatus = isAgentActive ? 'READY' : 'GENERATING';
+
   res.status(200).json({ success: true, data: [
-    { id: 'r1', name: 'Monthly Revenue Summary', type: 'EXECUTIVE', format: 'PDF', status: 'READY', downloadUrl: 'https://example.com/reports/r1.pdf', createdAt: new Date().toISOString() },
+    { id: 'r1', name: 'Monthly Revenue Summary', type: 'EXECUTIVE', format: 'PDF', status: reportStatus, downloadUrl: 'https://example.com/reports/r1.pdf', createdAt: new Date().toISOString() },
+    { id: 'r2', name: 'AI Agent Performance ROI', type: 'ANALYTICS', format: 'EXCEL', status: reportStatus, downloadUrl: 'https://example.com/reports/r2.xlsx', createdAt: new Date().toISOString() },
   ]});
 });
 

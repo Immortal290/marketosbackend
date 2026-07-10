@@ -58,18 +58,28 @@ import { AgentsService } from '../modules/agents/service';
 const agentsService = new AgentsService();
 
 function buildDashboardSnapshot() {
+  const agents = agentsService.getAllAgents();
+  const activeAgents = agents.filter(a => a.status === 'RUNNING');
+  const performanceMultiplier = agents.length > 0 ? activeAgents.length / agents.length : 1;
+  const avgSuccessRate = activeAgents.length > 0 
+    ? activeAgents.reduce((acc, a) => acc + a.successRate, 0) / activeAgents.length 
+    : 90;
+
+  const baseRevenue = 1240000;
+  const currentRevenue = baseRevenue * (0.5 + (performanceMultiplier * 0.8));
+
   return {
     kpis: {
       totalCampaigns:  12,
-      activeCampaigns: Math.round(jitter(7, 0.1)),
-      totalLeads:      Math.round(jitter(12400, 0.03)),
-      revenue:         jitter(1240000, 0.02),
-      roas:            jitter(4.2, 0.05),
+      activeCampaigns: Math.round(jitter(12 * performanceMultiplier, 0.1)), // More active agents = more active campaigns
+      totalLeads:      Math.round(jitter(12400 * (avgSuccessRate / 100), 0.03)),
+      revenue:         jitter(currentRevenue, 0.02),
+      roas:            jitter(4.2 * (avgSuccessRate / 100), 0.05),
     },
-    agents: agentsService.getAllAgents(),
+    agents: agents,
     campaignHealth: [
-      { campaignId: 'c1', campaignName: 'Q4 Product Launch', healthScore: jitter(91.2, 0.03), roas: jitter(5.1, 0.04), ctr: jitter(3.2, 0.05), conversionRate: jitter(4.1, 0.04), budgetStatus: 'ON_TRACK' },
-      { campaignId: 'c2', campaignName: 'Summer Sale',       healthScore: jitter(74.3, 0.04), roas: jitter(2.8, 0.05), ctr: jitter(1.9, 0.06), conversionRate: jitter(2.3, 0.05), budgetStatus: 'AT_RISK'  },
+      { campaignId: 'c1', campaignName: 'Q4 Product Launch', healthScore: jitter(91.2 * performanceMultiplier, 0.03), roas: jitter(5.1 * performanceMultiplier, 0.04), ctr: jitter(3.2, 0.05), conversionRate: jitter(4.1, 0.04), budgetStatus: 'ON_TRACK' },
+      { campaignId: 'c2', campaignName: 'Summer Sale',       healthScore: jitter(74.3 * performanceMultiplier, 0.04), roas: jitter(2.8 * performanceMultiplier, 0.05), ctr: jitter(1.9, 0.06), conversionRate: jitter(2.3, 0.05), budgetStatus: 'AT_RISK'  },
     ],
     timestamp: new Date().toISOString(),
   };
