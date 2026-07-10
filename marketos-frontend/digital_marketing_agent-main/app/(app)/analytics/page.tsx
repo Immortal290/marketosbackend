@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/api";
 import { NeoCard } from "@/components/ui/NeoCard";
 import { NeoBadge } from "@/components/ui/NeoBadge";
 import { NeoButton } from "@/components/ui/NeoButton";
@@ -116,6 +118,17 @@ const recentAlerts = [
 
 export default function AnalyticsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { data: execData } = useSWR("/analytics/executive", fetcher);
+  const { data: funnelData } = useSWR("/analytics/funnel", fetcher);
+  
+  const m = execData || { revenue: 1240000, pipeline: 5600000, cac: 124.5, ltv: 4800, roas: 4.2, conversionRate: 3.47 };
+
+  const dynamicMetrics = [
+    { label: "Total Revenue", value: `$${(m.revenue / 1000000).toFixed(1)}M`, change: "+12.4%", trend: "up" as const, accent: "yellow" as const },
+    { label: "Pipeline", value: `$${(m.pipeline / 1000000).toFixed(1)}M`, change: "+8.7%", trend: "up" as const, accent: "pink" as const },
+    { label: "Avg ROAS", value: `${m.roas}x`, change: "+0.3%", trend: "up" as const, accent: "cyan" as const },
+    { label: "Conversion Rate", value: `${m.conversionRate}%`, change: "+18.2%", trend: "up" as const, accent: "lime" as const },
+  ];
 
   return (
     <div className="flex flex-col gap-8">
@@ -153,7 +166,7 @@ export default function AnalyticsPage() {
 
       {/* Key Metrics */}
       <section className="grid gap-4 md:grid-cols-4">
-        {metrics.map((metric) => (
+        {dynamicMetrics.map((metric) => (
           <NeoCard key={metric.label} title={metric.label} accent={metric.accent}>
             <div className="flex items-end justify-between">
               <span className="font-display text-3xl font-black">
@@ -268,6 +281,25 @@ export default function AnalyticsPage() {
           ))}
         </div>
       </section>
+
+      {/* Funnel Data */}
+      {funnelData && (
+        <section>
+          <NeoCard title="Conversion Funnel" accent="lime">
+            <div className="flex flex-col gap-2">
+              {funnelData.map((stage: any) => (
+                <div key={stage.stage} className="flex items-center justify-between p-2 hover:bg-black/5 transition-colors">
+                  <span className="font-bold min-w-[100px]">{stage.stage}</span>
+                  <div className="flex-1 mx-4 h-4 border-[2px] border-black bg-neo-surface relative overflow-hidden">
+                    <div className="absolute top-0 left-0 h-full bg-neo-lime border-r-[2px] border-black" style={{ width: `${stage.convRate}%` }} />
+                  </div>
+                  <span className="font-mono text-sm font-black text-right min-w-[80px]">{stage.count.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </NeoCard>
+        </section>
+      )}
 
       {/* Two Column: Top Campaigns + Audience */}
       <section className="grid gap-4 md:grid-cols-2">

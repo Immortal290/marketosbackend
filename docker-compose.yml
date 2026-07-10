@@ -127,10 +127,13 @@ services:
       backend:
         condition: service_healthy
     environment:
-      - KAFKA_BROKER=redpanda:9092
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BROKERS=redpanda:9092
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketos}?schema=public
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    # Boot the supervisor agent by default
-    command: ["python", "-m", "agents.supervisor.supervisor_agent"]
+    # Boot the worker agent consumer loop by default
+    command: ["python", "worker.py"]
 
 #   # ── Frontend (nginx static) ─────────────────────────────────────────────────
 #   frontend:

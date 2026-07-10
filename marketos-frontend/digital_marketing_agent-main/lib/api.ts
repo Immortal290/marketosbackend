@@ -1,7 +1,19 @@
 const DEFAULT_API_BASE_URL = "http://localhost:3000/api/v1";
 
 export function getApiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    // If running in browser over HTTPS and env var points to http://localhost, fallback to relative /api/v1
+    if (typeof window !== "undefined" && window.location.protocol === "https:" && process.env.NEXT_PUBLIC_API_BASE_URL.includes("localhost")) {
+      return "/api/v1";
+    }
+    return process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "");
+  }
+  // When running inside the browser (`window` is defined) and no explicit external API URL was injected,
+  // ALWAYS use relative path "/api/v1" so it works across Railway, Vercel, Docker, or local proxies.
+  if (typeof window !== "undefined") {
+    return "/api/v1";
+  }
+  return DEFAULT_API_BASE_URL;
 }
 
 export function buildApiUrl(path: string) {

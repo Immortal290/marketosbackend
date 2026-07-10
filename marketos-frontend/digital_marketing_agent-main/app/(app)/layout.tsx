@@ -3,6 +3,7 @@ import "@/app/globals.css";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { NeoToaster } from "@/components/ui/NeoToaster";
 import { NeoCommandPalette } from "@/components/ui/NeoCommandPalette";
+import { AIGuidancePopup } from "@/components/ui/AIGuidancePopup";
 
 export const metadata: Metadata = {
   title: "Dashboard | MarketOS",
@@ -23,6 +24,7 @@ export default function AppLayout({
         </main>
         <NeoToaster position="bottom-right" />
         <NeoCommandPalette />
+        <AIGuidancePopup />
       </body>
     </html>
   );

@@ -1,13 +1,59 @@
-langchain-core
-langchain-google-genai
-langchain-anthropic
-langchain-openai
-fastapi
-uvicorn
-redis
-google-genai
-pyngrok
-python-dotenv
-pydantic
-kafka-python
-aiokafka
+# MarketOS — Python Dependencies
+# Phase 1 + Phase 2
+# Install: pip install -r requirements.txt --break-system-packages
+
+# ── LLM & Agent Framework ────────────────────────────────────────────────────
+anthropic>=0.86.0
+langchain-anthropic>=1.4.0
+langchain-google-genai>=4.2.1
+langchain-openai>=0.3.0
+langchain-core>=0.3.0
+langgraph>=0.2.0
+google-generativeai>=0.8.0
+
+# ── API Layer ────────────────────────────────────────────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+pydantic[email]>=2.7.0
+python-dotenv>=1.0.0
+
+# ── Kafka (Redpanda / MSK) ───────────────────────────────────────────────────
+confluent-kafka>=2.4.0
+
+# ── Database ─────────────────────────────────────────────────────────────────
+psycopg2-binary>=2.9.9        # PostgreSQL sync (used by agents directly)
+asyncpg>=0.29.0               # PostgreSQL async (for API layer)
+pgvector>=0.3.2               # pgvector Python client + numpy helpers
+clickhouse-driver>=0.2.9      # ClickHouse native protocol
+
+# ── Cache / Redis ────────────────────────────────────────────────────────────
+redis>=5.0.0
+
+# ── Email ────────────────────────────────────────────────────────────────────
+sendgrid>=6.11.0              # SendGrid SDK (PRD primary email provider)
+
+# ── Image Pipeline ───────────────────────────────────────────────────────────
+Pillow>=10.0.0                # Image processing
+
+# ── HTTP / Utilities ─────────────────────────────────────────────────────────
+httpx>=0.27.0
+requests>=2.32.0
+tenacity>=9.0.0               # Retry logic for API calls
+
+# ── Observability ────────────────────────────────────────────────────────────
+opentelemetry-sdk>=1.25.0
+opentelemetry-instrumentation-fastapi>=0.46b0
+
+# ── Document Generation ──────────────────────────────────────────────────────
+reportlab>=4.2.0
+
+# ── SMS / Messaging ──────────────────────────────────────────────────────────
+twilio>=9.0.0
+
+# ── Scheduling (analytics daemon mode) ──────────────────────────────────────
+apscheduler>=3.10.0           # 5-min analytics polling + hourly finance checks
+
+# ── ORM & Migrations ─────────────────────────────────────────────────────────
+SQLAlchemy>=2.0.30
+alembic>=1.13.0

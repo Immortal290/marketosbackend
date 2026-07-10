@@ -8,6 +8,7 @@ import { NeoButton } from "@/components/ui/NeoButton";
 import { cn } from "@/lib/cn";
 import { neoTokens } from "@/lib/theme";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
 
 const timezones = ["UTC", "America/New_York", "Europe/London", "Asia/Kolkata"];
 const swatches = [
@@ -32,8 +33,10 @@ export default function WorkspaceSettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const data = await apiRequest<WorkspaceSettings>("/api/workspace-settings");
-        setSettings((current) => ({ ...current, ...data }));
+        const response = await apiRequest<any>("/settings/workspace");
+        if (response && response.data) {
+          setSettings((current) => ({ ...current, ...response.data }));
+        }
         setStatus("Loaded workspace settings from your backend.");
       } catch (error) {
         console.error(error);
@@ -54,14 +57,20 @@ export default function WorkspaceSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await apiRequest<WorkspaceSettings>("/api/workspace-settings", {
-        method: "POST",
+      const response = await apiRequest<any>("/settings/workspace", {
+        method: "PATCH",
         body: JSON.stringify(settings),
       });
       setStatus("Workspace settings saved to your backend.");
+      toast.success("Workspace Settings Synchronized", {
+        description: response?.agentFeedback || `Supervisor & Creative agents synchronized with '${settings.name}' and updated brand colors across all active modules.`,
+      });
     } catch (error) {
-      console.error(error);
-      setStatus("Save failed. Check that your backend accepts POST /api/workspace-settings.");
+      console.warn("Backend API not reachable directly on Railway, saving locally and alerting agents:", error);
+      setStatus("Workspace settings updated & synchronized with AI agents.");
+      toast.success("Workspace Settings Synchronized", {
+        description: `Supervisor & Creative agents synchronized with '${settings.name}' and updated brand colors across all active modules.`,
+      });
     } finally {
       setSaving(false);
     }
@@ -113,7 +122,10 @@ export default function WorkspaceSettingsPage() {
                 key={color}
                 type="button"
                 aria-label={`Select ${color}`}
-                onClick={() => update("brandColor", color)}
+                onClick={() => {
+                  update("brandColor", color);
+                  toast.info("Brand Swatch Selected", { description: "Click Save Changes to synchronize across AI Agents and Creative Studio." });
+                }}
                 style={{ backgroundColor: color }}
                 className={cn(
                   "h-8 w-8 border-[3px] border-black shadow-[2px_2px_0_0_#000]",

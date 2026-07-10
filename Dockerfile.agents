@@ -11,11 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Python modules (agents, core, schemas, utils)
+# Copy Python modules (agents, core, schemas, utils, graph, models, api, worker, main)
 COPY agents/ ./agents/
 COPY core/ ./core/
 COPY schemas/ ./schemas/
 COPY utils/ ./utils/
+COPY graph/ ./graph/
+COPY models/ ./models/
+COPY api.py ./
+COPY main.py ./
+COPY worker.py ./
 
 # Expose the voice daemon port (matching DAEMON_PORT in voice_daemon.py)
 EXPOSE 8765
