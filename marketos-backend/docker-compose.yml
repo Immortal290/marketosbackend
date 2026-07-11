@@ -54,8 +54,8 @@ services:
   # ── Backend API ─────────────────────────────────────────────────────────────
   app:
     build:
-      context: ..                              # project root — grants access to both backend & frontend
-      dockerfile: marketos-backend/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     container_name: marketos_app
     restart: unless-stopped
     ports:
@@ -70,8 +70,8 @@ services:
       JWT_EXPIRES_IN:         1d
       JWT_REFRESH_SECRET:     super_secret_refresh_key_for_development_only
       JWT_REFRESH_EXPIRES_IN: 7d
-      FRONTEND_URL:           https://digitalmarketingagent-production.up.railway.app
-      ALLOWED_ORIGINS:        "https://digitalmarketingagent-production.up.railway.app,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5500,http://127.0.0.1:5500"
+      FRONTEND_URL:           http://localhost:3001
+      ALLOWED_ORIGINS:        "https://digitalmarketingagent-production.up.railway.app,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500,*"
     depends_on:
       db:
         condition: service_healthy
@@ -83,6 +83,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # ── AI Agents API (Python FastAPI on port 8000) ─────────────────────────────
+  agents_api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.agents
+    container_name: marketos_agents_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL:        redis://redis:6379/0
+      DATABASE_URL:     postgresql://postgres:postgres@db:5432/marketos?schema=public
+      OPENAI_API_KEY:   ${OPENAI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "api.py"]
 
 volumes:
   postgres_data:
