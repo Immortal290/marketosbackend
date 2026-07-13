@@ -109,10 +109,10 @@ const STAGE_ICONS: Record<string, React.ReactNode> = {
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  INIT:          "text-neo-cyan",
-  GLM_REASONING: "text-neo-pink",
-  AB_TEST:       "text-yellow-500",
-  AGENT_EXEC:    "text-neo-lime",
+  INIT:          "text-cyan-400",
+  GLM_REASONING: "text-pink-400",
+  AB_TEST:       "text-yellow-400",
+  AGENT_EXEC:    "text-lime-400",
   SYNTHESIS:     "text-purple-400",
   COMPLETE:      "text-green-400",
 };
@@ -179,20 +179,20 @@ function OrchestratorTerminal({
       {/* Terminal log */}
       <div
         ref={containerRef}
-        className="p-4 rounded-none border-[3px] border-neo-ink bg-neo-surface font-mono text-sm h-72 overflow-y-auto shadow-neo-sm relative"
+        className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-72 overflow-y-auto shadow-[4px_4px_0_0_#000] relative"
       >
-        <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-neo-surface border-b border-neo-ink/30 z-10">
+        <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-gray-900 border-b border-gray-700 z-10">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-neo-pink animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-neo-pink">AI Agent Pipeline — Processing</span>
+            <Zap className="w-4 h-4 text-pink-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">AI Agent Pipeline — Processing</span>
           </div>
-          {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-neo-cyan" />}
+          {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
         </div>
 
         <div className="flex flex-col gap-2">
           {events.map((ev, i) => (
             <div key={i} className="flex gap-3 items-start">
-              <span className={`mt-0.5 flex-shrink-0 ${ev.error ? "text-red-500" : (ev.stage ? STAGE_COLORS[ev.stage] || "text-neo-cyan" : "text-neo-cyan")}`}>
+              <span className={`mt-0.5 flex-shrink-0 ${ev.error ? "text-red-500" : (ev.stage ? STAGE_COLORS[ev.stage] || "text-cyan-400" : "text-cyan-400")}`}>
                 {ev.error ? <span className="text-red-500">⚠</span> : (ev.stage ? STAGE_ICONS[ev.stage] || <span>&gt;</span> : <span>&gt;</span>)}
               </span>
               <div className="flex flex-col gap-0.5 min-w-0">
@@ -201,21 +201,21 @@ function OrchestratorTerminal({
                     <span className="font-bold text-red-500 text-xs">PIPELINE ERROR</span>
                   ) : (
                     <>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neo-ink/50">{ev.stage ? STAGE_LABELS[ev.stage] || ev.stage : ""}</span>
-                      <span className="font-bold text-neo-ink text-xs">{ev.agent}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{ev.stage ? STAGE_LABELS[ev.stage] || ev.stage : ""}</span>
+                      <span className="font-bold text-white text-xs">{ev.agent}</span>
                       <span className={`text-[10px] uppercase font-bold px-1 rounded ${
                     ev.status === "completed" ? "bg-green-500/20 text-green-400" :
-                    ev.status === "running"   ? "bg-blue-500/20 text-neo-cyan" :
+                    ev.status === "running"   ? "bg-blue-500/20 text-cyan-400" :
                     ev.status === "error"     ? "bg-red-500/20 text-red-400" :
                     ev.status === "skipped"   ? "bg-gray-500/20 text-gray-400" :
                     "bg-yellow-500/20 text-yellow-400"
                   }`}>{ev.status}</span>
-                  {ev.status === "running" && <Loader2 className="w-3 h-3 animate-spin text-neo-cyan" />}
+                  {ev.status === "running" && <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />}
                   {ev.status === "completed" && <CheckCircle2 className="w-3 h-3 text-green-400" />}
                     </>
                   )}
                 </div>
-                <span className={`text-xs break-all ${ev.error ? "text-red-500 font-bold" : "text-neo-ink/70"}`}>
+                <span className={`text-xs break-all ${ev.error ? "text-red-500 font-bold" : "text-gray-300"}`}>
                   {ev.error ? ev.error : (i === events.length - 1 && isExecuting
                     ? <DecryptingText text={ev.detail || ""} />
                     : ev.detail)}
@@ -237,7 +237,7 @@ function OrchestratorTerminal({
                 {ev.stage === "GLM_REASONING" && ev.status === "completed" && ev.data?.agents && (
                   <div className="mt-1 flex gap-1 flex-wrap">
                     {(ev.data.agents as string[]).map(a => (
-                      <span key={a} className="text-[10px] bg-neo-pink/20 text-neo-pink px-1 rounded">{a}</span>
+                      <span key={a} className="text-[10px] bg-pink-500/20 text-pink-400 px-1 rounded">{a}</span>
                     ))}
                   </div>
                 )}
@@ -246,8 +246,8 @@ function OrchestratorTerminal({
           ))}
           {isExecuting && (
             <div className="flex gap-2">
-              <span className="text-neo-cyan">&gt;</span>
-              <span className="animate-pulse text-neo-cyan">_</span>
+              <span className="text-cyan-400">&gt;</span>
+              <span className="animate-pulse text-cyan-400">_</span>
             </div>
           )}
         </div>
@@ -255,13 +255,29 @@ function OrchestratorTerminal({
 
       {/* Documentation panel — appears after SYNTHESIS completes */}
       {documentation && (
-        <div className="border-[3px] border-neo-ink bg-white shadow-neo-sm">
-          <div className="flex items-center gap-2 px-4 py-3 bg-neo-pink border-b-[3px] border-neo-ink">
-            <FileText className="w-4 h-4" />
-            <span className="font-display font-black text-sm uppercase">AI Structured Report</span>
+        <div className="border-[3px] border-black bg-white shadow-[4px_4px_0_0_#000] mt-2">
+          <div className="flex items-center justify-between px-4 py-3 bg-neo-pink border-b-[3px] border-black">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-black" />
+              <span className="font-display font-black text-sm uppercase text-black">AI Structured Report</span>
+            </div>
+            <button
+              onClick={() => {
+                const blob = new Blob([documentation], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `marketos_report_${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-2 bg-black text-white px-3 py-1.5 text-xs font-bold uppercase hover:bg-black/80 transition-colors shadow-neo-sm active:translate-y-px active:shadow-none"
+            >
+              Download Report
+            </button>
           </div>
           <div className="px-4 py-4 max-h-96 overflow-y-auto">
-            <pre className="whitespace-pre-wrap font-mono text-xs text-neo-ink leading-relaxed">
+            <pre className="whitespace-pre-wrap font-mono text-xs text-black leading-relaxed">
               {documentation}
             </pre>
           </div>
