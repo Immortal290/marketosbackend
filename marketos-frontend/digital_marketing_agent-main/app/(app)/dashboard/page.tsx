@@ -90,12 +90,13 @@ const agentCommands = [
 // ── Stage event types ─────────────────────────────────────────────────────────
 
 type StageEvent = {
-  stage:     "INIT" | "GLM_REASONING" | "AB_TEST" | "AGENT_EXEC" | "SYNTHESIS" | "COMPLETE" | "error";
-  agent:     string;
-  status:    "starting" | "running" | "completed" | "error" | "skipped";
-  detail:    string;
-  data:      Record<string, any>;
-  timestamp: string;
+  stage?:    "INIT" | "GLM_REASONING" | "AB_TEST" | "AGENT_EXEC" | "SYNTHESIS" | "COMPLETE" | "error";
+  agent?:    string;
+  status?:   "starting" | "running" | "completed" | "error" | "skipped";
+  detail?:   string;
+  data?:     Record<string, any>;
+  timestamp?: string;
+  error?:    string; // For backend stream errors
 };
 
 const STAGE_ICONS: Record<string, React.ReactNode> = {
@@ -191,14 +192,18 @@ function OrchestratorTerminal({
         <div className="flex flex-col gap-2">
           {events.map((ev, i) => (
             <div key={i} className="flex gap-3 items-start">
-              <span className={`mt-0.5 flex-shrink-0 ${STAGE_COLORS[ev.stage] || "text-neo-cyan"}`}>
-                {STAGE_ICONS[ev.stage] || <span>&gt;</span>}
+              <span className={`mt-0.5 flex-shrink-0 ${ev.error ? "text-red-500" : (ev.stage ? STAGE_COLORS[ev.stage] || "text-neo-cyan" : "text-neo-cyan")}`}>
+                {ev.error ? <span className="text-red-500">⚠</span> : (ev.stage ? STAGE_ICONS[ev.stage] || <span>&gt;</span> : <span>&gt;</span>)}
               </span>
               <div className="flex flex-col gap-0.5 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-neo-ink/50">{STAGE_LABELS[ev.stage] || ev.stage}</span>
-                  <span className="font-bold text-neo-ink text-xs">{ev.agent}</span>
-                  <span className={`text-[10px] uppercase font-bold px-1 rounded ${
+                  {ev.error ? (
+                    <span className="font-bold text-red-500 text-xs">PIPELINE ERROR</span>
+                  ) : (
+                    <>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neo-ink/50">{ev.stage ? STAGE_LABELS[ev.stage] || ev.stage : ""}</span>
+                      <span className="font-bold text-neo-ink text-xs">{ev.agent}</span>
+                      <span className={`text-[10px] uppercase font-bold px-1 rounded ${
                     ev.status === "completed" ? "bg-green-500/20 text-green-400" :
                     ev.status === "running"   ? "bg-blue-500/20 text-neo-cyan" :
                     ev.status === "error"     ? "bg-red-500/20 text-red-400" :
@@ -207,11 +212,13 @@ function OrchestratorTerminal({
                   }`}>{ev.status}</span>
                   {ev.status === "running" && <Loader2 className="w-3 h-3 animate-spin text-neo-cyan" />}
                   {ev.status === "completed" && <CheckCircle2 className="w-3 h-3 text-green-400" />}
+                    </>
+                  )}
                 </div>
-                <span className="text-neo-ink/70 text-xs break-all">
-                  {i === events.length - 1 && isExecuting
-                    ? <DecryptingText text={ev.detail} />
-                    : ev.detail}
+                <span className={`text-xs break-all ${ev.error ? "text-red-500 font-bold" : "text-neo-ink/70"}`}>
+                  {ev.error ? ev.error : (i === events.length - 1 && isExecuting
+                    ? <DecryptingText text={ev.detail || ""} />
+                    : ev.detail)}
                 </span>
                 {/* Show A/B result inline */}
                 {ev.stage === "AB_TEST" && ev.status === "completed" && ev.data?.ab_result && (
@@ -339,6 +346,12 @@ export default function MissionControlPage() {
                   finalAgents = (ev.data.agents as string[]).join(", ");
                   if (ev.data.routeTo) finalRouteTo = ev.data.routeTo;
                   if (ev.data.intent)  finalIntent  = ev.data.intent;
+                }
+                
+                if (ev.error) {
+                  setIsExecuting(false);
+                  toast.error("Pipeline encountered an error");
+                  return;
                 }
               } catch (_e) {}
             }
