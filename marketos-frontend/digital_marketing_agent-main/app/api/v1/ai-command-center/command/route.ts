@@ -61,18 +61,18 @@ function buildLocalStream(prompt: string): ReadableStream {
   const taskId = `task-${Date.now()}`;
 
   const stages = [
-    buildSSELine("INIT",         "GLM-5.2 Orchestrator", "starting",  `Session initialised — receiving query`),
-    buildSSELine("GLM_REASONING","GLM-5.2 Orchestrator", "running",   "Analysing intent with GLM-5.2 reasoning engine..."),
-    buildSSELine("GLM_REASONING","GLM-5.2 Orchestrator", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
-    buildSSELine("AB_TEST",      "A/B Test Agent",       "running",   "Running mandatory Bayesian A/B analysis gate..."),
-    buildSSELine("AB_TEST",      "A/B Test Agent",       "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
+    buildSSELine("INIT",         "MarketOS AI",       "starting",  `Session initialised — receiving query`),
+    buildSSELine("GLM_REASONING","AI Engine",          "running",   "Analysing intent — classifying request & planning agent workflow..."),
+    buildSSELine("GLM_REASONING","AI Engine",          "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
+    buildSSELine("AB_TEST",      "A/B Test Agent",     "running",   "Running mandatory Bayesian A/B analysis gate..."),
+    buildSSELine("AB_TEST",      "A/B Test Agent",     "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
     ...agents.map(a => buildSSELine("AGENT_EXEC", a, "running",   `Executing ${a}...`)),
     ...agents.map(a => buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`)),
-    buildSSELine("SYNTHESIS",    "GLM-5.2 Orchestrator", "running",   "Synthesising all outputs into structured documentation..."),
-    buildSSELine("SYNTHESIS",    "GLM-5.2 Orchestrator", "completed", "Documentation ready", {
+    buildSSELine("SYNTHESIS",    "Document Generator", "running",   "Synthesising all outputs into structured documentation..."),
+    buildSSELine("SYNTHESIS",    "Document Generator", "completed", "Documentation ready", {
       documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## A/B Test Gate\n- Decision: Winner Declared\n- Winner Variant: V-001 (P(best) = 96%)\n- Key Learning: Urgency-led messaging outperforms benefit-led by 18%\n\n## Recommendations\n1. Proceed with the recommended agent outputs in the ${routeTo.replace("/", "").toUpperCase()} module\n2. Scale winning A/B variant to full audience list\n3. Monitor performance via Analytics Agent over next 24h\n\n## Next Steps\n1. Navigate to ${routeTo} to review agent work\n2. Approve copy variants and launch campaign\n3. Set up automated monitoring alerts`
     }),
-    buildSSELine("COMPLETE",     "GLM-5.2 Orchestrator", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
+    buildSSELine("COMPLETE",     "MarketOS AI",       "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
       session_id: taskId, intent, confidence, agents_run: agents.length + 1, routeTo,
       documentation: `## Executive Summary\n${summary}`,
       ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 },

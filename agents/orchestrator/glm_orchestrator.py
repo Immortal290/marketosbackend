@@ -198,13 +198,13 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
     glm = get_glm(temperature=0)
 
     # ── STAGE 0: Initialisation ───────────────────────────────────────────
-    yield _event("INIT", "GLM-5.2 Orchestrator", "starting",
+    yield _event("INIT", "MarketOS AI", "starting",
                  f"Session {session_id} — receiving user query")
     time.sleep(0.1)
 
     # ── STAGE 1: GLM Intent Classification ───────────────────────────────
-    yield _event("GLM_REASONING", "GLM-5.2 Orchestrator", "running",
-                 "Analysing query with GLM-5.2 — intent classification & agent routing")
+    yield _event("GLM_REASONING", "AI Engine", "running",
+                 "Analysing query — intent classification & agent routing")
 
     try:
         clf_response = glm.invoke([
@@ -229,7 +229,7 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
     agents_plan = INTENT_AGENT_MAP.get(intent, INTENT_AGENT_MAP["GENERAL_QUERY"])
     route_to    = ROUTE_MAP.get(intent, "/dashboard")
 
-    yield _event("GLM_REASONING", "GLM-5.2 Orchestrator", "completed",
+    yield _event("GLM_REASONING", "AI Engine", "completed",
                  f"Intent: {intent} ({int(confidence * 100)}% confidence) — routing to {len(agents_plan)} agents",
                  {
                      "intent":     intent,
@@ -342,7 +342,7 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
                          f"Error: {e}", {"error": str(e)})
 
     # ── STAGE 4: GLM Documentation Synthesis ─────────────────────────────
-    yield _event("SYNTHESIS", "GLM-5.2 Orchestrator", "running",
+    yield _event("SYNTHESIS", "Document Generator", "running",
                  "Synthesising all agent outputs into structured documentation...")
 
     synthesis_input = _build_synthesis_input(user_query, intent, summary, agent_outputs)
@@ -356,11 +356,11 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
         agent_log("ORCHESTRATOR", f"Synthesis error: {e}")
         documentation = _fallback_documentation(user_query, intent, summary, agent_outputs)
 
-    yield _event("SYNTHESIS", "GLM-5.2 Orchestrator", "completed",
+    yield _event("SYNTHESIS", "Document Generator", "completed",
                  "Documentation ready", {"documentation": documentation})
 
     # ── STAGE 5: Complete ─────────────────────────────────────────────────
-    yield _event("COMPLETE", "GLM-5.2 Orchestrator", "completed",
+    yield _event("COMPLETE", "MarketOS AI", "completed",
                  f"Workflow complete — {len(agents_plan)} agents executed",
                  {
                      "session_id":    session_id,

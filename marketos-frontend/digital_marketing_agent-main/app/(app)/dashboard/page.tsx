@@ -116,6 +116,16 @@ const STAGE_COLORS: Record<string, string> = {
   COMPLETE:      "text-green-400",
 };
 
+// User-friendly stage labels (no model names exposed)
+const STAGE_LABELS: Record<string, string> = {
+  INIT:          "Initialising",
+  GLM_REASONING: "Intent Analysis",
+  AB_TEST:       "A/B Testing",
+  AGENT_EXEC:    "Agent Processing",
+  SYNTHESIS:     "Report Generation",
+  COMPLETE:      "Complete",
+};
+
 function DecryptingText({ text }: { text: string }) {
   const [displayed, setDisplayed] = useState("");
   
@@ -172,8 +182,8 @@ function OrchestratorTerminal({
       >
         <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-neo-surface border-b border-neo-ink/30 z-10">
           <div className="flex items-center gap-2">
-            <Brain className="w-4 h-4 text-neo-pink animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-neo-pink">GLM-5.2 Orchestrator — Agent Pipeline</span>
+            <Zap className="w-4 h-4 text-neo-pink animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-neo-pink">AI Agent Pipeline — Processing</span>
           </div>
           {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-neo-cyan" />}
         </div>
@@ -186,6 +196,7 @@ function OrchestratorTerminal({
               </span>
               <div className="flex flex-col gap-0.5 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-neo-ink/50">{STAGE_LABELS[ev.stage] || ev.stage}</span>
                   <span className="font-bold text-neo-ink text-xs">{ev.agent}</span>
                   <span className={`text-[10px] uppercase font-bold px-1 rounded ${
                     ev.status === "completed" ? "bg-green-500/20 text-green-400" :
@@ -240,7 +251,7 @@ function OrchestratorTerminal({
         <div className="border-[3px] border-neo-ink bg-white shadow-neo-sm">
           <div className="flex items-center gap-2 px-4 py-3 bg-neo-pink border-b-[3px] border-neo-ink">
             <FileText className="w-4 h-4" />
-            <span className="font-display font-black text-sm uppercase">GLM-5.2 Structured Report</span>
+            <span className="font-display font-black text-sm uppercase">AI Structured Report</span>
           </div>
           <div className="px-4 py-4 max-h-96 overflow-y-auto">
             <pre className="whitespace-pre-wrap font-mono text-xs text-neo-ink leading-relaxed">
