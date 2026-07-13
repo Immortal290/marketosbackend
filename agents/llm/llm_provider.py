@@ -181,14 +181,20 @@ def get_glm(temperature: float = 0):
         return get_llm(temperature=temperature)
 
     from langchain_openai import ChatOpenAI
-    return ChatOpenAI(
+    glm_model = ChatOpenAI(
         model="z-ai/glm-5.2",
         openai_api_key=api_key,
         openai_api_base="https://integrate.api.nvidia.com/v1",
         temperature=temperature,
         max_tokens=8192,
+        max_retries=1, # Don't retry endlessly if NVIDIA is down, fail fast to fallback
+        timeout=15, # Fail fast on hang
         default_headers={
             "HTTP-Referer": "https://marketos.ai",
             "X-Title": "MarketOS-GLM-Orchestrator",
         },
     )
+    
+    # User requested Gemini as fallback
+    fallback_model = get_llm(temperature=temperature)
+    return glm_model.with_fallbacks([fallback_model])
