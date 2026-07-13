@@ -172,26 +172,26 @@ def get_glm(temperature: float = 0):
         # reuse the same mock
         return get_llm(temperature=temperature)
 
-    api_key = os.getenv("NVIDIA_API_KEY", "")
+    api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
         import logging
         logging.getLogger("marketos").warning(
-            "NVIDIA_API_KEY not set — GLM-5.2 unavailable, falling back to configured LLM_PROVIDER."
+            "GROQ_API_KEY not set — Groq unavailable, falling back to configured LLM_PROVIDER."
         )
         return get_llm(temperature=temperature)
 
     from langchain_openai import ChatOpenAI
     glm_model = ChatOpenAI(
-        model="z-ai/glm-5.2",
+        model="llama3-70b-8192",
         openai_api_key=api_key,
-        openai_api_base="https://integrate.api.nvidia.com/v1",
+        openai_api_base="https://api.groq.com/openai/v1",
         temperature=temperature,
         max_tokens=8192,
-        max_retries=1, # Don't retry endlessly if NVIDIA is down, fail fast to fallback
+        max_retries=1, # Don't retry endlessly if Groq is down, fail fast to fallback
         timeout=15, # Fail fast on hang
         default_headers={
             "HTTP-Referer": "https://marketos.ai",
-            "X-Title": "MarketOS-GLM-Orchestrator",
+            "X-Title": "MarketOS-Orchestrator",
         },
     )
     
