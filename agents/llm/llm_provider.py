@@ -5,8 +5,10 @@ Switch providers by changing ONE line in .env:
     LLM_PROVIDER=gemini       →  Google Gemini 2.0 Flash  (default, dev)
     LLM_PROVIDER=anthropic    →  Anthropic Claude Sonnet 4
     LLM_PROVIDER=openrouter   →  OpenRouter (production)
+    LLM_PROVIDER=glm          →  GLM-5.2 via NVIDIA integrate (orchestration head)
 
 All agents call get_llm() — no agent touches API keys directly.
+The orchestrator always uses get_glm() which is pinned to GLM-5.2.
 """
 
 import os
@@ -148,8 +150,43 @@ def get_llm(temperature: float = 0):
             max_output_tokens=4096,
         )
 
+    elif provider == "glm":
+        return get_glm(temperature=temperature)
+
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER='{provider}'. "
-            "Valid values: gemini | anthropic | openrouter"
+            "Valid values: gemini | anthropic | openrouter | glm"
         )
+
+
+def get_glm(temperature: float = 0):
+    """
+    Always returns GLM-5.2 via NVIDIA's OpenAI-compatible integrate API.
+    Used by the GLM Orchestrator as the fixed reasoning head.
+    Set NVIDIA_API_KEY in .env to activate. Falls back to configured get_llm() if key absent.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        # reuse the same mock
+        return get_llm(temperature=temperature)
+
+    api_key = os.getenv("NVIDIA_API_KEY", "")
+    if not api_key:
+        import logging
+        logging.getLogger("marketos").warning(
+            "NVIDIA_API_KEY not set — GLM-5.2 unavailable, falling back to configured LLM_PROVIDER."
+        )
+        return get_llm(temperature=temperature)
+
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model="z-ai/glm-5.2",
+        openai_api_key=api_key,
+        openai_api_base="https://integrate.api.nvidia.com/v1",
+        temperature=temperature,
+        max_tokens=8192,
+        default_headers={
+            "HTTP-Referer": "https://marketos.ai",
+            "X-Title": "MarketOS-GLM-Orchestrator",
+        },
+    )

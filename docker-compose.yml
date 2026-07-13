@@ -57,7 +57,7 @@ services:
     container_name: marketos_backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       NODE_ENV:               production
       PORT:                   3000
@@ -91,7 +91,7 @@ services:
       - redpanda
       - start
       - --smp 1
-      - --memory 256M
+      - --memory 512M
       - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
@@ -106,7 +106,7 @@ services:
       - "9644:9644"
     volumes:
       - redpanda_data:/var/lib/redpanda/data
-    mem_limit: 512m
+    mem_limit: 768m
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy' || exit 1"]
       interval: 5s
@@ -132,8 +132,15 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketos}?schema=public
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    # Boot the worker agent consumer loop by default
-    command: ["python", "worker.py"]
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    ports:
+      - "8000:8000"
+    # Run the FastAPI server (exposes /v1/query/stream and all existing endpoints)
+    command: ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
 
   # ── AI Agents API (FastAPI on port 8000) ────────────────────────────────────
   agents_api:

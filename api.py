@@ -49,6 +49,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Auto-create all Kafka topics on startup ──────────────────────────────────
+
+@app.on_event("startup")
+async def _create_kafka_topics():
+    """Pre-create all PRD-defined Kafka topics in Redpanda so agents can
+    immediately publish/consume without relying on auto-topic-creation."""
+    from utils.kafka_bus import KAFKA_BROKERS, KAFKA_AVAILABLE, Topics
+    if not KAFKA_AVAILABLE:
+        agent_log("KAFKA", "confluent-kafka not installed — skipping topic creation")
+        return
+    try:
+        from confluent_kafka.admin import AdminClient, NewTopic
+        admin  = AdminClient({"bootstrap.servers": KAFKA_BROKERS, "socket.timeout.ms": 5000})
+        meta   = admin.list_topics(timeout=5)
+        existing = set(meta.topics.keys())
+        needed   = [t for t in Topics.all_topics() if t not in existing]
+        if not needed:
+            agent_log("KAFKA", f"All {len(Topics.all_topics())} topics already exist ✓")
+            return
+        new_topics = [NewTopic(t, num_partitions=1, replication_factor=1) for t in needed]
+        futures = admin.create_topics(new_topics)
+        for topic, future in futures.items():
+            try:
+                future.result()
+                agent_log("KAFKA", f"  ✓ Created topic: {topic}")
+            except Exception as e:
+                if "TopicExistsError" not in str(type(e).__name__):
+                    agent_log("KAFKA", f"  ✗ Failed to create {topic}: {e}")
+        agent_log("KAFKA", f"Topic creation complete — {len(needed)} new topics")
+    except Exception as e:
+        agent_log("KAFKA", f"Topic auto-creation failed: {e}")
+
+
 # ── Agent Registry ──────────────────────────────────────────────────────────
 
 AGENT_REGISTRY: dict[str, dict] = {
@@ -217,6 +250,49 @@ async def run_pipeline_stream(request: CampaignRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
+# ── POST /v1/query/stream — GLM-Orchestrated Query Pipeline ─────────────────
+
+class QueryRequest(BaseModel):
+    query:        str = Field(..., description="Natural language user query")
+    workspace_id: str = "default"
+
+@app.post("/v1/query/stream")
+async def run_query_stream(request: QueryRequest):
+    """
+    Full automated agent workflow powered by GLM-5.2 as the reasoning head.
+
+    Flow:
+      1. GLM-5.2 classifies intent & builds routing plan
+      2. A/B Test Agent runs as mandatory first gate
+      3. Relevant specialist agents execute in sequence
+      4. GLM-5.2 synthesises outputs into structured documentation
+
+    Returns SSE stream of stage-by-stage events for the frontend terminal.
+    """
+    from agents.orchestrator.glm_orchestrator import orchestrate_query_stream
+
+    def event_generator():
+        try:
+            for event in orchestrate_query_stream(
+                user_query=request.query,
+                workspace_id=request.workspace_id,
+            ):
+                yield event
+        except Exception as e:
+            import json
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/v1/pipeline/campaign")
 async def run_pipeline_sync(request: CampaignRequest):
     """Run the full campaign pipeline synchronously. Returns complete result."""
@@ -369,6 +445,158 @@ async def agent_health():
             results[name] = str(e)
     is_healthy = all(v == "ok" for v in results.values())
     return {"ok": is_healthy, "data": results}
+
+
+# ── GET /v1/kafka/health — Broker + topic connectivity check ─────────────────
+
+@app.get("/v1/kafka/health")
+async def kafka_health():
+    """
+    Deep Kafka diagnostic:
+      - Broker reachability (Redpanda at KAFKA_BROKERS)
+      - Which PRD-defined topics exist vs missing
+      - In-memory event log stats (messages published this session per topic)
+      - Last 5 inter-agent events for quick visual confirmation
+    """
+    from utils.kafka_bus import Topics, get_event_log, KAFKA_BROKERS, KAFKA_AVAILABLE
+
+    broker_ok    = False
+    topic_list: list[str] = []
+    missing:    list[str] = []
+    topic_status: dict[str, str] = {}
+
+    # ── 1. Broker ping ────────────────────────────────────────────────────
+    if KAFKA_AVAILABLE:
+        try:
+            from confluent_kafka.admin import AdminClient
+            admin      = AdminClient({"bootstrap.servers": KAFKA_BROKERS, "socket.timeout.ms": 3000})
+            meta       = admin.list_topics(timeout=4)
+            topic_list = [t for t in meta.topics.keys() if not t.startswith("_")]
+            broker_ok  = True
+            for t in Topics.all_topics():
+                topic_status[t] = "exists" if t in topic_list else "MISSING"
+                if t not in topic_list:
+                    missing.append(t)
+        except Exception as e:
+            broker_ok = False
+            topic_status["error"] = str(e)
+
+    # ── 2. In-memory event log ────────────────────────────────────────────
+    event_log = get_event_log()
+
+    topic_event_counts: dict[str, int] = {}
+    for e in event_log:
+        topic_event_counts[e["topic"]] = topic_event_counts.get(e["topic"], 0) + 1
+
+    last_events = [
+        {
+            "topic":   e["topic"],
+            "from":    e["envelope"]["sourceAgent"],
+            "to":      e["envelope"]["targetAgent"],
+            "msg_id":  e["envelope"]["messageId"][:8],
+            "ts":      e["envelope"]["timestamp"],
+        }
+        for e in event_log[-5:]
+    ]
+
+    return {
+        "ok": True,
+        "data": {
+            "broker":                 KAFKA_BROKERS,
+            "broker_ok":              broker_ok,
+            "kafka_available":        KAFKA_AVAILABLE,
+            "topics_found":           len(topic_list),
+            "topics_expected":        len(Topics.all_topics()),
+            "missing_topics":         missing,
+            "topic_status":           topic_status,
+            "in_memory_events_total": len(event_log),
+            "in_memory_by_topic":     topic_event_counts,
+            "last_5_events":          last_events,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# ── GET /v1/kafka/events — In-memory inter-agent event log ───────────────────
+
+@app.get("/v1/kafka/events")
+async def kafka_events(limit: int = 50, topic: str = ""):
+    """
+    Return the in-memory inter-agent event log.
+    Every agent publish_event() call is captured here regardless of broker state.
+    Query params:
+      ?topic=agent.supervisor.tasks  — filter by topic
+      ?limit=100                     — max events returned (cap 200)
+    """
+    from utils.kafka_bus import get_event_log
+    events = get_event_log()
+    if topic:
+        events = [e for e in events if e["topic"] == topic]
+    limit  = min(limit, 200)
+    sliced = events[-limit:]
+
+    formatted = []
+    for e in sliced:
+        env = e["envelope"]
+        formatted.append({
+            "topic":           e["topic"],
+            "message_id":      env["messageId"],
+            "source_agent":    env["sourceAgent"],
+            "target_agent":    env["targetAgent"],
+            "priority":        env["priority"],
+            "correlation_id":  env["correlationId"],
+            "timestamp":       env["timestamp"],
+            "payload_keys":    list(env["payload"].keys()) if isinstance(env.get("payload"), dict) else [],
+            "payload_preview": str(env.get("payload", {}))[:300],
+        })
+
+    return {
+        "ok":   True,
+        "data": {"events": formatted, "total": len(events), "returned": len(formatted)},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# ── POST /v1/kafka/probe — Fire one test message to every agent topic ─────────
+
+@app.post("/v1/kafka/probe")
+async def kafka_probe():
+    """
+    Publishes one probe message to every PRD-defined Kafka topic.
+    Returns per-topic delivery results and the in-memory event log delta.
+    Use this to verify end-to-end broker connectivity for all 18 agents.
+    """
+    from utils.kafka_bus import Topics, publish_event, get_event_log
+
+    trace_id   = str(uuid.uuid4())[:8].upper()
+    all_topics = Topics.all_topics()
+    results: dict[str, str] = {}
+
+    before = len(get_event_log())
+
+    for topic in all_topics:
+        agent_name = topic.split(".")[1] if "." in topic else "probe"
+        ok = publish_event(
+            topic=topic,
+            source_agent="kafka_probe",
+            target_agent=agent_name,
+            payload={"probe": True, "trace_id": trace_id, "topic": topic},
+            priority="LOW",
+        )
+        results[topic] = "published" if ok else "failed"
+
+    new_msgs = len(get_event_log()) - before
+
+    return {
+        "ok":   True,
+        "data": {
+            "probe_trace_id":  trace_id,
+            "topics_probed":   len(all_topics),
+            "messages_logged": new_msgs,
+            "results":         results,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
 
 
 # ── DB Helper ────────────────────────────────────────────────────────────────

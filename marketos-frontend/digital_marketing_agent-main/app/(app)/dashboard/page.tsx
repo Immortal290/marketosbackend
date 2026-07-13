@@ -17,7 +17,13 @@ import {
   Send,
   Lightbulb,
   Terminal,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Brain,
+  GitBranch,
+  FileText,
+  Cpu,
 } from "lucide-react";
 import useSWR from "swr";
 import { fetcher, apiRequest } from "@/lib/api";
@@ -81,6 +87,35 @@ const agentCommands = [
   "Generate social media posts for product launch",
 ];
 
+// ── Stage event types ─────────────────────────────────────────────────────────
+
+type StageEvent = {
+  stage:     "INIT" | "GLM_REASONING" | "AB_TEST" | "AGENT_EXEC" | "SYNTHESIS" | "COMPLETE" | "error";
+  agent:     string;
+  status:    "starting" | "running" | "completed" | "error" | "skipped";
+  detail:    string;
+  data:      Record<string, any>;
+  timestamp: string;
+};
+
+const STAGE_ICONS: Record<string, React.ReactNode> = {
+  INIT:         <Cpu     className="w-4 h-4" />,
+  GLM_REASONING:<Brain   className="w-4 h-4" />,
+  AB_TEST:      <GitBranch className="w-4 h-4" />,
+  AGENT_EXEC:   <Bot     className="w-4 h-4" />,
+  SYNTHESIS:    <FileText className="w-4 h-4" />,
+  COMPLETE:     <CheckCircle2 className="w-4 h-4" />,
+};
+
+const STAGE_COLORS: Record<string, string> = {
+  INIT:          "text-neo-cyan",
+  GLM_REASONING: "text-neo-pink",
+  AB_TEST:       "text-yellow-500",
+  AGENT_EXEC:    "text-neo-lime",
+  SYNTHESIS:     "text-purple-400",
+  COMPLETE:      "text-green-400",
+};
+
 function DecryptingText({ text }: { text: string }) {
   const [displayed, setDisplayed] = useState("");
   
@@ -93,18 +128,13 @@ function DecryptingText({ text }: { text: string }) {
           .split("")
           .map((char, index) => {
             if (char === " ") return " ";
-            if (index < iteration) {
-              return text[index];
-            }
+            if (index < iteration) return text[index];
             return chars[Math.floor(Math.random() * chars.length)];
           })
           .join("")
       );
-      
-      if (iteration >= text.length) {
-        clearInterval(interval);
-      }
-      iteration += 1 / 2; 
+      if (iteration >= text.length) clearInterval(interval);
+      iteration += 1 / 2;
     }, 20);
     return () => clearInterval(interval);
   }, [text]);
@@ -112,66 +142,113 @@ function DecryptingText({ text }: { text: string }) {
   return <span>{displayed}</span>;
 }
 
-function TerminalStream({ isExecuting, streamData }: { isExecuting: boolean, streamData: string[] }) {
-  const [logs, setLogs] = useState<string[]>([]);
+// ── Stage-aware terminal stream ───────────────────────────────────────────────
+
+function OrchestratorTerminal({
+  isExecuting,
+  events,
+  documentation,
+}: {
+  isExecuting:   boolean;
+  events:        StageEvent[];
+  documentation: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isExecuting) {
-      setLogs([]);
-      return;
-    }
-
-    if (streamData.length === 0) {
-      setLogs(["[SYSTEM] Connecting to AI Command Center..."]);
-      return;
-    }
-
-    let index = 0;
-    
-    // Scroll the terminal container into view once on mount
-    setTimeout(() => {
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-
-    const interval = setInterval(() => {
-      if (index < streamData.length) {
-        const log = streamData[index];
-        setLogs(prev => [...prev, `[${new Date().toTimeString().split(' ')[0]}] ${log}`]);
-        index++;
-      }
-    }, 800);
-
-    return () => clearInterval(interval);
-  }, [isExecuting, streamData]);
-
-  // Auto-scroll within the terminal container only
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [events]);
 
-  if (!isExecuting) return null;
+  if (!isExecuting && events.length === 0) return null;
 
   return (
-    <div ref={containerRef} className="mt-4 p-4 rounded-none border-[3px] border-neo-ink bg-neo-surface font-mono text-sm h-56 overflow-y-auto shadow-neo-sm relative text-neo-ink">
-      <div className="sticky top-0 right-0 flex justify-end items-center gap-2 mb-2 pb-2 z-10 bg-neo-surface border-b border-neo-ink/30">
-        <Loader2 className="w-4 h-4 animate-spin text-neo-pink" />
-        <span className="text-xs font-bold uppercase tracking-wider text-neo-pink">Neural Processing</span>
-      </div>
-      <div className="flex flex-col gap-1">
-        {logs.map((log, i) => (
-          <div key={i} className="flex gap-2">
-            <span className="select-none text-neo-cyan font-bold">{">"}</span>
-            <DecryptingText text={log} />
+    <div className="mt-4 flex flex-col gap-4">
+      {/* Terminal log */}
+      <div
+        ref={containerRef}
+        className="p-4 rounded-none border-[3px] border-neo-ink bg-neo-surface font-mono text-sm h-72 overflow-y-auto shadow-neo-sm relative"
+      >
+        <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-neo-surface border-b border-neo-ink/30 z-10">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-neo-pink animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-neo-pink">GLM-5.2 Orchestrator — Agent Pipeline</span>
           </div>
-        ))}
-        <div className="flex gap-2">
-          <span className="select-none text-neo-cyan font-bold">{">"}</span>
-          <span className="animate-pulse">_</span>
+          {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-neo-cyan" />}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {events.map((ev, i) => (
+            <div key={i} className="flex gap-3 items-start">
+              <span className={`mt-0.5 flex-shrink-0 ${STAGE_COLORS[ev.stage] || "text-neo-cyan"}`}>
+                {STAGE_ICONS[ev.stage] || <span>&gt;</span>}
+              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-neo-ink text-xs">{ev.agent}</span>
+                  <span className={`text-[10px] uppercase font-bold px-1 rounded ${
+                    ev.status === "completed" ? "bg-green-500/20 text-green-400" :
+                    ev.status === "running"   ? "bg-blue-500/20 text-neo-cyan" :
+                    ev.status === "error"     ? "bg-red-500/20 text-red-400" :
+                    ev.status === "skipped"   ? "bg-gray-500/20 text-gray-400" :
+                    "bg-yellow-500/20 text-yellow-400"
+                  }`}>{ev.status}</span>
+                  {ev.status === "running" && <Loader2 className="w-3 h-3 animate-spin text-neo-cyan" />}
+                  {ev.status === "completed" && <CheckCircle2 className="w-3 h-3 text-green-400" />}
+                </div>
+                <span className="text-neo-ink/70 text-xs break-all">
+                  {i === events.length - 1 && isExecuting
+                    ? <DecryptingText text={ev.detail} />
+                    : ev.detail}
+                </span>
+                {/* Show A/B result inline */}
+                {ev.stage === "AB_TEST" && ev.status === "completed" && ev.data?.ab_result && (
+                  <div className="mt-1 flex gap-2 flex-wrap">
+                    <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1 rounded font-bold">
+                      A/B: {ev.data.ab_result.decision?.toUpperCase()}
+                    </span>
+                    {ev.data.ab_result.winner_id && (
+                      <span className="text-[10px] bg-green-500/20 text-green-400 px-1 rounded font-bold">
+                        Winner: {ev.data.ab_result.winner_id}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Show intent + agents on GLM completed */}
+                {ev.stage === "GLM_REASONING" && ev.status === "completed" && ev.data?.agents && (
+                  <div className="mt-1 flex gap-1 flex-wrap">
+                    {(ev.data.agents as string[]).map(a => (
+                      <span key={a} className="text-[10px] bg-neo-pink/20 text-neo-pink px-1 rounded">{a}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {isExecuting && (
+            <div className="flex gap-2">
+              <span className="text-neo-cyan">&gt;</span>
+              <span className="animate-pulse text-neo-cyan">_</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Documentation panel — appears after SYNTHESIS completes */}
+      {documentation && (
+        <div className="border-[3px] border-neo-ink bg-white shadow-neo-sm">
+          <div className="flex items-center gap-2 px-4 py-3 bg-neo-pink border-b-[3px] border-neo-ink">
+            <FileText className="w-4 h-4" />
+            <span className="font-display font-black text-sm uppercase">GLM-5.2 Structured Report</span>
+          </div>
+          <div className="px-4 py-4 max-h-96 overflow-y-auto">
+            <pre className="whitespace-pre-wrap font-mono text-xs text-neo-ink leading-relaxed">
+              {documentation}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -182,7 +259,9 @@ export default function MissionControlPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [streamData, setStreamData] = useState<string[]>([]);
+  const [sseEvents, setSseEvents] = useState<StageEvent[]>([]);
+  const [documentation, setDocumentation] = useState("");
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const [redirectionData, setRedirectionData] = useState<{
     active: boolean;
     taskId: string;
@@ -196,99 +275,88 @@ export default function MissionControlPage() {
     if (!commandInput.trim()) return;
     setIsExecuting(true);
     setShowSuggestions(false);
-    setStreamData([]);
+    setSseEvents([]);
+    setDocumentation("");
 
-    let data: any = null;
+    const prompt = commandInput;
+
     try {
-      const response = await apiRequest<any>("/ai-command-center/command", {
-        method: "POST",
-        body: JSON.stringify({
-          prompt: commandInput,
-          workspaceId: "00000000-0000-0000-0000-000000000000"
-        })
+      const res = await fetch("/api/v1/ai-command-center/command", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ prompt, workspaceId: "00000000-0000-0000-0000-000000000000" }),
       });
-      if (response && response.data) {
-        data = response.data;
-      } else if (response) {
-        data = response;
-      }
-    } catch (err) {
-      console.warn("Backend API not reachable or CORS error on Railway, using local neural intent fallback:", err);
-    }
 
-    if (!data) {
-      const lower = commandInput.toLowerCase();
-      let intent = 'GENERAL_QUERY';
-      let agentsSpawned = ['SupervisorAgent', 'GeneralAgent'];
-      let routeTo = '/dashboard';
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
-      if (lower.includes('campaign')) {
-        intent = 'CREATE_CAMPAIGN';
-        agentsSpawned = ['CopyAgent', 'CreativeAgent', 'EmailAgent'];
-        routeTo = '/campaigns';
-      } else if (lower.includes('content') || lower.includes('post') || lower.includes('email') || lower.includes('generation')) {
-        intent = 'GENERATE_CONTENT';
-        agentsSpawned = ['CreativeAgent', 'CopyAgent'];
-        routeTo = '/creative-studio';
-      } else if (lower.includes('analy') || lower.includes('report') || lower.includes('performance')) {
-        intent = 'ANALYZE_PERFORMANCE';
-        agentsSpawned = ['AnalyticsAgent'];
-        routeTo = '/reports';
-      } else if (lower.includes('setting') || lower.includes('workspace') || lower.includes('brand')) {
-        intent = 'CONFIGURE_SETTINGS';
-        agentsSpawned = ['SupervisorAgent'];
-        routeTo = '/settings/workspace';
-      }
+      const reader = res.body.getReader();
+      readerRef.current  = reader;
+      const decoder      = new TextDecoder();
+      let buffer         = "";
+      let finalRouteTo   = "/dashboard";
+      let finalIntent    = "GENERAL_QUERY";
+      let finalTaskId    = `task-${Date.now()}`;
+      let finalAgents    = "General AI";
 
-      data = {
-        taskId: `task-${Date.now()}`,
-        intent,
-        confidence: 0.94,
-        agentsSpawned,
-        routeTo
+      const processChunk = async () => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr || jsonStr === "{\"status\":\"done\"}") continue;
+              try {
+                const ev: StageEvent = JSON.parse(jsonStr);
+                setSseEvents(prev => [...prev, ev]);
+
+                if (ev.stage === "COMPLETE" && ev.data) {
+                  if (ev.data.routeTo)       finalRouteTo = ev.data.routeTo;
+                  if (ev.data.intent)        finalIntent  = ev.data.intent;
+                  if (ev.data.session_id)    finalTaskId  = ev.data.session_id;
+                  if (ev.data.documentation) setDocumentation(ev.data.documentation);
+                }
+                if (ev.stage === "SYNTHESIS" && ev.status === "completed" && ev.data?.documentation) {
+                  setDocumentation(ev.data.documentation);
+                }
+                if (ev.stage === "GLM_REASONING" && ev.status === "completed" && ev.data?.agents) {
+                  finalAgents = (ev.data.agents as string[]).join(", ");
+                  if (ev.data.routeTo) finalRouteTo = ev.data.routeTo;
+                  if (ev.data.intent)  finalIntent  = ev.data.intent;
+                }
+              } catch (_e) {}
+            }
+          }
+        }
+
+        // Done
+        toast.success("AI pipeline completed", { description: `Intent: ${finalIntent}` });
+        setIsExecuting(false);
+
+        if (finalRouteTo && finalRouteTo !== "/dashboard") {
+          setRedirectionData({
+            active: true,
+            taskId: finalTaskId,
+            intent: finalIntent,
+            prompt,
+            routeTo: finalRouteTo,
+            agents: finalAgents,
+          });
+        }
+        setCommandInput("");
       };
+
+      await processChunk();
+    } catch (err) {
+      console.warn("SSE stream error:", err);
+      setIsExecuting(false);
+      toast.error("Pipeline error — please try again");
     }
-
-    const intent = data.intent || 'UNKNOWN_INTENT';
-    const confidence = data.confidence || 0.94;
-    const agents = Array.isArray(data.agentsSpawned) ? data.agentsSpawned.join(', ') : (data.agentsSpawned || 'General AI');
-    const taskId = data.taskId || `task-${Date.now()}`;
-    const routeTo = data.routeTo || '/dashboard';
-
-    // Build real-time data stream array from backend response
-    const generatedStream = [
-      `Authenticating workspace constraints... [OK]`,
-      `Analyzing prompt: "${commandInput}"`,
-      `Extracted Intent: ${intent} (Confidence: ${Math.round(confidence * 100)}%)`,
-      `Task ID generated: ${taskId}`,
-      `Delegating sub-tasks to agents: ${agents}`,
-      `Executing distributed sub-routines...`,
-      `Fetching live analytics signals...`,
-      `Operation completed successfully.`
-    ];
-
-    setStreamData(generatedStream);
-
-    // Wait for the stream to finish displaying (generatedStream.length * 800ms) + 1s buffer
-    await new Promise(resolve => setTimeout(resolve, generatedStream.length * 800 + 1000));
-
-    toast.success("Command processed successfully", {
-      description: `Intent detected: ${intent}`
-    });
-    
-    if (routeTo && routeTo !== '/dashboard') {
-      setRedirectionData({
-        active: true,
-        taskId,
-        intent,
-        prompt: commandInput,
-        routeTo,
-        agents,
-      });
-    }
-    
-    setCommandInput("");
-    setIsExecuting(false);
   };
 
   const { data: kpisData } = useSWR("/dashboard/kpis?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
@@ -486,7 +554,11 @@ export default function MissionControlPage() {
           </div>
         </NeoCard>
         
-        <TerminalStream isExecuting={isExecuting} streamData={streamData} />
+        <OrchestratorTerminal
+          isExecuting={isExecuting}
+          events={sseEvents}
+          documentation={documentation}
+        />
       </section>
 
       {/* Quick Actions / Suggested Actions */}
