@@ -159,10 +159,12 @@ function OrchestratorTerminal({
   isExecuting,
   events,
   documentation,
+  prompt,
 }: {
   isExecuting:   boolean;
   events:        StageEvent[];
   documentation: string;
+  prompt:        string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -267,7 +269,13 @@ function OrchestratorTerminal({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `marketos_report_${Date.now()}.json`;
+                
+                const safeName = (prompt || "marketos_report")
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "_")
+                  .slice(0, 50);
+                  
+                a.download = `${safeName}_${Date.now()}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
               }}
@@ -295,6 +303,7 @@ export default function MissionControlPage() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [sseEvents, setSseEvents] = useState<StageEvent[]>([]);
   const [documentation, setDocumentation] = useState("");
+  const [lastExecutedPrompt, setLastExecutedPrompt] = useState("");
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const [redirectionData, setRedirectionData] = useState<{
     active: boolean;
@@ -307,12 +316,14 @@ export default function MissionControlPage() {
 
   const handleExecute = async () => {
     if (!commandInput.trim()) return;
+    const currentPrompt = commandInput;
     setIsExecuting(true);
     setShowSuggestions(false);
     setSseEvents([]);
     setDocumentation("");
+    setLastExecutedPrompt(currentPrompt);
 
-    const prompt = commandInput;
+    const prompt = currentPrompt;
 
     try {
       const res = await fetch("/api/v1/ai-command-center/command", {
@@ -598,6 +609,7 @@ export default function MissionControlPage() {
           isExecuting={isExecuting}
           events={sseEvents}
           documentation={documentation}
+          prompt={lastExecutedPrompt}
         />
       </section>
 

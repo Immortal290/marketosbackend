@@ -152,13 +152,28 @@ def get_llm(temperature: float = 0):
             max_output_tokens=4096,
         )
 
+    elif provider == "groq":
+        from langchain_openai import ChatOpenAI
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            import logging
+            logging.getLogger("marketos").warning("GROQ_API_KEY missing. Falling back to MockLLM.")
+            return MockLLM()
+        return ChatOpenAI(
+            model="llama-3.1-8b-instant",
+            openai_api_key=api_key,
+            openai_api_base="https://api.groq.com/openai/v1",
+            temperature=temperature,
+            max_tokens=4096,
+        )
+
     elif provider == "glm":
         return get_glm(temperature=temperature)
 
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER='{provider}'. "
-            "Valid values: gemini | anthropic | openrouter | glm"
+            "Valid values: gemini | anthropic | openrouter | glm | groq"
         )
 
 
