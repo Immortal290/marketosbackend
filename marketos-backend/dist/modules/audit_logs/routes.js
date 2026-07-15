@@ -25,4 +25,19 @@ __export(routes_exports, {
 module.exports = __toCommonJS(routes_exports);
 var import_express = require("express");
 var router = (0, import_express.Router)();
+router.get("/activity", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/agents", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/api", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/compliance", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/events", (req, res) => {
+  res.status(200).json({ success: true, data: [], lastEventAt: (/* @__PURE__ */ new Date()).toISOString() });
+});
 var routes_default = router;

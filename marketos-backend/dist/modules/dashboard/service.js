@@ -25,8 +25,24 @@ __export(service_exports, {
 module.exports = __toCommonJS(service_exports);
 
 // src/lib/prisma.ts
+var import_config = require("dotenv/config");
 var import_client = require("@prisma/client");
-var prisma = new import_client.PrismaClient();
+var import_adapter_pg = require("@prisma/adapter-pg");
+var import_pg = require("pg");
+var DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+}
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var adapter = new import_adapter_pg.PrismaPg(pool);
+var globalForPrisma = globalThis;
+var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
+});
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 // src/modules/dashboard/service.ts
 var DashboardService = class {

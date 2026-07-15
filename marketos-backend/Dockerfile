@@ -1,15 +1,15 @@
 # ── Stage 1: Install dependencies ────────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:22-slim AS deps
 WORKDIR /app
 
 COPY package*.json    ./
 COPY prisma           ./prisma/
 COPY prisma.config.ts ./
 
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 # ── Stage 2: Build TypeScript ─────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 
 # DATABASE_URL is required by prisma.config.ts at generate time.
@@ -27,14 +27,14 @@ RUN node node_modules/.bin/prisma generate
 RUN node node_modules/.bin/tsup src
 
 # ── Stage 3: Production image ─────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
 # Production-only Node deps
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
 
 # Compiled API + Prisma artifacts
 COPY --from=builder /app/prisma            ./prisma/

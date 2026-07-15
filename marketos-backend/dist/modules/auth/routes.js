@@ -40,12 +40,30 @@ var import_bcryptjs = __toESM(require("bcryptjs"));
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
 
 // src/lib/prisma.ts
+var import_config = require("dotenv/config");
 var import_client = require("@prisma/client");
-var prisma = new import_client.PrismaClient();
+var import_adapter_pg = require("@prisma/adapter-pg");
+var import_pg = require("pg");
+var DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+}
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var adapter = new import_adapter_pg.PrismaPg(pool);
+var globalForPrisma = globalThis;
+var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
+});
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 // src/modules/auth/service.ts
 var JWT_SECRET = process.env.JWT_SECRET || "secret";
 var JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
+var JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "refresh_secret";
+var JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 var AuthService = class {
   async register(data) {
     const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
@@ -74,9 +92,34 @@ var AuthService = class {
     }
     return this.generateTokens(user.id);
   }
+  async refresh(refreshToken) {
+    try {
+      const payload = import_jsonwebtoken.default.verify(refreshToken, JWT_REFRESH_SECRET);
+      return this.generateTokens(payload.userId);
+    } catch {
+      throw new Error("Invalid or expired refresh token");
+    }
+  }
+  async getMe(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        createdAt: true
+      }
+    });
+    if (!user) {
+      throw new Error("User not found");
+    }
+    return user;
+  }
   generateTokens(userId) {
     const accessToken = import_jsonwebtoken.default.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    return { accessToken };
+    const refreshToken = import_jsonwebtoken.default.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
+    return { accessToken, refreshToken, expiresIn: 86400 };
   }
 };
 
@@ -106,6 +149,47 @@ var AuthController = class {
       next(error);
     }
   };
+  refresh = async (req, res, next) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
+          success: false,
+          error: "refreshToken is required"
+        });
+      }
+      const tokens = await this.service.refresh(refreshToken);
+      res.status(import_http_status_codes.StatusCodes.OK).json({
+        success: true,
+        data: tokens
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  logout = async (req, res, next) => {
+    try {
+      res.status(import_http_status_codes.StatusCodes.OK).json({
+        success: true,
+        data: null,
+        message: "Logged out successfully"
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  me = async (req, res, next) => {
+    try {
+      const userId = req.user?.userId ?? "unknown";
+      const user = await this.service.getMe(userId);
+      res.status(import_http_status_codes.StatusCodes.OK).json({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 };
 
 // src/middlewares/validate.middleware.ts
@@ -121,6 +205,8 @@ var validate = (schema) => {
       });
       return next();
     } catch (error) {
+      console.log("VALIDATION ERROR CAUGHT:", error);
+      console.log("IS ZOD ERROR?", error instanceof import_zod.ZodError);
       if (error instanceof import_zod.ZodError) {
         return res.status(import_http_status_codes2.StatusCodes.BAD_REQUEST).json({
           success: false,
@@ -140,7 +226,8 @@ var registerSchema = import_zod2.z.object({
     email: import_zod2.z.string().email(),
     password: import_zod2.z.string().min(8),
     firstName: import_zod2.z.string().optional(),
-    lastName: import_zod2.z.string().optional()
+    lastName: import_zod2.z.string().optional(),
+    workspaceName: import_zod2.z.string().optional()
   })
 });
 var loginSchema = import_zod2.z.object({
@@ -155,4 +242,7 @@ var router = (0, import_express.Router)();
 var controller = new AuthController();
 router.post("/register", validate(registerSchema), controller.register);
 router.post("/login", validate(loginSchema), controller.login);
+router.post("/refresh", controller.refresh);
+router.post("/logout", controller.logout);
+router.get("/me", controller.me);
 var routes_default = router;

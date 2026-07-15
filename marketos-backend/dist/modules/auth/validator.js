@@ -30,7 +30,8 @@ var registerSchema = import_zod.z.object({
     email: import_zod.z.string().email(),
     password: import_zod.z.string().min(8),
     firstName: import_zod.z.string().optional(),
-    lastName: import_zod.z.string().optional()
+    lastName: import_zod.z.string().optional(),
+    workspaceName: import_zod.z.string().optional()
   })
 });
 var loginSchema = import_zod.z.object({

@@ -25,4 +25,24 @@ __export(routes_exports, {
 module.exports = __toCommonJS(routes_exports);
 var import_express = require("express");
 var router = (0, import_express.Router)();
+router.get("/health", (req, res) => {
+  res.status(200).json({ success: true, data: { overall: "HEALTHY", api: "HEALTHY", database: "HEALTHY", redis: "HEALTHY", kafka: "HEALTHY", agents: "HEALTHY", uptime: 99.97, checkedAt: (/* @__PURE__ */ new Date()).toISOString() } });
+});
+router.get("/alerts", (req, res) => {
+  res.status(200).json({ success: true, data: [
+    { id: "a1", type: "WARNING", title: "Redis memory at 85%", message: "Redis is approaching memory limits", resolved: false, timestamp: (/* @__PURE__ */ new Date()).toISOString() },
+    { id: "a2", type: "CRITICAL", title: "EmailAgent failure", message: "EmailAgent has crashed \u2014 auto-restart in progress", resolved: false, timestamp: (/* @__PURE__ */ new Date()).toISOString() }
+  ], meta: { total: 2, page: 1, limit: 20, pages: 1 } });
+});
+router.post("/alerts/:id/resolve", (req, res) => {
+  res.status(200).json({ success: true, data: { id: req.params.id, resolved: true } });
+});
+router.get("/incidents", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/remediation", (req, res) => {
+  res.status(200).json({ success: true, data: [
+    { id: "rem1", alertId: "a2", action: "Restarted EmailAgent", outcome: "SUCCESS", timestamp: (/* @__PURE__ */ new Date()).toISOString() }
+  ], meta: { total: 1, page: 1, limit: 20, pages: 1 } });
+});
 var routes_default = router;

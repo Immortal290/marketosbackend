@@ -240,9 +240,13 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
                  })
 
     # ── Build shared pipeline state ───────────────────────────────────────
+    # Seed a CampaignPlan-compatible dict from the GLM classification so
+    # downstream agents (copy, sms, email, etc.) don't fail on missing fields.
+    campaign_name = key_params.get("campaign_name") or summary[:60]
+    channels      = key_params.get("channels") or ["email", "sms"]
     pipeline_state: dict = {
         "user_intent":     user_query,
-        "user_channels":   key_params.get("channels"),
+        "user_channels":   channels,
         "pipeline":        "campaign" if "CAMPAIGN" in intent or intent == "GENERATE_CONTENT" else "query",
         "workspace_id":    workspace_id,
         "sender_name":     "MarketOS",
@@ -252,6 +256,18 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
         "current_step":    "ab_test",
         "errors":          [],
         "trace":           [],
+        # CampaignPlan fields required by Copy/SMS/Email agents
+        "campaign_plan": {
+            "campaign_name":   campaign_name,
+            "goal":            key_params.get("goal") or f"Drive engagement for {campaign_name}",
+            "target_audience": key_params.get("target_audience") or "general audience",
+            "channels":        channels,
+            "budget":          key_params.get("budget") or 5000,
+            "timeline":        key_params.get("timeline") or "2 weeks",
+            "tone":            key_params.get("tone") or "professional",
+            "key_messages":    [f"Discover {campaign_name}", "Act now", "Limited offer"],
+            "tasks":           [],
+        },
     }
 
     # ── STAGE 2: Mandatory A/B Test Gate ──────────────────────────────────
@@ -317,9 +333,31 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
             # Merge delta back into pipeline state for downstream agents
             pipeline_state = {**pipeline_state, **agent_state_delta}
 
-            # Extract the main result key for this agent
-            result_key = f"{agent_key}_result"
-            agent_result = agent_state_delta.get(result_key, {"status": "completed"})
+            # Each agent stores output under a different state key
+            AGENT_RESULT_KEYS: dict[str, str] = {
+                "supervisor":   "supervisor_result",
+                "copy":         "copy_output",
+                "image":        "image_result",
+                "compliance":   "compliance_result",
+                "finance":      "finance_result",
+                "email":        "send_result",
+                "sms":          "sms_result",
+                "social_media": "social_result",
+                "analytics":    "analytics_result",
+                "monitor":      "monitor_result",
+                "ab_test":      "ab_test_result",
+                "lead_scoring": "lead_scoring_result",
+                "competitor":   "competitor_result",
+                "seo":          "seo_result",
+                "reporting":    "reporting_result",
+                "onboarding":   "onboarding_result",
+            }
+            result_key = AGENT_RESULT_KEYS.get(agent_key, f"{agent_key}_result")
+            agent_result = (
+                agent_state_delta.get(result_key)
+                or agent_state_delta.get(f"{agent_key}_result")
+                or {"status": "completed"}
+            )
             agent_outputs[agent_key] = agent_result
 
             # Publish result event to Kafka
@@ -334,7 +372,12 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
 
             yield _event("AGENT_EXEC", agent_display, "completed",
                          f"Completed in {elapsed_ms}ms",
-                         {"result_preview": _summarise_result(agent_result), "elapsed_ms": elapsed_ms})
+                         {
+                             "result_preview": _summarise_result(agent_result),
+                             "result": agent_result,
+                             "agent_key": agent_key,
+                             "elapsed_ms": elapsed_ms,
+                         })
         except Exception as e:
             elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
             agent_outputs[agent_key] = {"status": "error", "error": str(e)}

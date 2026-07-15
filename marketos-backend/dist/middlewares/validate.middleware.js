@@ -35,6 +35,8 @@ var validate = (schema) => {
       });
       return next();
     } catch (error) {
+      console.log("VALIDATION ERROR CAUGHT:", error);
+      console.log("IS ZOD ERROR?", error instanceof import_zod.ZodError);
       if (error instanceof import_zod.ZodError) {
         return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
           success: false,

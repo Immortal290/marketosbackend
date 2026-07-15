@@ -34,6 +34,7 @@ __export(logger_exports, {
 });
 module.exports = __toCommonJS(logger_exports);
 var import_winston = __toESM(require("winston"));
+var import_fs = __toESM(require("fs"));
 var { combine, timestamp, printf, colorize } = import_winston.default.format;
 var customFormat = printf(({ level, message, timestamp: timestamp2, ...metadata }) => {
   let msg = `${timestamp2} [${level}]: ${message}`;
@@ -42,23 +43,31 @@ var customFormat = printf(({ level, message, timestamp: timestamp2, ...metadata 
   }
   return msg;
 });
+var isProduction = process.env.NODE_ENV === "production";
+var transports = [
+  new import_winston.default.transports.Console({
+    format: combine(
+      colorize(),
+      timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+      customFormat
+    )
+  })
+];
+if (!isProduction) {
+  try {
+    if (!import_fs.default.existsSync("logs")) import_fs.default.mkdirSync("logs", { recursive: true });
+    transports.push(new import_winston.default.transports.File({ filename: "logs/error.log", level: "error" }));
+    transports.push(new import_winston.default.transports.File({ filename: "logs/combined.log" }));
+  } catch (_e) {
+  }
+}
 var logger = import_winston.default.createLogger({
-  level: process.env.NODE_ENV === "development" ? "debug" : "info",
+  level: isProduction ? "info" : "debug",
   format: combine(
     timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
     import_winston.default.format.json()
   ),
-  transports: [
-    new import_winston.default.transports.Console({
-      format: combine(
-        colorize(),
-        timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        customFormat
-      )
-    }),
-    new import_winston.default.transports.File({ filename: "logs/error.log", level: "error" }),
-    new import_winston.default.transports.File({ filename: "logs/combined.log" })
-  ]
+  transports
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

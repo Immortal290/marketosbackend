@@ -316,6 +316,15 @@ def email_agent_node(state: dict) -> dict:
     result_dict["recipient_count"] = max(int(data.get("recipient_count", 1) or 1), 1)
     result_dict["simulated_recipients"] = result_dict["recipient_count"]
     result_dict["personalization_signals"] = personalized.get("personalization_signals", [])
+    result_dict["selected_variant"] = {
+        "variant_id": selected.variant_id,
+        "subject_line": personalized.get("subject_line", selected.subject_line),
+        "preview_text": selected.preview_text,
+        "body_html": personalized.get("body_html", selected.body_html),
+        "body_text": personalized.get("body_text", selected.body_text),
+        "cta_text": selected.cta_text,
+        "cta_url": selected.cta_url,
+    }
 
     if real_result.get("sent"):
         _record_email_send_cost(

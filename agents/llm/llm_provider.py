@@ -197,7 +197,7 @@ def get_glm(temperature: float = 0):
 
     from langchain_openai import ChatOpenAI
     glm_model = ChatOpenAI(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         openai_api_key=api_key,
         openai_api_base="https://api.groq.com/openai/v1",
         temperature=temperature,

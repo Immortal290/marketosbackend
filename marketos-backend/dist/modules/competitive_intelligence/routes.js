@@ -25,4 +25,29 @@ __export(routes_exports, {
 module.exports = __toCommonJS(routes_exports);
 var import_express = require("express");
 var router = (0, import_express.Router)();
+router.get("/competitors", (req, res) => {
+  res.status(200).json({ success: true, data: [
+    { id: "c1", name: "RivalCo", website: "https://rivalco.com", adSpend: 25e4, keywords: ["crm", "marketing automation"] }
+  ] });
+});
+router.post("/competitors", (req, res) => {
+  res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body } });
+});
+router.delete("/competitors/:id", (req, res) => {
+  res.status(200).json({ success: true, data: null });
+});
+router.get("/ad-monitoring", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router.get("/pricing", (req, res) => {
+  res.status(200).json({ success: true, data: [] });
+});
+router.get("/seo", (req, res) => {
+  res.status(200).json({ success: true, data: { yourDomain: { domainAuthority: 48, organicKeywords: 3200, backlinks: 12400 }, competitors: [], keywordGaps: [] } });
+});
+router.get("/opportunities", (req, res) => {
+  res.status(200).json({ success: true, data: [
+    { id: "o1", type: "PRICING_GAP", title: "RivalCo raised starter plan price by 25%", description: "Their starter plan now costs $149/mo vs your $99/mo \u2014 opportunity to capture price-sensitive segment", impact: "HIGH", detectedAt: (/* @__PURE__ */ new Date()).toISOString() }
+  ] });
+});
 var routes_default = router;

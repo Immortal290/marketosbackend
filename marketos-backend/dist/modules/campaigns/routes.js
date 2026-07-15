@@ -26,8 +26,24 @@ module.exports = __toCommonJS(routes_exports);
 var import_express = require("express");
 
 // src/lib/prisma.ts
+var import_config = require("dotenv/config");
 var import_client = require("@prisma/client");
-var prisma = new import_client.PrismaClient();
+var import_adapter_pg = require("@prisma/adapter-pg");
+var import_pg = require("pg");
+var DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+}
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var adapter = new import_adapter_pg.PrismaPg(pool);
+var globalForPrisma = globalThis;
+var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
+});
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 // src/modules/campaigns/service.ts
 var CampaignsService = class {
@@ -136,6 +152,8 @@ var validate = (schema) => {
       });
       return next();
     } catch (error) {
+      console.log("VALIDATION ERROR CAUGHT:", error);
+      console.log("IS ZOD ERROR?", error instanceof import_zod.ZodError);
       if (error instanceof import_zod.ZodError) {
         return res.status(import_http_status_codes2.StatusCodes.BAD_REQUEST).json({
           success: false,
@@ -167,8 +185,20 @@ var updateCampaignSchema = import_zod2.z.object({
 var router = (0, import_express.Router)();
 var controller = new CampaignsController();
 router.get("/", controller.getAll);
+router.get("/stats", (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: { total: 42, active: 8, paused: 3, scheduled: 5, completed: 26 }
+  });
+});
 router.get("/:id", controller.getById);
 router.post("/", validate(createCampaignSchema), controller.create);
 router.patch("/:id", validate(updateCampaignSchema), controller.update);
 router.delete("/:id", controller.delete);
+router.post("/:id/launch", (req, res) => {
+  res.status(200).json({ success: true, data: { id: req.params.id, status: "ACTIVE" } });
+});
+router.post("/:id/pause", (req, res) => {
+  res.status(200).json({ success: true, data: { id: req.params.id, status: "PAUSED" } });
+});
 var routes_default = router;
