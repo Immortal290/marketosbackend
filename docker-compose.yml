@@ -117,8 +117,8 @@ services:
   # ── AI Agents (Python) ──────────────────────────────────────────────────────
   agents:
     build:
-      context: .
-      dockerfile: Dockerfile.agents
+      context: ./marketos-agents
+      dockerfile: Dockerfile
     container_name: marketos_agents
     restart: unless-stopped
     depends_on:
