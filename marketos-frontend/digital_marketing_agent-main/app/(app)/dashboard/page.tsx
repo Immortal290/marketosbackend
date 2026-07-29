@@ -68,38 +68,107 @@ const STAGE_LABELS: Record<string, string> = {
 function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecuting: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [events]);
+
+  // Extract the agent plan from the GLM_REASONING completed event
+  const planEvent = events.find(e => e.stage === "GLM_REASONING" && e.status === "completed");
+  const agentPlan: string[] = (planEvent?.data?.agents as string[]) || [];
+  const intentLabel: string = (planEvent?.data?.intent as string) || "";
+  const intentConfidence: number = (planEvent?.data?.confidence as number) || 0;
+
+  // Track which agents are done
+  const completedAgents = new Set(
+    events
+      .filter(e => e.stage === "AGENT_EXEC" && e.status === "completed")
+      .map(e => e.agent || "")
+  );
+  const runningAgent = events.findLast
+    ? events.findLast(e => e.stage === "AGENT_EXEC" && e.status === "running")?.agent || null
+    : [...events].reverse().find(e => e.stage === "AGENT_EXEC" && e.status === "running")?.agent || null;
+
   if (!isExecuting && events.length === 0) return null;
+
   return (
-    <div ref={ref} className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-56 overflow-y-auto shadow-[4px_4px_0_0_#000]">
-      <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-gray-900 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-pink-400 animate-pulse" />
-          <span className="text-xs font-bold uppercase tracking-wider text-pink-400">AI Agent Pipeline</span>
-        </div>
-        {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
-      </div>
-      <div className="flex flex-col gap-2">
-        {events.map((ev, i) => (
-          <div key={i} className="flex gap-3 items-start">
-            <span className={`mt-0.5 flex-shrink-0 ${ev.error ? "text-red-500" : (ev.stage ? STAGE_COLORS[ev.stage] || "text-cyan-400" : "text-cyan-400")}`}>
-              {ev.stage ? STAGE_ICONS[ev.stage] || ">" : ">"}
+    <div className="flex flex-col gap-3">
+      {/* Agent plan strip — shown once GLM classifies the intent */}
+      {agentPlan.length > 0 && (
+        <div className="border-[3px] border-black bg-neo-pink shadow-[4px_4px_0_0_#000] p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Brain className="w-4 h-4 text-black" />
+            <span className="font-mono text-xs font-black uppercase">
+              Intent: {intentLabel}
+              {intentConfidence > 0 && <span className="ml-2 text-black/60">({Math.round(intentConfidence * 100)}% confidence)</span>}
             </span>
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{ev.stage ? STAGE_LABELS[ev.stage] || ev.stage : ""}</span>
-                <span className="font-bold text-white text-xs">{ev.agent}</span>
-                <span className={`text-[10px] uppercase font-bold px-1 rounded ${
-                  ev.status==="completed" ? "bg-green-500/20 text-green-400" :
-                  ev.status==="running"   ? "bg-blue-500/20 text-cyan-400" :
-                  ev.status==="error"     ? "bg-red-500/20 text-red-400" :
-                  ev.status==="skipped"   ? "bg-gray-500/20 text-gray-400" :
-                  "bg-yellow-500/20 text-yellow-400"}`}>{ev.status}</span>
-              </div>
-              <span className="text-xs text-gray-300 break-all">{ev.error || ev.detail}</span>
-            </div>
           </div>
-        ))}
-        {isExecuting && <div className="flex gap-2"><span className="text-cyan-400">{">"}</span><span className="animate-pulse text-cyan-400">_</span></div>}
+          <div className="flex flex-wrap gap-2">
+            {agentPlan.map((agentName, i) => {
+              const isDone    = completedAgents.has(agentName);
+              const isRunning = runningAgent === agentName;
+              return (
+                <span
+                  key={i}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs font-bold border-2 border-black transition-all ${
+                    isDone    ? "bg-green-400 text-black shadow-[2px_2px_0_0_#000]" :
+                    isRunning ? "bg-cyan-400 text-black shadow-[2px_2px_0_0_#000] animate-pulse" :
+                                "bg-white text-black/60"
+                  }`}
+                >
+                  {isDone ? <CheckCircle2 className="w-3 h-3" /> : isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
+                  {agentName}
+                </span>
+              );
+            })}
+          </div>
+          {/* Progress bar */}
+          <div className="mt-2 h-1.5 bg-black/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-black transition-all duration-500"
+              style={{ width: `${agentPlan.length > 0 ? (completedAgents.size / agentPlan.length) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="font-mono text-[10px] text-black/60 mt-1">
+            {completedAgents.size} / {agentPlan.length} agents complete
+          </p>
+        </div>
+      )}
+
+      {/* Terminal log */}
+      <div ref={ref} className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-64 overflow-y-auto shadow-[4px_4px_0_0_#000]">
+        <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-gray-900 border-b border-gray-700">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-pink-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">AI Agent Pipeline</span>
+          </div>
+          {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
+        </div>
+        <div className="flex flex-col gap-2">
+          {events.map((ev, i) => (
+            <div key={i} className="flex gap-3 items-start">
+              <span className={`mt-0.5 flex-shrink-0 ${ev.error ? "text-red-500" : (ev.stage ? STAGE_COLORS[ev.stage] || "text-cyan-400" : "text-cyan-400")}`}>
+                {ev.stage ? STAGE_ICONS[ev.stage] || ">" : ">"}
+              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{ev.stage ? STAGE_LABELS[ev.stage] || ev.stage : ""}</span>
+                  <span className="font-bold text-white text-xs">{ev.agent}</span>
+                  <span className={`text-[10px] uppercase font-bold px-1 rounded ${
+                    ev.status==="completed" ? "bg-green-500/20 text-green-400" :
+                    ev.status==="running"   ? "bg-blue-500/20 text-cyan-400" :
+                    ev.status==="error"     ? "bg-red-500/20 text-red-400" :
+                    ev.status==="skipped"   ? "bg-gray-500/20 text-gray-400" :
+                    "bg-yellow-500/20 text-yellow-400"}`}>{ev.status}</span>
+                </div>
+                <span className="text-xs text-gray-300 break-all">{ev.error || ev.detail}</span>
+                {/* Show result preview for completed AGENT_EXEC events */}
+                {ev.stage === "AGENT_EXEC" && ev.status === "completed" && ev.data?.result_preview && (
+                  <span className="text-[10px] text-lime-400 font-mono mt-0.5 break-all">
+                    ↳ {String(ev.data.result_preview).slice(0, 150)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {isExecuting && <div className="flex gap-2"><span className="text-cyan-400">{">"}</span><span className="animate-pulse text-cyan-400">_</span></div>}
+        </div>
       </div>
     </div>
   );
@@ -218,16 +287,26 @@ export default function MissionControlPage() {
     setLastPrompt(prompt);
 
     try {
-      const res = await fetch("/api/v1/ai-command-center/command", {
+      // ── Use the real GLM-Orchestrated query/stream SSE endpoint ──
+      // This hits the Python agent service via Railway private networking and
+      // streams real-time stage events: INIT → GLM_REASONING → AB_TEST →
+      // AGENT_EXEC (×N agents) → SYNTHESIS → COMPLETE
+      const res = await fetch("/api/v1/ai-command-center/query/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, workspaceId: "00000000-0000-0000-0000-000000000000" }),
+        body: JSON.stringify({
+          query: prompt,
+          workspace_id: "00000000-0000-0000-0000-000000000000",
+        }),
       });
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
-      const reader = res.body.getReader();
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status} — ${await res.text().catch(() => "")}`);
+      }
+
+      const reader  = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      let buffer    = "";
 
       while (true) {
         const { value, done } = await reader.read();
@@ -235,57 +314,89 @@ export default function MissionControlPage() {
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
+
         for (const line of lines) {
+          // Handle SSE "event: end" terminator
+          if (line.startsWith("event:") && line.includes("end")) continue;
+
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
           if (!jsonStr || jsonStr === '{"status":"done"}') continue;
+
           try {
             const ev: StageEvent = JSON.parse(jsonStr);
+
+            // Always append to the live terminal log
             setSseEvents(prev => [...prev, ev]);
 
-            // Collect full agent outputs for approval panel
-            if (ev.stage === "AGENT_EXEC" && ev.status === "completed" && ev.data?.result) {
-              const agentKey = ev.data.agent_key || ev.agent?.toLowerCase().replace(/ agent$/,"").replace(/ /,"_") || "unknown";
-              const output: AgentOutput = {
-                agentKey,
-                agentName: ev.agent || agentKey,
-                elapsedMs: ev.data.elapsed_ms || 0,
-                result: ev.data.result,
-                status: "pending",
-              };
-              setAgentOutputs(prev => {
-                const exists = prev.find(o => o.agentKey === agentKey);
-                return exists ? prev : [...prev, output];
-              });
-            }
-            // AB_TEST result
+            // ── Capture A/B Test output ────────────────────────────────
             if (ev.stage === "AB_TEST" && ev.status === "completed" && ev.data?.ab_result) {
+              const abResult = ev.data.ab_result;
               const output: AgentOutput = {
-                agentKey: "ab_test",
+                agentKey:  "ab_test",
                 agentName: "A/B Test Agent",
                 elapsedMs: 0,
-                result: ev.data.ab_result,
-                status: "pending",
+                result:    abResult,
+                status:    "pending",
               };
               setAgentOutputs(prev => {
                 const exists = prev.find(o => o.agentKey === "ab_test");
                 return exists ? prev : [output, ...prev];
               });
             }
-            if (ev.stage === "SYNTHESIS" && ev.status === "completed" && ev.data?.documentation) {
-              setDocumentation(ev.data.documentation);
+
+            // ── Capture each specialist agent output ───────────────────
+            if (ev.stage === "AGENT_EXEC" && ev.status === "completed") {
+              // agent_key comes from the orchestrator's data payload
+              const agentKey = (ev.data?.agent_key as string)
+                || (ev.agent || "")
+                    .toLowerCase()
+                    .replace(/ agent$/i, "")
+                    .replace(/\s+/g, "_")
+                || "unknown";
+
+              const result = ev.data?.result ?? { status: "completed", detail: ev.detail };
+
+              const output: AgentOutput = {
+                agentKey,
+                agentName:  ev.agent || agentKey,
+                elapsedMs:  (ev.data?.elapsed_ms as number) || 0,
+                result,
+                status:     "pending",
+              };
+
+              setAgentOutputs(prev => {
+                const exists = prev.find(o => o.agentKey === agentKey);
+                return exists ? prev : [...prev, output];
+              });
             }
-            if (ev.stage === "COMPLETE" && ev.data?.documentation) {
-              setDocumentation(ev.data.documentation);
+
+            // ── Capture GLM synthesis document ─────────────────────────
+            if (
+              (ev.stage === "SYNTHESIS" || ev.stage === "COMPLETE") &&
+              ev.status === "completed" &&
+              ev.data?.documentation
+            ) {
+              setDocumentation(ev.data.documentation as string);
             }
-            if (ev.error) { setIsExecuting(false); toast.error("Pipeline error"); return; }
-          } catch (_) {}
+
+            // ── Pipeline error ─────────────────────────────────────────
+            if (ev.error) {
+              toast.error(`Pipeline error: ${ev.error}`);
+              setIsExecuting(false);
+              return;
+            }
+          } catch (_) {
+            // Silently skip malformed SSE lines
+          }
         }
       }
+
       toast.success("Pipeline complete — review agent outputs below");
       setCommandInput("");
-    } catch (err) {
-      toast.error("Pipeline error — please try again");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Pipeline error — ${msg}`);
     } finally {
       setIsExecuting(false);
     }
