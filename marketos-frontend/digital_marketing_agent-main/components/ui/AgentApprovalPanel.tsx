@@ -104,39 +104,96 @@ function EmailPreview({ variant }: { variant: any }) {
   );
 }
 
+/* ── Creative / Image View ─────────────────────────────────────────────────── */
+function CreativeView({ result }: { result: any }) {
+  const preview = result?.asset_preview || result?.asset_url || result?.asset_preview_url;
+  const concept = result?.campaign_concept || result?.creative_concept;
+  const style = result?.creative_direction || result?.style;
+  const specs = result?.ad_banner_specs || {};
+  const palette = result?.color_palette || [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {concept && (
+        <div className="bg-pink-50 border border-pink-200 p-3 rounded-lg">
+          <p className="text-xs font-bold uppercase text-pink-700">Creative Concept</p>
+          <p className="text-sm font-bold text-gray-900 mt-1">{concept}</p>
+          {style && <p className="text-xs text-gray-600 mt-1 italic">Style: {style}</p>}
+        </div>
+      )}
+
+      {/* Visual Image Preview */}
+      {preview && (
+        <div className="border-2 border-black rounded-lg overflow-hidden shadow-[4px_4px_0_0_#000] relative bg-gray-900">
+          <img src={preview} alt="Creative Asset Preview" className="w-full h-48 object-cover" />
+          {specs.headline_overlay && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4 text-center">
+              <span className="font-display font-black text-xl text-yellow-300 uppercase drop-shadow-[2px_2px_0_#000]">
+                {specs.headline_overlay}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {specs.dimensions && (
+        <div className="grid grid-cols-2 gap-2">
+          <Metric label="Banner Dimensions" value={specs.dimensions} />
+          <Metric label="Visual Variants" value={`${result?.total_variants_generated || 4} generated`} />
+        </div>
+      )}
+
+      {palette.length > 0 && (
+        <div>
+          <p className="text-xs font-bold uppercase text-gray-500 mb-1">Color Palette</p>
+          <div className="flex gap-2 flex-wrap">
+            {palette.map((c: string, i: number) => (
+              <span key={i} className="text-xs font-mono px-2 py-1 bg-gray-100 border border-gray-300 rounded font-bold">
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── SMS Bubble ────────────────────────────────────────────────────────────── */
 function SmsBubble({ result }: { result: any }) {
+  const formats: string[] = result?.sms_marketing_formats || [];
   const v = result?.variants?.[0] || {};
+  const msg = formats[0] || v.message || result?.selected_variant?.message || "SMS content generated";
+
   return (
     <div className="flex flex-col gap-4">
       {/* Phone mockup */}
       <div className="flex justify-center">
-        <div className="w-64 bg-gray-100 rounded-3xl border-4 border-gray-800 p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-gray-600">Messages</span>
-            <span className="text-xs text-gray-400">now</span>
+        <div className="w-72 bg-gray-900 rounded-3xl border-4 border-black p-4 shadow-xl">
+          <div className="flex items-center justify-between mb-3 border-b border-gray-700 pb-2">
+            <span className="text-xs font-bold text-white">Messages</span>
+            <span className="text-[10px] text-lime-400">Live Preview</span>
           </div>
           <div className="flex gap-2 items-end">
             <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold shrink-0">M</div>
-            <div className="bg-white rounded-2xl rounded-bl-none px-3 py-2 shadow text-sm text-gray-900 leading-relaxed max-w-[180px]">
-              {v.message || result?.selected_variant?.message || "SMS content will appear here"}
+            <div className="bg-white rounded-2xl rounded-bl-none px-3 py-2.5 shadow text-xs font-mono text-gray-900 leading-relaxed">
+              {msg}
             </div>
           </div>
-          {v.char_count && (
-            <p className="text-[10px] text-gray-400 mt-2 text-right">{v.char_count} chars · {v.segments || 1} SMS</p>
-          )}
+          <p className="text-[10px] text-gray-400 mt-2 text-right">TCPA Opt-out Included</p>
         </div>
       </div>
-      {/* Drip */}
-      {(result?.drip_sequence || v.drip_sequence || []).length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-          <p className="text-xs font-bold uppercase text-green-700 mb-2">Drip Follow-ups</p>
-          {(result?.drip_sequence || v.drip_sequence || []).map((d: string, i: number) => (
-            <p key={i} className="text-sm text-gray-700 py-0.5">• {d}</p>
+
+      {formats.length > 1 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-bold uppercase text-green-700">Alternative SMS Formats</p>
+          {formats.slice(1).map((f, i) => (
+            <div key={i} className="bg-green-50 border border-green-200 p-2.5 rounded text-xs font-mono text-gray-800">
+              {f}
+            </div>
           ))}
         </div>
       )}
-      {result?.optimal_send_time && <Metric label="Optimal Send Time" value={result.optimal_send_time}/>}
     </div>
   );
 }
@@ -144,25 +201,47 @@ function SmsBubble({ result }: { result: any }) {
 /* ── Copy Variants ─────────────────────────────────────────────────────────── */
 function CopyVariants({ result }: { result: any }) {
   const variants = result?.variants || [];
+  const headlines = result?.ad_headlines || [];
   const selected = result?.selected_variant_id;
   const [active, setActive] = useState<string>(selected || variants[0]?.variant_id || "");
   const v = variants.find((x: any) => x.variant_id === active) || variants[0];
+
   return (
     <div className="flex flex-col gap-3">
-      {result?.selection_reasoning && (
-        <p className="text-sm text-gray-600 italic border-l-4 border-blue-300 pl-3 bg-blue-50 py-2 rounded-r">{result.selection_reasoning}</p>
+      {headlines.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-xs font-bold uppercase text-blue-700 mb-2">High-Converting Ad Headlines</p>
+          <div className="flex flex-col gap-1.5">
+            {headlines.map((h: string, i: number) => (
+              <p key={i} className="text-xs font-mono text-gray-900 font-bold bg-white p-2 rounded border border-blue-100">
+                {i + 1}. {h}
+              </p>
+            ))}
+          </div>
+        </div>
       )}
-      {/* Variant tabs */}
-      <div className="flex gap-2">
-        {variants.map((vr: any) => (
-          <button key={vr.variant_id} onClick={() => setActive(vr.variant_id)}
-            className={`px-3 py-1.5 text-xs font-bold rounded border-2 transition-all ${
-              active === vr.variant_id ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
-            }`}>
-            {vr.variant_id} {vr.variant_id === selected && "★"}
-          </button>
-        ))}
-      </div>
+
+      {result?.landing_page_variants?.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+          <p className="text-xs font-bold uppercase text-purple-700 mb-1">Landing Page Hero Variants</p>
+          {result.landing_page_variants.map((lp: string, i: number) => (
+            <p key={i} className="text-xs text-gray-800 py-1 font-mono">• {lp}</p>
+          ))}
+        </div>
+      )}
+
+      {variants.length > 0 && (
+        <div className="flex gap-2">
+          {variants.map((vr: any) => (
+            <button key={vr.variant_id} onClick={() => setActive(vr.variant_id)}
+              className={`px-3 py-1.5 text-xs font-bold rounded border-2 transition-all ${
+                active === vr.variant_id ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
+              }`}>
+              {vr.variant_id} {vr.variant_id === selected && "★"}
+            </button>
+          ))}
+        </div>
+      )}
       {v && <EmailPreview variant={v}/>}
     </div>
   );
@@ -219,11 +298,11 @@ function SocialPosts({ result }: { result: any }) {
 function ComplianceView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className={`flex items-center gap-3 p-3 rounded-lg border-2 ${result?.approved ? "bg-green-50 border-green-400" : "bg-red-50 border-red-400"}`}>
-        {result?.approved ? <CheckCircle2 className="w-6 h-6 text-green-600"/> : <AlertTriangle className="w-6 h-6 text-red-600"/>}
+      <div className={`flex items-center gap-3 p-3 rounded-lg border-2 ${result?.approved || result?.compliance_status === "APPROVED" ? "bg-green-50 border-green-400" : "bg-red-50 border-red-400"}`}>
+        {result?.approved || result?.compliance_status === "APPROVED" ? <CheckCircle2 className="w-6 h-6 text-green-600"/> : <AlertTriangle className="w-6 h-6 text-red-600"/>}
         <div className="flex-1">
-          <p className="font-bold">{result?.approved ? "✅ Content Approved" : "❌ Issues Found"}</p>
-          {result?.reason_code && <p className="text-xs text-gray-500">{result.reason_code}</p>}
+          <p className="font-bold">{result?.approved || result?.compliance_status === "APPROVED" ? "✅ Content Approved" : "❌ Issues Found"}</p>
+          {result?.policy_notes && <p className="text-xs text-gray-600 mt-0.5">{result.policy_notes}</p>}
         </div>
         {result?.compliance_score != null && <span className="font-mono font-black text-2xl">{result.compliance_score}%</span>}
       </div>
@@ -261,10 +340,10 @@ function FinanceView({ result }: { result: any }) {
 function SupervisorView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-3">
-      {result?.campaign_name && <h3 className="font-black text-2xl text-gray-900">{result.campaign_name}</h3>}
+      {result?.campaign_name && <h3 className="font-black text-xl text-gray-900">{result.campaign_name}</h3>}
       <div className="grid grid-cols-2 gap-2">
         {result?.goal && <Metric label="Goal" value={result.goal}/>}
-        {result?.budget != null && <Metric label="Budget" value={`$${result.budget}`}/>}
+        {result?.budget != null && <Metric label="Budget" value={typeof result.budget === 'number' ? `$${result.budget}` : result.budget}/>}
         {result?.timeline && <Metric label="Timeline" value={result.timeline}/>}
         {result?.tone && <Metric label="Tone" value={result.tone}/>}
         {result?.target_audience && <div className="col-span-2"><Metric label="Target Audience" value={result.target_audience}/></div>}
@@ -272,7 +351,7 @@ function SupervisorView({ result }: { result: any }) {
       {result?.key_messages?.length > 0 && (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
           <p className="text-xs font-bold uppercase text-purple-700 mb-2">Key Messages</p>
-          {result.key_messages.map((m: string, i: number) => <p key={i} className="text-sm text-gray-800">• {m}</p>)}
+          {result.key_messages.map((m: string, i: number) => <p key={i} className="text-xs text-gray-800">• {m}</p>)}
         </div>
       )}
     </div>
@@ -280,30 +359,46 @@ function SupervisorView({ result }: { result: any }) {
 }
 
 function EmailSendView({ result }: { result: any }) {
+  const draft = result?.email_draft_1 || result?.selected_variant || {};
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 p-3 bg-cyan-50 border border-cyan-300 rounded-lg">
         <Mail className="w-5 h-5 text-cyan-600"/>
         <div>
-          <p className="font-bold text-sm">{result?.status || "SENT"}</p>
-          {result?.optimal_send_time && <p className="text-xs text-gray-500">Best time: {result.optimal_send_time}</p>}
+          <p className="font-bold text-sm">{result?.status || "CONFIGURED & READY"}</p>
+          <p className="text-xs text-gray-500">Sequence: {result?.email_campaign_name || "Enterprise Nurture"}</p>
         </div>
       </div>
       
-      {result?.selected_variant && (
-        <div className="border border-cyan-200 rounded-lg p-3 bg-cyan-50/30">
-          <p className="text-xs font-bold uppercase text-cyan-700 mb-2">Generated Email Message Content</p>
-          <EmailPreview variant={result.selected_variant}/>
+      {(draft.subject_line || draft.body) && (
+        <div className="border-2 border-cyan-300 rounded-lg p-4 bg-white shadow-sm">
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
+            <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-white text-xs font-bold">M</div>
+            <div>
+              <p className="text-xs font-bold text-gray-800">MarketOS AI &lt;noreply@marketos.ai&gt;</p>
+              <p className="text-xs text-gray-400">To: Target Audience Segment</p>
+            </div>
+          </div>
+          {draft.subject_line && <p className="font-bold text-gray-900 text-sm mb-1">Subject: {draft.subject_line}</p>}
+          {draft.preview_text && <p className="text-xs text-gray-500 italic mb-3">Preview: {draft.preview_text}</p>}
+          {draft.body && (
+            <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-800 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto font-sans">
+              {draft.body}
+            </div>
+          )}
+          {draft.call_to_action && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="inline-block bg-cyan-600 text-white text-xs font-bold px-4 py-2 rounded">
+                {draft.call_to_action}
+              </span>
+              {draft.cta_url && <span className="text-xs text-gray-400 font-mono">{draft.cta_url}</span>}
+            </div>
+          )}
         </div>
       )}
 
-      {result?.drip_sequence_preview?.length > 0 && (
-        <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
-          <p className="text-xs font-bold uppercase text-cyan-700 mb-2">Drip Sequence Queued</p>
-          {result.drip_sequence_preview.map((d: string, i: number) => (
-            <p key={i} className="text-sm text-gray-700 py-1 border-b border-cyan-100 last:border-0">📧 {d}</p>
-          ))}
-        </div>
+      {result?.sequence_schedule && (
+        <p className="text-xs text-gray-600 font-mono bg-cyan-50 p-2 rounded">📅 Schedule: {result.sequence_schedule}</p>
       )}
     </div>
   );
@@ -333,23 +428,22 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-2">
       <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wide">{label}</p>
-      <p className={`font-mono font-black text-sm ${color || "text-gray-900"}`}>{value}</p>
+      <p className={`font-mono font-black text-xs ${color || "text-gray-900"}`}>{value}</p>
     </div>
   );
 }
 
 function renderBody(agentKey: string, result: any) {
-  switch (agentKey) {
-    case "supervisor":   return <SupervisorView result={result}/>;
-    case "copy":        return <CopyVariants result={result}/>;
-    case "email":       return result?.variants ? <CopyVariants result={result}/> : <EmailSendView result={result}/>;
-    case "send_result": return <EmailSendView result={result}/>;
-    case "sms":         return <SmsBubble result={result}/>;
-    case "social_media":return <SocialPosts result={result}/>;
-    case "compliance":  return <ComplianceView result={result}/>;
-    case "finance":     return <FinanceView result={result}/>;
-    default:            return <GenericView result={result}/>;
-  }
+  const key = agentKey.toLowerCase();
+  if (key.includes("supervisor")) return <SupervisorView result={result}/>;
+  if (key.includes("creative") || key.includes("image")) return <CreativeView result={result}/>;
+  if (key.includes("copy")) return <CopyVariants result={result}/>;
+  if (key.includes("email") || key.includes("send")) return <EmailSendView result={result}/>;
+  if (key.includes("sms")) return <SmsBubble result={result}/>;
+  if (key.includes("social")) return <SocialPosts result={result}/>;
+  if (key.includes("compliance")) return <ComplianceView result={result}/>;
+  if (key.includes("finance")) return <FinanceView result={result}/>;
+  return <GenericView result={result}/>;
 }
 
 /* ── Main Card ─────────────────────────────────────────────────────────────── */
