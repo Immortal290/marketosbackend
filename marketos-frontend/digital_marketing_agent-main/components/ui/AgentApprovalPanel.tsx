@@ -110,48 +110,49 @@ function CreativeView({ result }: { result: any }) {
     {
       id: "v1",
       title: "1. Landscape (1200x628)",
-      url: result?.asset_preview || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      url: result?.asset_preview || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95",
       overlay: result?.ad_banner_specs?.headline_overlay || "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF",
       format: "LinkedIn / Meta Landscape (1200x628)"
     },
     {
       id: "v2",
       title: "2. Instagram Square (1080x1080)",
-      url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
+      url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95",
       overlay: "☀️ BEAT THE HEAT WITH 10X MARKETING VELOCITY",
       format: "Instagram / Facebook Square (1080x1080)"
     },
     {
       id: "v3",
       title: "3. Mobile Story (1080x1920)",
-      url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80",
+      url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95",
       overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM YOUR GIFT",
       format: "Instagram Stories & Reels (1080x1920)"
     },
     {
       id: "v4",
       title: "4. Dark Cyberpunk (1200x628)",
-      url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80",
+      url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95",
       overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT YOUR COMMAND",
       format: "High-Contrast Cyberpunk Dark Mode"
     },
     {
       id: "v5",
       title: "5. Neon Sunburst (1080x1080)",
-      url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80",
+      url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95",
       overlay: "🌴 SIZZLE INTO SUMMER WITH 3 MONTHS FREE ACCESS",
       format: "Vibrant Neon Tropical Theme"
     },
     {
       id: "v6",
       title: "6. Minimalist Enterprise (1200x628)",
-      url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80",
+      url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95",
       overlay: "📈 UNIFIED AI COMPLIANCE & REAL-TIME ROAS TRACKING",
       format: "Minimalist B2B Enterprise Layout"
     }
   ];
 
   const [activeIdx, setActiveIdx] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const activeBanner = options[activeIdx] || options[0];
 
   const concept = result?.campaign_concept || result?.creative_concept;
@@ -161,10 +162,13 @@ function CreativeView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-4">
       {concept && (
-        <div className="bg-pink-50 border border-pink-200 p-3 rounded-lg">
-          <p className="text-xs font-bold uppercase text-pink-700">Creative Concept</p>
-          <p className="text-sm font-bold text-gray-900 mt-1">{concept}</p>
-          {style && <p className="text-xs text-gray-600 mt-1 italic">Style: {style}</p>}
+        <div className="bg-gradient-to-r from-pink-50 to-purple-50 border-2 border-pink-300 p-3.5 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black uppercase tracking-wider text-pink-700">Creative Concept</p>
+            <span className="bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">4K ULTRA-HD</span>
+          </div>
+          <p className="text-base font-black text-gray-900 mt-1">{concept}</p>
+          {style && <p className="text-xs text-gray-600 mt-1 font-medium italic">Style: {style}</p>}
         </div>
       )}
 
@@ -172,42 +176,66 @@ function CreativeView({ result }: { result: any }) {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase text-gray-700">Visual Banner Options ({options.length} Generated)</span>
-          <span className="text-[10px] text-pink-600 font-mono font-bold">Select variant to preview</span>
+          <span className="text-[10px] text-pink-600 font-mono font-bold">Click banner to preview in 4K</span>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {options.map((opt: any, idx: number) => (
             <button
               key={opt.id || idx}
               onClick={() => setActiveIdx(idx)}
-              className={`p-1.5 rounded-lg border-2 text-left transition-all flex flex-col items-center gap-1 ${
+              className={`p-1.5 rounded-xl border-2 text-left transition-all flex flex-col items-center gap-1 ${
                 activeIdx === idx
-                  ? "bg-pink-500 text-white border-pink-700 shadow-md scale-[1.02]"
+                  ? "bg-pink-600 text-white border-pink-700 shadow-lg scale-[1.03] ring-2 ring-pink-400"
                   : "bg-white text-gray-700 border-gray-300 hover:border-pink-400 hover:bg-pink-50/50"
               }`}
             >
-              <img src={opt.url} alt={opt.title} className="w-full h-12 object-cover rounded" />
+              <img src={opt.url} alt={opt.title} className="w-full h-14 object-cover rounded-lg shadow-sm" />
               <span className="text-[10px] font-bold truncate w-full text-center">{opt.title.split('.')[1] || opt.title}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Active Visual Banner Preview */}
-      <div className="border-2 border-black rounded-lg overflow-hidden shadow-[4px_4px_0_0_#000] relative bg-gray-900 group">
-        <img src={activeBanner.url} alt={activeBanner.title} className="w-full h-64 object-cover transition-all" />
-        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6 text-center">
-          <span className="text-xs font-mono font-bold text-pink-300 uppercase tracking-widest mb-2 bg-black/60 px-3 py-1 rounded-full border border-pink-400/50">
-            {activeBanner.format}
-          </span>
-          <span className="font-display font-black text-xl sm:text-2xl text-yellow-300 uppercase drop-shadow-[2px_2px_0_#000] max-w-xl leading-snug">
-            {activeBanner.overlay}
-          </span>
+      {/* Active Visual Banner Preview Card */}
+      <div className="border-3 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0_0_#000] relative bg-gray-950 group">
+        <img
+          src={activeBanner.url}
+          alt={activeBanner.title}
+          className="w-full h-72 sm:h-80 object-cover transition-all duration-300 group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-between p-6">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono font-bold text-yellow-300 uppercase tracking-widest bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-yellow-400/40 shadow-sm">
+              {activeBanner.format}
+            </span>
+            <button
+              onClick={() => setLightboxOpen(true)}
+              className="bg-white/90 hover:bg-white text-black text-xs font-bold px-3 py-1.5 rounded-lg shadow border border-black flex items-center gap-1 transition-all"
+            >
+              <Eye className="w-3.5 h-3.5" /> View Full 4K
+            </button>
+          </div>
+          <div className="text-center">
+            <span className="font-display font-black text-2xl sm:text-3xl text-yellow-300 uppercase drop-shadow-[3px_3px_0_#000] leading-tight block">
+              {activeBanner.overlay}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Metric label="Active Format" value={activeBanner.format} />
-        <Metric label="Visual Options" value={`${options.length} Banners Ready`} color="text-pink-600" />
+        <Metric label="Image Quality" value="4K Ultra-HD (2400px)" color="text-green-600" />
+        <div className="col-span-2 sm:col-span-1">
+          <a
+            href={activeBanner.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 bg-black text-white text-xs font-bold py-2.5 px-3 rounded-lg border-2 border-black hover:bg-gray-800 transition-all h-full"
+          >
+            Download 4K Asset
+          </a>
+        </div>
       </div>
 
       {palette.length > 0 && (
@@ -215,10 +243,29 @@ function CreativeView({ result }: { result: any }) {
           <p className="text-xs font-bold uppercase text-gray-500 mb-1">Color Palette</p>
           <div className="flex gap-2 flex-wrap">
             {palette.map((c: string, i: number) => (
-              <span key={i} className="text-xs font-mono px-2 py-1 bg-gray-100 border border-gray-300 rounded font-bold">
+              <span key={i} className="text-xs font-mono px-2.5 py-1 bg-gray-100 border border-gray-300 rounded-md font-bold">
                 {c}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4K Lightbox Modal */}
+      {lightboxOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setLightboxOpen(false)}>
+          <div className="relative max-w-5xl w-full bg-gray-950 border-4 border-white rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 bg-gray-900 border-b border-gray-800">
+              <p className="font-bold text-white text-sm">{activeBanner.title} — 4K Full Resolution</p>
+              <button onClick={() => setLightboxOpen(false)} className="text-white hover:text-red-400 font-bold text-xl px-2">✕</button>
+            </div>
+            <div className="relative bg-black flex items-center justify-center max-h-[75vh] overflow-hidden">
+              <img src={activeBanner.url} alt={activeBanner.title} className="max-h-[75vh] w-auto object-contain" />
+              <div className="absolute bottom-4 inset-x-4 bg-black/75 backdrop-blur-md p-4 rounded-xl text-center border border-white/20">
+                <p className="font-black text-yellow-300 text-xl uppercase drop-shadow">{activeBanner.overlay}</p>
+                <p className="text-xs text-gray-300 mt-1 font-mono">{activeBanner.format}</p>
+              </div>
+            </div>
           </div>
         </div>
       )}

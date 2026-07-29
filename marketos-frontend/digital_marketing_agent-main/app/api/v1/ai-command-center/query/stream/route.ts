@@ -28,56 +28,56 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
 function getBrandImageGallery(topic: string, lowerPrompt: string) {
   if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
     return [
-      { id: "v1", title: "1. Athletic Performance (1200x628)", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=80", overlay: "🔥 UNLEASH YOUR SUMMER SPEED — NIKE AIR MAX", format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. High-Speed Motion (1080x1080)", url: "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=1080&q=80", overlay: "⚡ JUST DO IT — EXCLUSIVE SUMMER DROP", format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Urban Streetwear Story (1080x1920)", url: "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 UP TO 40% OFF SUMMER COLLECTION", format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Dark Mode Tech Runner (1200x628)", url: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1200&q=80", overlay: "👟 REVOLUTIONARY CUSHIONING & UNMATCHED SPEED", format: "High-Contrast Cyberpunk Dark Mode" },
-      { id: "v5", title: "5. Gold Edition Sneaker (1080x1080)", url: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=1080&q=80", overlay: "🏆 LIMITED EDITION VIP EARLY ACCESS", format: "Vibrant Gold Edition Theme" },
-      { id: "v6", title: "6. Stadium Lights Banner (1200x628)", url: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1200&q=80", overlay: "🥇 ENGINEERED FOR CHAMPIONS — ORDER TODAY", format: "Stadium Arena Banner" }
+      { id: "v1", title: "1. Athletic Performance (1200x628)", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=2400&q=95", overlay: "🔥 UNLEASH YOUR SUMMER SPEED — NIKE AIR MAX", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. High-Speed Motion (1080x1080)", url: "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=2400&q=95", overlay: "⚡ JUST DO IT — EXCLUSIVE SUMMER DROP", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Urban Streetwear Story (1080x1920)", url: "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=2400&q=95", overlay: "🚀 UP TO 40% OFF SUMMER COLLECTION", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Dark Mode Tech Runner (1200x628)", url: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=2400&q=95", overlay: "👟 REVOLUTIONARY CUSHIONING & UNMATCHED SPEED", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Gold Edition Sneaker (1080x1080)", url: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=2400&q=95", overlay: "🏆 LIMITED EDITION VIP EARLY ACCESS", format: "Vibrant Gold Edition Theme" },
+      { id: "v6", title: "6. Stadium Lights Banner (1200x628)", url: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=2400&q=95", overlay: "🥇 ENGINEERED FOR CHAMPIONS — ORDER TODAY", format: "Stadium Arena Banner" }
     ];
   }
 
   if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive")) {
     return [
-      { id: "v1", title: "1. Electric Performance (1200x628)", url: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ EXPERIENCE ZERO EMISSIONS — TESLA MODEL Y", format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Sleek Modern EV (1080x1080)", url: "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 THE FUTURE OF DRIVING — BOOK A TEST DRIVE", format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Highway Autopilot (1080x1920)", url: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1080&q=80", overlay: "🛣️ FULL SELF-DRIVING INTELLIGENCE", format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Cyberpunk Supercharger (1200x628)", url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80", overlay: "🔋 200 MILES IN 15 MINUTES — SUPERCHARGE", format: "High-Contrast Cyberpunk Dark Mode" },
-      { id: "v5", title: "5. Minimalist Cockpit (1080x1080)", url: "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=1080&q=80", overlay: "🖥️ 15-INCH TOUCHSCREEN & PREMIUM AUDIO", format: "Minimalist Interior Theme" },
-      { id: "v6", title: "6. Sunset Highway Banner (1200x628)", url: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=1200&q=80", overlay: "☀️ SUSTAINABLE ENERGY FOR THE PLANET", format: "Clean Energy Sunset Banner" }
+      { id: "v1", title: "1. Electric Performance (1200x628)", url: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=2400&q=95", overlay: "⚡ EXPERIENCE ZERO EMISSIONS — TESLA MODEL Y", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Sleek Modern EV (1080x1080)", url: "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=2400&q=95", overlay: "🚀 THE FUTURE OF DRIVING — BOOK A TEST DRIVE", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Highway Autopilot (1080x1920)", url: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=2400&q=95", overlay: "🛣️ FULL SELF-DRIVING INTELLIGENCE", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Cyberpunk Supercharger (1200x628)", url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=2400&q=95", overlay: "🔋 200 MILES IN 15 MINUTES — SUPERCHARGE", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Minimalist Cockpit (1080x1080)", url: "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=2400&q=95", overlay: "🖥️ 15-INCH TOUCHSCREEN & PREMIUM AUDIO", format: "Minimalist Interior Theme" },
+      { id: "v6", title: "6. Sunset Highway Banner (1200x628)", url: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=2400&q=95", overlay: "☀️ SUSTAINABLE ENERGY FOR THE PLANET", format: "Clean Energy Sunset Banner" }
     ];
   }
 
   if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte")) {
     return [
-      { id: "v1", title: "1. Iced Cold Brew Splash (1200x628)", url: "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=1200&q=80", overlay: "☕ REFRESH YOUR SUMMER — STARBUCKS ICED COFFEE", format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Artisan Latte Art (1080x1080)", url: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=80", overlay: "☀️ CRAFTED WITH PASSION — 50% OFF YOUR FIRST ORDER", format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Summer Refresher Story (1080x1920)", url: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1080&q=80", overlay: "🍓 TROPICAL FRUIT REFRESHERS ARE HERE", format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Modern Coffee Bar (1200x628)", url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80", overlay: "🏬 ORDER AHEAD WITH STARBUCKS REWARDS", format: "High-Contrast Storefront Mode" },
-      { id: "v5", title: "5. Iced Frappuccino Delight (1080x1080)", url: "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=1080&q=80", overlay: "🍦 SWEET SUMMER TREATS — BUY 1 GET 1 FREE", format: "Vibrant Summer Delight Theme" },
-      { id: "v6", title: "6. Morning Roast Beans (1200x628)", url: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1200&q=80", overlay: "🌱 100% ETHICALLY SOURCED ARABICA BEANS", format: "Ethical Sourcing Banner" }
+      { id: "v1", title: "1. Iced Cold Brew Splash (1200x628)", url: "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=2400&q=95", overlay: "☕ REFRESH YOUR SUMMER — STARBUCKS ICED COFFEE", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Artisan Latte Art (1080x1080)", url: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=2400&q=95", overlay: "☀️ CRAFTED WITH PASSION — 50% OFF YOUR FIRST ORDER", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Summer Refresher Story (1080x1920)", url: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=2400&q=95", overlay: "🍓 TROPICAL FRUIT REFRESHERS ARE HERE", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Modern Coffee Bar (1200x628)", url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2400&q=95", overlay: "🏬 ORDER AHEAD WITH STARBUCKS REWARDS", format: "High-Contrast Storefront Mode" },
+      { id: "v5", title: "5. Iced Frappuccino Delight (1080x1080)", url: "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=2400&q=95", overlay: "🍦 SWEET SUMMER TREATS — BUY 1 GET 1 FREE", format: "Vibrant Summer Delight Theme" },
+      { id: "v6", title: "6. Morning Roast Beans (1200x628)", url: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=2400&q=95", overlay: "🌱 100% ETHICALLY SOURCED ARABICA BEANS", format: "Ethical Sourcing Banner" }
     ];
   }
 
   if (lowerPrompt.includes("summer") || lowerPrompt.includes("beach")) {
     return [
-      { id: "v1", title: "1. Summer Beach Paradise (1200x628)", url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80", overlay: "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF", format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Neon Sunburst (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1080&q=80", overlay: "☀️ BEAT THE HEAT WITH UNBEATABLE OFFERS", format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Summer Mobile Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM GIFT", format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Cyberpunk Neon Dark (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT WORK", format: "High-Contrast Cyberpunk Dark Mode" },
-      { id: "v5", title: "5. Summer Shopping Spree (1080x1080)", url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1080&q=80", overlay: "🛍️ SEASONAL DISCOUNT BLITZ — SHOP NOW", format: "Vibrant E-Commerce Theme" },
-      { id: "v6", title: "6. Promotional Discount (1200x628)", url: "https://images.unsplash.com/photo-1556742049-0a670f4a4591?auto=format&fit=crop&w=1200&q=80", overlay: "📈 SCALE YOUR CONVERSIONS EFFORTLESSLY", format: "B2B Promotional Layout" }
+      { id: "v1", title: "1. Summer Beach Paradise (1200x628)", url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=2400&q=95", overlay: "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Neon Sunburst (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95", overlay: "☀️ BEAT THE HEAT WITH UNBEATABLE OFFERS", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Summer Mobile Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95", overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM GIFT", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Cyberpunk Neon Dark (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95", overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT WORK", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Summer Shopping Spree (1080x1080)", url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=2400&q=95", overlay: "🛍️ SEASONAL DISCOUNT BLITZ — SHOP NOW", format: "Vibrant E-Commerce Theme" },
+      { id: "v6", title: "6. Promotional Discount (1200x628)", url: "https://images.unsplash.com/photo-1556742049-0a670f4a4591?auto=format&fit=crop&w=2400&q=95", overlay: "📈 SCALE YOUR CONVERSIONS EFFORTLESSLY", format: "B2B Promotional Layout" }
     ];
   }
 
   // Default High-Tech AI SaaS Enterprise Gallery
   return [
-    { id: "v1", title: "1. Holographic AI Dashboard (1200x628)", url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ 10X MARKETING VELOCITY WITH AI AGENTS", format: "LinkedIn / Meta Landscape (1200x628)" },
-    { id: "v2", title: "2. Command Center (1080x1080)", url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 DEPLOY 18 AUTONOMOUS SPECIALIST AGENTS", format: "Instagram / Facebook Square (1080x1080)" },
-    { id: "v3", title: "3. Growth Telemetry Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1080&q=80", overlay: "📊 REAL-TIME ROAS TRACKING & COMPLIANCE", format: "Instagram Stories & Reels (1080x1920)" },
-    { id: "v4", title: "4. Cyberpunk Neural Network (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", overlay: "🔒 UNIFIED ENTERPRISE COMPLIANCE AUDITING", format: "High-Contrast Cyberpunk Dark Mode" },
-    { id: "v5", title: "5. Automated Workflow Nodes (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1080&q=80", overlay: "💡 ZERO-FRICTION CAMPAIGN ORCHESTRATION", format: "Vibrant Tech Node Layout" },
-    { id: "v6", title: "6. Enterprise Cloud Infrastructure (1200x628)", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80", overlay: "📈 PROVEN 5.4X PREDICTED RETURN ON AD SPEND", format: "Enterprise Data Infrastructure" }
+    { id: "v1", title: "1. Holographic AI Dashboard (1200x628)", url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95", overlay: "⚡ 10X MARKETING VELOCITY WITH AI AGENTS", format: "LinkedIn / Meta Landscape (1200x628)" },
+    { id: "v2", title: "2. Command Center (1080x1080)", url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95", overlay: "🚀 DEPLOY 18 AUTONOMOUS SPECIALIST AGENTS", format: "Instagram / Facebook Square (1080x1080)" },
+    { id: "v3", title: "3. Growth Telemetry Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95", overlay: "📊 REAL-TIME ROAS TRACKING & COMPLIANCE", format: "Instagram Stories & Reels (1080x1920)" },
+    { id: "v4", title: "4. Cyberpunk Neural Network (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95", overlay: "🔒 UNIFIED ENTERPRISE COMPLIANCE AUDITING", format: "High-Contrast Cyberpunk Dark Mode" },
+    { id: "v5", title: "5. Automated Workflow Nodes (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95", overlay: "💡 ZERO-FRICTION CAMPAIGN ORCHESTRATION", format: "Vibrant Tech Node Layout" },
+    { id: "v6", title: "6. Enterprise Cloud Infrastructure (1200x628)", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95", overlay: "📈 PROVEN 5.4X PREDICTED RETURN ON AD SPEND", format: "Enterprise Data Infrastructure" }
   ];
 }
 
