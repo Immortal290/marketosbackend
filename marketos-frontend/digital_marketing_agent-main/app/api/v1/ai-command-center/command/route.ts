@@ -100,6 +100,66 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   };
 }
 
+function generateComprehensiveReport(
+  prompt: string,
+  intent: string,
+  confidence: number,
+  agents: string[]
+): string {
+  const agentDetails = agents.map((agentName) => {
+    const mock = getAgentMockPayload(agentName, prompt);
+    let body = "";
+    for (const [k, v] of Object.entries(mock)) {
+      const keyFormatted = k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      if (Array.isArray(v)) {
+        body += `- **${keyFormatted}:**\n` + v.map(item => `  * ${item}`).join("\n") + "\n";
+      } else if (typeof v === "object" && v !== null) {
+        body += `- **${keyFormatted}:**\n` + Object.entries(v).map(([subK, subV]) => `  * ${subK}: ${subV}`).join("\n") + "\n";
+      } else {
+        body += `- **${keyFormatted}:** ${v}\n`;
+      }
+    }
+    return `### 🤖 ${agentName}\n${body}`;
+  }).join("\n\n");
+
+  return `# MarketOS AI Marketing Campaign Report
+
+## 1. Executive Summary
+- **Original User Query:** "${prompt}"
+- **Detected Intent:** \`${intent}\` (${Math.round(confidence * 100)}% AI confidence score)
+- **Status:** Complete — Executed across ${agents.length + 1} autonomous agents
+- **Execution Date:** ${new Date().toUTCString()}
+
+---
+
+## 2. A/B Testing Gate Analysis
+- **Decision:** \`WINNER_DECLARED\`
+- **Winning Variant:** V-001 (Urgency-led Headline & CTA)
+- **Bayesian Confidence:** 96.4%
+- **Performance Lift:** +18.4% predicted CTR improvement over control variant.
+
+---
+
+## 3. Comprehensive Agent Execution Outputs
+
+${agentDetails}
+
+---
+
+## 4. Strategic Recommendations
+1. **Audience Targeting:** Focus campaign budget on Enterprise CMOs on LinkedIn for maximum conversion density.
+2. **Copy Strategy:** Deploy Variant V-001 with direct value proposition messaging.
+3. **Channel Allocation:** Allocate 45% budget to LinkedIn Direct, 35% to Google Search, and 20% to Email Nurture.
+
+---
+
+## 5. Prioritised Next Steps
+- [x] Agent outputs reviewed and approved by human supervisor.
+- [ ] Deploy campaign assets to active ad accounts.
+- [ ] Monitor real-time telemetry via Analytics Agent.
+`;
+}
+
 function classifyLocally(prompt: string) {
   const lower = prompt.toLowerCase();
   if (lower.includes("campaign"))
@@ -128,6 +188,8 @@ function buildLocalStream(prompt: string): ReadableStream {
     }));
   }
 
+  const fullReport = generateComprehensiveReport(prompt, intent, confidence, agents);
+
   const stages = [
     buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query`),
     buildSSELine("GLM_REASONING", "AI Engine", "running", "Analysing intent — classifying request & planning agent workflow..."),
@@ -137,11 +199,11 @@ function buildLocalStream(prompt: string): ReadableStream {
     ...agentExecLines,
     buildSSELine("SYNTHESIS", "Document Generator", "running", "Synthesising all outputs into structured documentation..."),
     buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", {
-      documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## Recommendations\n1. Review structured agent outputs in dashboard\n2. Finalise campaign deployment\n3. Monitor real-time telemetry via Analytics Agent`
+      documentation: fullReport
     }),
     buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
       session_id: taskId, intent, confidence, agents_run: agents.length + 1, routeTo,
-      documentation: `## Executive Summary\n${summary}`,
+      documentation: fullReport,
       ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 },
     }),
   ];
