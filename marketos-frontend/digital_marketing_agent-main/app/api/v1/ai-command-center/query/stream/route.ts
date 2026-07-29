@@ -51,6 +51,22 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
     };
   }
 
+  if (name.includes("creative") || name.includes("image")) {
+    return {
+      campaign_concept: `${topic}: High-Velocity Multi-Touch Growth Blitz`,
+      creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Yellow & Cyan Accents",
+      visual_theme: lowerPrompt.includes("summer") ? "Tropical Sunburst Neon with Glowing Cybernetic Elements" : "Sleek Enterprise Tech Dark Mode",
+      ad_banner_specs: {
+        dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
+        headline_overlay: lowerPrompt.includes("summer") ? "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF" : "10x MARKETING VELOCITY WITH AI AGENTS",
+        primary_visual: "Futuristic AI Command Dashboard featuring live holographic analytics & performance telemetry"
+      },
+      color_palette: ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
+      asset_preview: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      total_variants_generated: 6
+    };
+  }
+
   if (name.includes("copy")) {
     if (lowerPrompt.includes("summer") || lowerPrompt.includes("promo") || lowerPrompt.includes("headline") || lowerPrompt.includes("ad")) {
       return {
@@ -89,13 +105,34 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
     };
   }
 
-  if (name.includes("image") || name.includes("creative")) {
+  if (name.includes("email")) {
     return {
-      creative_concept: `${topic} Visual Assets`,
-      aspect_ratio: "16:9 & 1:1 Social Formats",
-      style: lowerPrompt.includes("summer") ? "Vibrant Sunburst Neon & High-Energy Aesthetics" : "Sleek Dark Mode Cyberpunk Tech",
-      asset_preview: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
-      variants_generated: 4
+      email_campaign_name: `${topic} 3-Touch Nurture Sequence`,
+      email_draft_1: {
+        subject_line: lowerPrompt.includes("summer") ? "🔥 Summer Special: Unlock 40% Off MarketOS AI Operations" : "Exclusive Briefing: 10x Your Marketing Velocity with AI Agents",
+        preview_text: "Scale your campaign velocity by 10x with 18 autonomous AI agents.",
+        salutation: "Hi {{first_name}},",
+        body: lowerPrompt.includes("summer")
+          ? "Summer is here, and it's time to supercharge your marketing operations.\n\nMarketOS equips your team with 18 autonomous AI agents that handle copy generation, creative design, compliance audits, and real-time ROAS tracking automatically.\n\nFor a limited time, claim 40% off your first 3 months and scale your growth velocity with zero setup friction."
+          : "Enterprise marketing requires rapid execution without expanding headcount.\n\nMarketOS connects 18 specialist AI agents directly into your marketing stack to automate copywriting, ad creation, compliance, and multi-channel publishing.\n\nBook an executive briefing today to see live campaign orchestration in action.",
+        call_to_action: lowerPrompt.includes("summer") ? "Claim 40% Off Summer Special" : "Schedule Executive Briefing",
+        cta_url: "https://marketos.ai/promotions/special-offer",
+        footer: "MarketOS Inc. | 100 Cybernetic Way, San Francisco, CA. Reply STOP to opt out."
+      },
+      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Social Proof & Case Studies), Email 3 (Day 7: Last Call Expiration)",
+      metrics_estimate: { open_rate: "46.2%", click_through_rate: "11.4%", projected_leads: 320 }
+    };
+  }
+
+  if (name.includes("sms")) {
+    return {
+      sms_marketing_formats: [
+        `Option 1 (Urgency Flash Sale): MarketOS Summer Special! Claim 40% OFF AI Marketing Automation for 3 months. Offer ends Friday: https://mktos.ai/s/summer Text STOP to opt out.`,
+        `Option 2 (Direct Value Pitch): Scale your ad campaigns 10x with 18 AI Agents. Special summer discount active today! Try demo: https://mktos.ai/s/demo Text STOP to cancel.`,
+        `Option 3 (VIP Invitation): VIP Access: Executive Demo & 40% off MarketOS Enterprise Suite. Claim your spot: https://mktos.ai/s/vip Reply STOP to unsubscribe.`
+      ],
+      segment_length: "154 characters (1 GSM 7-bit SMS segment)",
+      tcpa_compliance: "Fully compliant — includes mandatory STOP / HELP keyword handlers & opt-out footer."
     };
   }
 
@@ -107,19 +144,6 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
       ad_policy_verified: true,
       risk_score: "LOW (0.02)",
       policy_notes: "All promotional disclaimers and opt-out links validated."
-    };
-  }
-
-  if (name.includes("email")) {
-    return {
-      sequence_name: `${topic} Email Sequence`,
-      subject_lines: [
-        `[Summer Sale] Unlock Exclusive Access for ${topic}`,
-        "Final Reminder: Your Seasonal Discount Expires Soon"
-      ],
-      estimated_open_rate: "44.8%",
-      estimated_ctr: "10.2%",
-      dispatch_status: "Ready for Launch"
     };
   }
 
@@ -165,20 +189,54 @@ function generateComprehensiveReport(
   const agentDetails = agents.map((agentName) => {
     const mock = getAgentMockPayload(agentName, prompt);
     let body = "";
-    for (const [k, v] of Object.entries(mock)) {
-      const keyFormatted = k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-      if (Array.isArray(v)) {
-        body += `\n#### ${keyFormatted}:\n` + v.map(item => `* ${item}`).join("\n") + "\n";
-      } else if (typeof v === "object" && v !== null) {
-        body += `\n#### ${keyFormatted}:\n` + Object.entries(v).map(([subK, subV]) => `* **${subK}:** ${subV}`).join("\n") + "\n";
-      } else {
-        body += `- **${keyFormatted}:** ${v}\n`;
+    
+    if (agentName.toLowerCase().includes("email") && mock.email_draft_1) {
+      const draft = mock.email_draft_1;
+      body += `**Campaign Sequence:** \`${mock.email_campaign_name}\`\n\n`;
+      body += `> 📧 **EMAIL DRAFT 1**\n`;
+      body += `> **Subject:** ${draft.subject_line}\n`;
+      body += `> **Preview Text:** *${draft.preview_text}*\n`;
+      body += `>\n`;
+      body += `> ${draft.salutation}\n>\n`;
+      body += `> ${draft.body.replace(/\n/g, "\n> ")}\n>\n`;
+      body += `> **[ ${draft.call_to_action} ]** → \`${draft.cta_url}\`\n`;
+      body += `>\n`;
+      body += `> *${draft.footer}*\n\n`;
+      body += `- **Sequence Schedule:** ${mock.sequence_schedule}\n`;
+      body += `- **Estimated Performance:** ${mock.metrics_estimate.open_rate} Open Rate | ${mock.metrics_estimate.click_through_rate} CTR\n`;
+    } else if (agentName.toLowerCase().includes("sms") && mock.sms_marketing_formats) {
+      body += `**SMS Marketing Formats:**\n\n`;
+      mock.sms_marketing_formats.forEach((fmt: string) => {
+        body += `\`\`\`text\n${fmt}\n\`\`\`\n`;
+      });
+      body += `- **Segment Length:** ${mock.segment_length}\n`;
+      body += `- **Compliance:** ${mock.tcpa_compliance}\n`;
+    } else if ((agentName.toLowerCase().includes("creative") || agentName.toLowerCase().includes("image")) && mock.ad_banner_specs) {
+      body += `- **Campaign Concept:** ${mock.campaign_concept}\n`;
+      body += `- **Creative Direction:** ${mock.creative_direction}\n`;
+      body += `- **Visual Theme:** ${mock.visual_theme}\n`;
+      body += `\n#### Ad Banner Specifications:\n`;
+      body += `* **Dimensions:** ${mock.ad_banner_specs.dimensions}\n`;
+      body += `* **Headline Overlay:** "${mock.ad_banner_specs.headline_overlay}"\n`;
+      body += `* **Primary Visual:** ${mock.ad_banner_specs.primary_visual}\n`;
+      body += `\n- **Color Palette:** ${mock.color_palette.join(" | ")}\n`;
+      body += `- **Asset Preview:** ![Ad Banner](${mock.asset_preview})\n`;
+    } else {
+      for (const [k, v] of Object.entries(mock)) {
+        const keyFormatted = k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        if (Array.isArray(v)) {
+          body += `\n#### ${keyFormatted}:\n` + v.map(item => `* ${item}`).join("\n") + "\n";
+        } else if (typeof v === "object" && v !== null) {
+          body += `\n#### ${keyFormatted}:\n` + Object.entries(v).map(([subK, subV]) => `* **${subK}:** ${subV}`).join("\n") + "\n";
+        } else {
+          body += `- **${keyFormatted}:** ${v}\n`;
+        }
       }
     }
     return `### 🤖 ${agentName}\n${body}`;
   }).join("\n\n---\n\n");
 
-  return `# MarketOS AI Marketing Campaign Report
+  return `# MarketOS AI Marketing Campaign & Creative Execution Report
 
 ## 1. Executive Summary
 - **Original User Query:** "${prompt}"
@@ -203,15 +261,15 @@ ${agentDetails}
 ---
 
 ## 4. Strategic Recommendations
-1. **Ad Copy Deployment:** Scale top-performing promotional ad headlines across search and social ad sets.
-2. **Landing Page Optimization:** Deploy Landing Page Variant A with seasonal discount banners to maximize conversion density.
+1. **Multi-Touch Deployment:** Deploy Creative Concept ad banners alongside Email Draft 1 and SMS Option 1 for maximum omnichannel synergy.
+2. **Ad Copy Testing:** Scale top-performing promotional ad headlines across LinkedIn and Meta ad networks.
 3. **Channel Budget Allocation:** Allocate 45% of spend to LinkedIn/Meta Paid Social, 35% to Search Ads, and 20% to Retargeting Email Sequences.
 
 ---
 
 ## 5. Actionable Next Steps
-- [x] Agent execution completed and outputs verified by human supervisor.
-- [ ] Push approved ad headlines and landing page copy variants to ad accounts.
+- [x] All agent outputs generated and verified by human supervisor.
+- [ ] Push approved creative ad banners, email drafts, and SMS formats to campaign channels.
 - [ ] Monitor real-time telemetry via Analytics Agent.
 `;
 }
@@ -220,20 +278,32 @@ function classifyLocally(prompt: string) {
   const lower = prompt.toLowerCase();
   
   const isContent = ["content", "post", "headline", "headlines", "ad", "ads", "copy", "landing", "summer", "promo", "generation", "creative", "variant", "variants", "generate"].some(k => lower.includes(k));
-  const isCampaign = ["campaign", "drip", "launch", "cmo", "b2b", "email", "outreach", "channel"].some(k => lower.includes(k));
+  const isCampaign = ["campaign", "drip", "launch", "cmo", "b2b", "email", "outreach", "channel", "sms"].some(k => lower.includes(k));
   const isAnalytics = ["analy", "report", "performance", "metric", "roi", "finance", "budget", "spend", "kpi"].some(k => lower.includes(k));
   const isAudience = ["lead", "score", "audience", "segment", "contact", "persona"].some(k => lower.includes(k));
 
+  const fullAgentList = [
+    "Supervisor Agent",
+    "Creative Agent",
+    "Copy Agent",
+    "Email Agent",
+    "SMS Agent",
+    "SEO Agent",
+    "Compliance Agent",
+    "Analytics Agent",
+    "Reporting Agent"
+  ];
+
   if (isContent)
-    return { intent: "GENERATE_CONTENT", confidence: 0.95, agents: ["Supervisor Agent", "Copy Agent", "Creative Agent", "SEO Agent", "Compliance Agent", "Reporting Agent"], routeTo: "/creative-studio", summary: `Generating copy & ad variants for '${prompt.slice(0, 45)}'` };
+    return { intent: "GENERATE_CONTENT", confidence: 0.95, agents: fullAgentList, routeTo: "/creative-studio", summary: `Generating full creative concept, ad copy, email draft & SMS formats for '${prompt.slice(0, 45)}'` };
   if (isCampaign)
-    return { intent: "CREATE_CAMPAIGN", confidence: 0.94, agents: ["Supervisor Agent", "Copy Agent", "Creative Agent", "Compliance Agent", "Email Agent", "Analytics Agent", "Reporting Agent"], routeTo: "/campaigns", summary: `Launching multi-channel campaign for '${prompt.slice(0, 45)}'` };
+    return { intent: "CREATE_CAMPAIGN", confidence: 0.94, agents: fullAgentList, routeTo: "/campaigns", summary: `Launching multi-channel campaign for '${prompt.slice(0, 45)}'` };
   if (isAnalytics)
     return { intent: "ANALYZE_PERFORMANCE", confidence: 0.93, agents: ["Analytics Agent", "Monitor Agent", "Finance Agent", "Reporting Agent"], routeTo: "/reports", summary: `Analysing campaign data for '${prompt.slice(0, 45)}'` };
   if (isAudience)
-    return { intent: "LEAD_SCORING", confidence: 0.92, agents: ["Lead Scoring Agent", "Personalization Agent", "Email Agent", "Reporting Agent"], routeTo: "/audience", summary: `Segmenting audience for '${prompt.slice(0, 45)}'` };
+    return { intent: "LEAD_SCORING", confidence: 0.92, agents: ["Lead Scoring Agent", "Personalization Agent", "Email Agent", "SMS Agent", "Reporting Agent"], routeTo: "/audience", summary: `Segmenting audience for '${prompt.slice(0, 45)}'` };
 
-  return { intent: "MARKETING_AUTOMATION", confidence: 0.88, agents: ["Supervisor Agent", "Copy Agent", "Compliance Agent", "Reporting Agent"], routeTo: "/dashboard", summary: `Processing marketing request: '${prompt.slice(0, 45)}'` };
+  return { intent: "MARKETING_AUTOMATION", confidence: 0.88, agents: fullAgentList, routeTo: "/dashboard", summary: `Processing marketing request: '${prompt.slice(0, 45)}'` };
 }
 
 function buildLocalStream(prompt: string): ReadableStream {
