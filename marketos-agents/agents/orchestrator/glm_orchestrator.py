@@ -335,7 +335,7 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
 
             # Each agent stores output under a different state key
             AGENT_RESULT_KEYS: dict[str, str] = {
-                "supervisor":   "supervisor_result",
+                "supervisor":   "campaign_plan",
                 "copy":         "copy_output",
                 "image":        "image_result",
                 "compliance":   "compliance_result",
@@ -352,12 +352,23 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
                 "reporting":    "reporting_result",
                 "onboarding":   "onboarding_result",
             }
+
             result_key = AGENT_RESULT_KEYS.get(agent_key, f"{agent_key}_result")
-            agent_result = (
-                agent_state_delta.get(result_key)
-                or agent_state_delta.get(f"{agent_key}_result")
-                or {"status": "completed"}
-            )
+
+            # Extract rich result dict from state delta
+            if result_key in agent_state_delta and agent_state_delta[result_key]:
+                agent_result = agent_state_delta[result_key]
+            elif f"{agent_key}_result" in agent_state_delta and agent_state_delta[f"{agent_key}_result"]:
+                agent_result = agent_state_delta[f"{agent_key}_result"]
+            elif f"{agent_key}_output" in agent_state_delta and agent_state_delta[f"{agent_key}_output"]:
+                agent_result = agent_state_delta[f"{agent_key}_output"]
+            else:
+                # Return full delta excluding pipeline metadata keys
+                agent_result = {
+                    k: v for k, v in agent_state_delta.items()
+                    if k not in ("trace", "current_step", "errors", "user_intent", "workspace_id", "user_channels", "pipeline")
+                } or {"status": "completed", "detail": f"{agent_display} completed successfully"}
+
             agent_outputs[agent_key] = agent_result
 
             # Publish result event to Kafka

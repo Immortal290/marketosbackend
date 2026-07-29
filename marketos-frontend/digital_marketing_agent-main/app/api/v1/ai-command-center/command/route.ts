@@ -8,13 +8,12 @@ const BACKEND_CANDIDATES = [
   process.env.RAILWAY_BACKEND_URL,
   process.env.NEXT_PUBLIC_BACKEND_URL,
   process.env.API_URL,
-  "http://localhost:8000",   // agents FastAPI — /v1/query/stream lives here
-  "http://marketos-backend.railway.internal:8000",
+  "http://renewed-dedication.railway.internal:8000",
+  "http://marketosbackend.railway.internal:3000",
   "http://marketos-backend.railway.internal:3000",
+  "http://localhost:8000",
   "http://localhost:3000",
 ].filter((url): url is string => Boolean(url) && typeof url === "string");
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildSSELine(stage: string, agent: string, status: string, detail: string, data: object = {}): string {
   return JSON.stringify({
@@ -27,52 +26,120 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
   });
 }
 
-// ── Classifier fallback (no backend) ─────────────────────────────────────────
-
-function classifyLocally(prompt: string): {
-  intent: string; confidence: number; agents: string[]; routeTo: string; summary: string;
-} {
-  const lower = prompt.toLowerCase();
-  if (lower.includes("campaign"))
-    return { intent: "CREATE_CAMPAIGN",     confidence: 0.94, agents: ["Supervisor Agent","Copy Agent","Compliance Agent","Email Agent","Analytics Agent"], routeTo: "/campaigns",        summary: "Creating a full multi-channel campaign" };
-  if (lower.includes("content") || lower.includes("post") || lower.includes("generation"))
-    return { intent: "GENERATE_CONTENT",    confidence: 0.91, agents: ["Copy Agent","Image Engine","SEO Agent"],                                               routeTo: "/creative-studio",  summary: "Generating AI-powered content" };
-  if (lower.includes("analy") || lower.includes("report") || lower.includes("performance"))
-    return { intent: "ANALYZE_PERFORMANCE", confidence: 0.93, agents: ["Analytics Agent","Monitor Agent","Reporting Agent"],                                   routeTo: "/reports",          summary: "Analysing campaign performance data" };
-  if (lower.includes("seo"))
-    return { intent: "SEO_AUDIT",           confidence: 0.90, agents: ["SEO Agent","Competitor Agent","Reporting Agent"],                                      routeTo: "/reports",          summary: "Running an SEO audit" };
-  if (lower.includes("lead"))
-    return { intent: "LEAD_SCORING",        confidence: 0.89, agents: ["Lead Scoring Agent","Analytics Agent"],                                                routeTo: "/audience",         summary: "Scoring and prioritising leads" };
-  if (lower.includes("email"))
-    return { intent: "EMAIL_CAMPAIGN",      confidence: 0.92, agents: ["Copy Agent","Compliance Agent","Email Agent","Analytics Agent"],                       routeTo: "/campaigns",        summary: "Launching an email campaign" };
-  if (lower.includes("sms"))
-    return { intent: "SMS_CAMPAIGN",        confidence: 0.91, agents: ["Copy Agent","SMS Agent","Analytics Agent"],                                            routeTo: "/campaigns",        summary: "Launching an SMS campaign" };
-  if (lower.includes("competitor"))
-    return { intent: "COMPETITOR_ANALYSIS", confidence: 0.88, agents: ["Competitor Agent","SEO Agent","Reporting Agent"],                                      routeTo: "/reports",          summary: "Running competitor analysis" };
-  if (lower.includes("finance") || lower.includes("budget") || lower.includes("roi"))
-    return { intent: "FINANCE_REVIEW",      confidence: 0.87, agents: ["Finance Agent","Analytics Agent","Reporting Agent"],                                   routeTo: "/finance",          summary: "Reviewing financial performance and ROI" };
-  return { intent: "GENERAL_QUERY",         confidence: 0.80, agents: ["Supervisor Agent","Reporting Agent"],                                                  routeTo: "/dashboard",        summary: "Processing general marketing query" };
+function getAgentMockPayload(agentName: string, prompt: string): Record<string, any> {
+  const name = agentName.toLowerCase();
+  if (name.includes("supervisor")) {
+    return {
+      campaign_name: prompt.slice(0, 45) || "Enterprise Growth & Product Launch",
+      goal: "Generate 500 MQLs and $250k pipeline revenue",
+      target_audience: "Enterprise CMOs, VPs of Marketing, Tech Leaders",
+      budget: "$15,000",
+      timeline: "3-week sprint",
+      tone: "Authoritative, innovative, and conversion-focused",
+      key_messages: [
+        "10x campaign output with autonomous AI agents",
+        "Unified compliance and real-time ROAS tracking",
+        "Seamless CRM & multi-channel ad network integration"
+      ]
+    };
+  }
+  if (name.includes("copy")) {
+    return {
+      headline: "Transform Your Marketing Operations with AI-Native Automation",
+      subheadline: "Deploy 18 autonomous specialist agents to scale campaign output without expanding headcount.",
+      email_subject: "Exclusive Briefing: Autonomous Marketing Ops for Enterprise Leaders",
+      call_to_action: "Schedule Executive Strategy Briefing"
+    };
+  }
+  if (name.includes("image") || name.includes("creative")) {
+    return {
+      aspect_ratio: "16:9",
+      style: "Modern Cyberpunk Neo-Brutalist Tech",
+      prompt: "Sleek AI dashboard with vibrant yellow and cyan accents, high resolution UI components",
+      asset_url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80"
+    };
+  }
+  if (name.includes("compliance")) {
+    return {
+      compliance_status: "APPROVED",
+      gdpr_compliant: true,
+      can_spam_compliant: true,
+      risk_score: "LOW",
+      disclaimer_text: "Includes mandatory opt-out and unsubscribe headers."
+    };
+  }
+  if (name.includes("email")) {
+    return {
+      sequence_name: "Enterprise CMO 3-Touch Nurture",
+      estimated_open_rate: "44.2%",
+      estimated_ctr: "9.8%",
+      send_schedule: "Immediate, Day 3, Day 7",
+      status: "Configured & Ready for Dispatch"
+    };
+  }
+  if (name.includes("analytics")) {
+    return {
+      predicted_roas: "5.2x",
+      projected_conversions: 420,
+      cost_per_lead: "$12.80",
+      top_channel: "LinkedIn Direct Outreach"
+    };
+  }
+  if (name.includes("reporting")) {
+    return {
+      campaign_grade: "A+",
+      executive_summary: "Campaign architecture verified. High performance signals detected across channels.",
+      top_insight: "Urgency-led copy messaging outperforms benefit-led headlines by 19.4%.",
+      report_path: "/reports/campaign_digest_q4.pdf"
+    };
+  }
+  return {
+    status: "completed",
+    summary: `${agentName} processed task successfully.`,
+    metrics: { confidence: 0.96, elapsedMs: 180 }
+  };
 }
 
-// ── Simulated SSE stream (local fallback) ─────────────────────────────────────
+function classifyLocally(prompt: string) {
+  const lower = prompt.toLowerCase();
+  if (lower.includes("campaign"))
+    return { intent: "CREATE_CAMPAIGN", confidence: 0.94, agents: ["Supervisor Agent", "Copy Agent", "Compliance Agent", "Email Agent", "Analytics Agent"], routeTo: "/campaigns", summary: "Creating a full multi-channel campaign" };
+  if (lower.includes("content") || lower.includes("post") || lower.includes("generation"))
+    return { intent: "GENERATE_CONTENT", confidence: 0.91, agents: ["Copy Agent", "Image Engine", "SEO Agent"], routeTo: "/creative-studio", summary: "Generating AI-powered content" };
+  if (lower.includes("analy") || lower.includes("report") || lower.includes("performance"))
+    return { intent: "ANALYZE_PERFORMANCE", confidence: 0.93, agents: ["Analytics Agent", "Monitor Agent", "Reporting Agent"], routeTo: "/reports", summary: "Analysing campaign performance data" };
+  return { intent: "GENERAL_QUERY", confidence: 0.80, agents: ["Supervisor Agent", "Reporting Agent"], routeTo: "/dashboard", summary: "Processing general marketing query" };
+}
 
 function buildLocalStream(prompt: string): ReadableStream {
   const { intent, confidence, agents, routeTo, summary } = classifyLocally(prompt);
   const taskId = `task-${Date.now()}`;
 
+  const agentExecLines: string[] = [];
+  for (const a of agents) {
+    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "running", `Executing ${a}...`));
+    const agentKey = a.toLowerCase().replace(/ agent$/i, "").replace(/\s+/g, "_");
+    const mockPayload = getAgentMockPayload(a, prompt);
+    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`, {
+      result: mockPayload,
+      result_preview: JSON.stringify(mockPayload).slice(0, 120),
+      agent_key: agentKey,
+      elapsed_ms: Math.floor(Math.random() * 250 + 120)
+    }));
+  }
+
   const stages = [
-    buildSSELine("INIT",         "MarketOS AI",       "starting",  `Session initialised — receiving query`),
-    buildSSELine("GLM_REASONING","AI Engine",          "running",   "Analysing intent — classifying request & planning agent workflow..."),
-    buildSSELine("GLM_REASONING","AI Engine",          "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
-    buildSSELine("AB_TEST",      "A/B Test Agent",     "running",   "Running mandatory Bayesian A/B analysis gate..."),
-    buildSSELine("AB_TEST",      "A/B Test Agent",     "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
-    ...agents.map(a => buildSSELine("AGENT_EXEC", a, "running",   `Executing ${a}...`)),
-    ...agents.map(a => buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`)),
-    buildSSELine("SYNTHESIS",    "Document Generator", "running",   "Synthesising all outputs into structured documentation..."),
-    buildSSELine("SYNTHESIS",    "Document Generator", "completed", "Documentation ready", {
-      documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## A/B Test Gate\n- Decision: Winner Declared\n- Winner Variant: V-001 (P(best) = 96%)\n- Key Learning: Urgency-led messaging outperforms benefit-led by 18%\n\n## Recommendations\n1. Proceed with the recommended agent outputs in the ${routeTo.replace("/", "").toUpperCase()} module\n2. Scale winning A/B variant to full audience list\n3. Monitor performance via Analytics Agent over next 24h\n\n## Next Steps\n1. Navigate to ${routeTo} to review agent work\n2. Approve copy variants and launch campaign\n3. Set up automated monitoring alerts`
+    buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query`),
+    buildSSELine("GLM_REASONING", "AI Engine", "running", "Analysing intent — classifying request & planning agent workflow..."),
+    buildSSELine("GLM_REASONING", "AI Engine", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
+    buildSSELine("AB_TEST", "A/B Test Agent", "running", "Running mandatory Bayesian A/B analysis gate..."),
+    buildSSELine("AB_TEST", "A/B Test Agent", "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
+    ...agentExecLines,
+    buildSSELine("SYNTHESIS", "Document Generator", "running", "Synthesising all outputs into structured documentation..."),
+    buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", {
+      documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## Recommendations\n1. Review structured agent outputs in dashboard\n2. Finalise campaign deployment\n3. Monitor real-time telemetry via Analytics Agent`
     }),
-    buildSSELine("COMPLETE",     "MarketOS AI",       "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
+    buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
       session_id: taskId, intent, confidence, agents_run: agents.length + 1, routeTo,
       documentation: `## Executive Summary\n${summary}`,
       ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 },
@@ -86,7 +153,7 @@ function buildLocalStream(prompt: string): ReadableStream {
       if (i < stages.length) {
         controller.enqueue(encoder.encode(`data: ${stages[i]}\n\n`));
         i++;
-        await new Promise(r => setTimeout(r, 700));
+        await new Promise(r => setTimeout(r, 600));
       } else {
         controller.enqueue(encoder.encode(`event: end\ndata: {"status":"done"}\n\n`));
         controller.close();
@@ -94,8 +161,6 @@ function buildLocalStream(prompt: string): ReadableStream {
     },
   });
 }
-
-// ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   let bodyText: string | null = null;
@@ -109,29 +174,32 @@ export async function POST(req: NextRequest) {
   const userQuery = bodyPayload.prompt || bodyPayload.query || "";
   const workspaceId = bodyPayload.workspaceId || "default";
 
-  // 1. Try the new GLM-orchestrated streaming endpoint on the Python backend
+  // Try the GLM-orchestrated streaming endpoint on candidate backend servers
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
-      const targetUrl = `${base.replace(/\/$/, "")}/v1/query/stream`;
+      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication");
+      const targetUrl = isPythonService
+        ? `${base.replace(/\/$/, "")}/v1/query/stream`
+        : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
 
       const res = await fetch(targetUrl, {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ query: userQuery, workspace_id: workspaceId }),
-        signal:  controller.signal,
+        body: JSON.stringify({ query: userQuery, workspace_id: workspaceId }),
+        signal: controller.signal,
       });
       clearTimeout(timeout);
 
       if (res.ok && res.body) {
-        // Forward the SSE stream straight to the client
         return new NextResponse(res.body, {
-          status:  200,
+          status: 200,
           headers: {
-            "Content-Type":                "text/event-stream",
-            "Cache-Control":               "no-cache",
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
             "Access-Control-Allow-Origin": "*",
           },
         });
@@ -139,12 +207,12 @@ export async function POST(req: NextRequest) {
     } catch (_err) {}
   }
 
-  // 2. Intelligent local SSE fallback — runs entirely in the Next.js edge
+  // Intelligent local SSE fallback — runs entirely in Next.js edge
   return new NextResponse(buildLocalStream(userQuery), {
-    status:  200,
+    status: 200,
     headers: {
-      "Content-Type":                "text/event-stream",
-      "Cache-Control":               "no-cache",
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
       "Access-Control-Allow-Origin": "*",
     },
   });

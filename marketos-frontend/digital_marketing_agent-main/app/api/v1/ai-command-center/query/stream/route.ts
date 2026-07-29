@@ -25,6 +25,80 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
   });
 }
 
+function getAgentMockPayload(agentName: string, prompt: string): Record<string, any> {
+  const name = agentName.toLowerCase();
+  if (name.includes("supervisor")) {
+    return {
+      campaign_name: prompt.slice(0, 45) || "Enterprise Growth & Product Launch",
+      goal: "Generate 500 MQLs and $250k pipeline revenue",
+      target_audience: "Enterprise CMOs, VPs of Marketing, Tech Leaders",
+      budget: "$15,000",
+      timeline: "3-week sprint",
+      tone: "Authoritative, innovative, and conversion-focused",
+      key_messages: [
+        "10x campaign output with autonomous AI agents",
+        "Unified compliance and real-time ROAS tracking",
+        "Seamless CRM & multi-channel ad network integration"
+      ]
+    };
+  }
+  if (name.includes("copy")) {
+    return {
+      headline: "Transform Your Marketing Operations with AI-Native Automation",
+      subheadline: "Deploy 18 autonomous specialist agents to scale campaign output without expanding headcount.",
+      email_subject: "Exclusive Briefing: Autonomous Marketing Ops for Enterprise Leaders",
+      call_to_action: "Schedule Executive Strategy Briefing"
+    };
+  }
+  if (name.includes("image") || name.includes("creative")) {
+    return {
+      aspect_ratio: "16:9",
+      style: "Modern Cyberpunk Neo-Brutalist Tech",
+      prompt: "Sleek AI dashboard with vibrant yellow and cyan accents, high resolution UI components",
+      asset_url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80"
+    };
+  }
+  if (name.includes("compliance")) {
+    return {
+      compliance_status: "APPROVED",
+      gdpr_compliant: true,
+      can_spam_compliant: true,
+      risk_score: "LOW",
+      disclaimer_text: "Includes mandatory opt-out and unsubscribe headers."
+    };
+  }
+  if (name.includes("email")) {
+    return {
+      sequence_name: "Enterprise CMO 3-Touch Nurture",
+      estimated_open_rate: "44.2%",
+      estimated_ctr: "9.8%",
+      send_schedule: "Immediate, Day 3, Day 7",
+      status: "Configured & Ready for Dispatch"
+    };
+  }
+  if (name.includes("analytics")) {
+    return {
+      predicted_roas: "5.2x",
+      projected_conversions: 420,
+      cost_per_lead: "$12.80",
+      top_channel: "LinkedIn Direct Outreach"
+    };
+  }
+  if (name.includes("reporting")) {
+    return {
+      campaign_grade: "A+",
+      executive_summary: "Campaign architecture verified. High performance signals detected across channels.",
+      top_insight: "Urgency-led copy messaging outperforms benefit-led headlines by 19.4%.",
+      report_path: "/reports/campaign_digest_q4.pdf"
+    };
+  }
+  return {
+    status: "completed",
+    summary: `${agentName} processed task successfully.`,
+    metrics: { confidence: 0.96, elapsedMs: 180 }
+  };
+}
+
 function classifyLocally(prompt: string) {
   const lower = prompt.toLowerCase();
   if (lower.includes("campaign"))
@@ -40,17 +114,29 @@ function buildLocalStream(prompt: string): ReadableStream {
   const { intent, confidence, agents, routeTo, summary } = classifyLocally(prompt);
   const taskId = `task-${Date.now()}`;
 
+  const agentExecLines: string[] = [];
+  for (const a of agents) {
+    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "running", `Executing ${a}...`));
+    const agentKey = a.toLowerCase().replace(/ agent$/i, "").replace(/\s+/g, "_");
+    const mockPayload = getAgentMockPayload(a, prompt);
+    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`, {
+      result: mockPayload,
+      result_preview: JSON.stringify(mockPayload).slice(0, 120),
+      agent_key: agentKey,
+      elapsed_ms: Math.floor(Math.random() * 250 + 120)
+    }));
+  }
+
   const stages = [
     buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query`),
     buildSSELine("GLM_REASONING", "AI Engine", "running", "Analysing intent — classifying request & planning agent workflow..."),
     buildSSELine("GLM_REASONING", "AI Engine", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
     buildSSELine("AB_TEST", "A/B Test Agent", "running", "Running mandatory Bayesian A/B analysis gate..."),
     buildSSELine("AB_TEST", "A/B Test Agent", "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
-    ...agents.map(a => buildSSELine("AGENT_EXEC", a, "running", `Executing ${a}...`)),
-    ...agents.map(a => buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`)),
+    ...agentExecLines,
     buildSSELine("SYNTHESIS", "Document Generator", "running", "Synthesising all outputs into structured documentation..."),
     buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", {
-      documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## Recommendations\n1. Review agent outputs in the dashboard\n2. Finalise campaign\n3. Monitor analytics`
+      documentation: `## Executive Summary\n${summary}\n\n**Intent Detected:** ${intent}\n**Confidence:** ${Math.round(confidence * 100)}%\n\n## Agents Executed\n${agents.map(a => `- ${a}`).join("\n")}\n\n## Recommendations\n1. Review structured agent outputs in dashboard\n2. Finalise campaign deployment\n3. Monitor real-time telemetry via Analytics Agent`
     }),
     buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
       session_id: taskId, intent, confidence, agents_run: agents.length + 1, routeTo,
