@@ -53,17 +53,63 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("creative") || name.includes("image")) {
+    const banner_options = [
+      {
+        id: "v1",
+        title: "1. Landscape (1200x628)",
+        url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+        overlay: lowerPrompt.includes("summer") ? "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF" : "10x MARKETING VELOCITY WITH AI AGENTS",
+        format: "LinkedIn / Meta Landscape (1200x628)"
+      },
+      {
+        id: "v2",
+        title: "2. Instagram Square (1080x1080)",
+        url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
+        overlay: "☀️ BEAT THE HEAT WITH 10X MARKETING VELOCITY",
+        format: "Instagram / Facebook Square (1080x1080)"
+      },
+      {
+        id: "v3",
+        title: "3. Mobile Story (1080x1920)",
+        url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80",
+        overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM YOUR GIFT",
+        format: "Instagram Stories & Reels (1080x1920)"
+      },
+      {
+        id: "v4",
+        title: "4. Dark Cyberpunk (1200x628)",
+        url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80",
+        overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT YOUR COMMAND",
+        format: "High-Contrast Cyberpunk Dark Mode"
+      },
+      {
+        id: "v5",
+        title: "5. Neon Sunburst (1080x1080)",
+        url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80",
+        overlay: "🌴 SIZZLE INTO SUMMER WITH 3 MONTHS FREE ACCESS",
+        format: "Vibrant Neon Tropical Theme"
+      },
+      {
+        id: "v6",
+        title: "6. Minimalist Enterprise (1200x628)",
+        url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80",
+        overlay: "📈 UNIFIED AI COMPLIANCE & REAL-TIME ROAS TRACKING",
+        format: "Minimalist B2B Enterprise Layout"
+      }
+    ];
+
     return {
       campaign_concept: `${topic}: High-Velocity Multi-Touch Growth Blitz`,
       creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Yellow & Cyan Accents",
       visual_theme: lowerPrompt.includes("summer") ? "Tropical Sunburst Neon with Glowing Cybernetic Elements" : "Sleek Enterprise Tech Dark Mode",
       ad_banner_specs: {
         dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
-        headline_overlay: lowerPrompt.includes("summer") ? "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF" : "10x MARKETING VELOCITY WITH AI AGENTS",
+        headline_overlay: banner_options[0].overlay,
         primary_visual: "Futuristic AI Command Dashboard featuring live holographic analytics & performance telemetry"
       },
       color_palette: ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
-      asset_preview: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      asset_preview: banner_options[0].url,
+      banner_options: banner_options,
       total_variants_generated: 6
     };
   }
@@ -212,16 +258,18 @@ function generateComprehensiveReport(
       });
       body += `- **Segment Length:** ${mock.segment_length}\n`;
       body += `- **Compliance:** ${mock.tcpa_compliance}\n`;
-    } else if ((agentName.toLowerCase().includes("creative") || agentName.toLowerCase().includes("image")) && mock.ad_banner_specs) {
+    } else if ((agentName.toLowerCase().includes("creative") || agentName.toLowerCase().includes("image")) && mock.banner_options) {
       body += `- **Campaign Concept:** ${mock.campaign_concept}\n`;
       body += `- **Creative Direction:** ${mock.creative_direction}\n`;
-      body += `- **Visual Theme:** ${mock.visual_theme}\n`;
-      body += `\n#### Ad Banner Specifications:\n`;
-      body += `* **Dimensions:** ${mock.ad_banner_specs.dimensions}\n`;
-      body += `* **Headline Overlay:** "${mock.ad_banner_specs.headline_overlay}"\n`;
-      body += `* **Primary Visual:** ${mock.ad_banner_specs.primary_visual}\n`;
+      body += `- **Visual Theme:** ${mock.visual_theme}\n\n`;
+      body += `#### Generated Visual Banner Variants (${mock.banner_options.length} Options):\n`;
+      mock.banner_options.forEach((opt: any) => {
+        body += `\n##### ${opt.title}\n`;
+        body += `* **Format:** ${opt.format}\n`;
+        body += `* **Headline Overlay:** "${opt.overlay}"\n`;
+        body += `* **Asset Preview:** ![${opt.title}](${opt.url})\n`;
+      });
       body += `\n- **Color Palette:** ${mock.color_palette.join(" | ")}\n`;
-      body += `- **Asset Preview:** ![Ad Banner](${mock.asset_preview})\n`;
     } else {
       for (const [k, v] of Object.entries(mock)) {
         const keyFormatted = k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());

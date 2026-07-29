@@ -106,10 +106,56 @@ function EmailPreview({ variant }: { variant: any }) {
 
 /* ── Creative / Image View ─────────────────────────────────────────────────── */
 function CreativeView({ result }: { result: any }) {
-  const preview = result?.asset_preview || result?.asset_url || result?.asset_preview_url;
+  const options = result?.banner_options || [
+    {
+      id: "v1",
+      title: "1. Landscape (1200x628)",
+      url: result?.asset_preview || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      overlay: result?.ad_banner_specs?.headline_overlay || "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF",
+      format: "LinkedIn / Meta Landscape (1200x628)"
+    },
+    {
+      id: "v2",
+      title: "2. Instagram Square (1080x1080)",
+      url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
+      overlay: "☀️ BEAT THE HEAT WITH 10X MARKETING VELOCITY",
+      format: "Instagram / Facebook Square (1080x1080)"
+    },
+    {
+      id: "v3",
+      title: "3. Mobile Story (1080x1920)",
+      url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80",
+      overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM YOUR GIFT",
+      format: "Instagram Stories & Reels (1080x1920)"
+    },
+    {
+      id: "v4",
+      title: "4. Dark Cyberpunk (1200x628)",
+      url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80",
+      overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT YOUR COMMAND",
+      format: "High-Contrast Cyberpunk Dark Mode"
+    },
+    {
+      id: "v5",
+      title: "5. Neon Sunburst (1080x1080)",
+      url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80",
+      overlay: "🌴 SIZZLE INTO SUMMER WITH 3 MONTHS FREE ACCESS",
+      format: "Vibrant Neon Tropical Theme"
+    },
+    {
+      id: "v6",
+      title: "6. Minimalist Enterprise (1200x628)",
+      url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80",
+      overlay: "📈 UNIFIED AI COMPLIANCE & REAL-TIME ROAS TRACKING",
+      format: "Minimalist B2B Enterprise Layout"
+    }
+  ];
+
+  const [activeIdx, setActiveIdx] = useState(0);
+  const activeBanner = options[activeIdx] || options[0];
+
   const concept = result?.campaign_concept || result?.creative_concept;
   const style = result?.creative_direction || result?.style;
-  const specs = result?.ad_banner_specs || {};
   const palette = result?.color_palette || [];
 
   return (
@@ -122,26 +168,47 @@ function CreativeView({ result }: { result: any }) {
         </div>
       )}
 
-      {/* Visual Image Preview */}
-      {preview && (
-        <div className="border-2 border-black rounded-lg overflow-hidden shadow-[4px_4px_0_0_#000] relative bg-gray-900">
-          <img src={preview} alt="Creative Asset Preview" className="w-full h-48 object-cover" />
-          {specs.headline_overlay && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4 text-center">
-              <span className="font-display font-black text-xl text-yellow-300 uppercase drop-shadow-[2px_2px_0_#000]">
-                {specs.headline_overlay}
-              </span>
-            </div>
-          )}
+      {/* Visual Variant Selector Tabs */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase text-gray-700">Visual Banner Options ({options.length} Generated)</span>
+          <span className="text-[10px] text-pink-600 font-mono font-bold">Select variant to preview</span>
         </div>
-      )}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {options.map((opt: any, idx: number) => (
+            <button
+              key={opt.id || idx}
+              onClick={() => setActiveIdx(idx)}
+              className={`p-1.5 rounded-lg border-2 text-left transition-all flex flex-col items-center gap-1 ${
+                activeIdx === idx
+                  ? "bg-pink-500 text-white border-pink-700 shadow-md scale-[1.02]"
+                  : "bg-white text-gray-700 border-gray-300 hover:border-pink-400 hover:bg-pink-50/50"
+              }`}
+            >
+              <img src={opt.url} alt={opt.title} className="w-full h-12 object-cover rounded" />
+              <span className="text-[10px] font-bold truncate w-full text-center">{opt.title.split('.')[1] || opt.title}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {specs.dimensions && (
-        <div className="grid grid-cols-2 gap-2">
-          <Metric label="Banner Dimensions" value={specs.dimensions} />
-          <Metric label="Visual Variants" value={`${result?.total_variants_generated || 4} generated`} />
+      {/* Active Visual Banner Preview */}
+      <div className="border-2 border-black rounded-lg overflow-hidden shadow-[4px_4px_0_0_#000] relative bg-gray-900 group">
+        <img src={activeBanner.url} alt={activeBanner.title} className="w-full h-64 object-cover transition-all" />
+        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6 text-center">
+          <span className="text-xs font-mono font-bold text-pink-300 uppercase tracking-widest mb-2 bg-black/60 px-3 py-1 rounded-full border border-pink-400/50">
+            {activeBanner.format}
+          </span>
+          <span className="font-display font-black text-xl sm:text-2xl text-yellow-300 uppercase drop-shadow-[2px_2px_0_#000] max-w-xl leading-snug">
+            {activeBanner.overlay}
+          </span>
         </div>
-      )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Metric label="Active Format" value={activeBanner.format} />
+        <Metric label="Visual Options" value={`${options.length} Banners Ready`} color="text-pink-600" />
+      </div>
 
       {palette.length > 0 && (
         <div>
