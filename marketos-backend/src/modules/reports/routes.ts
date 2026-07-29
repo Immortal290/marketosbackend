@@ -147,9 +147,9 @@ import { AgentsService } from '../agents/service';
  *       401:
  *         description: Unauthorized
  */
-router.get('/executive', (req: Request, res: Response) => {
+router.get('/executive', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const reportingAgent = agents.find(a => a.type === 'REPORTING');
   
   const isAgentActive = reportingAgent && reportingAgent.status === 'RUNNING';

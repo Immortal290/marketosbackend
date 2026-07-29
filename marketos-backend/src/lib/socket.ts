@@ -10,7 +10,10 @@ function jitter(base: number, pct = 0.05): number {
 }
 
 function buildAnalyticsSnapshot() {
-  const agentsService = new AgentsService();
+  // Use the repository directly (sync/in-memory) for real-time WebSocket broadcasts.
+  // AgentsService.getAllAgents() is async (hits the Python agent service) and
+  // is inappropriate for setInterval-driven live updates.
+  const agentsService = new AgentsRepository();
   const agents = agentsService.getAllAgents();
   
   // ── Link analytics to agent functioning ──
@@ -55,10 +58,10 @@ function buildAnalyticsSnapshot() {
   };
 }
 
-import { AgentsService } from '../modules/agents/service';
+import { AgentsRepository } from '../modules/agents/repository';
 
 function buildDashboardSnapshot() {
-  const agentsService = new AgentsService();
+  const agentsService = new AgentsRepository();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const performanceMultiplier = agents.length > 0 ? activeAgents.length / agents.length : 1;

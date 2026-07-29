@@ -319,9 +319,9 @@ import { AgentsService } from '../agents/service';
  *       401:
  *         description: Unauthorized
  */
-router.get('/lead-scores', (req: Request, res: Response) => {
+router.get('/lead-scores', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;
 
@@ -358,9 +358,9 @@ router.get('/lead-scores', (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/personas', (req: Request, res: Response) => {
+router.get('/personas', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;
 
@@ -389,9 +389,9 @@ router.get('/personas', (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/lifecycle', (req: Request, res: Response) => {
+router.get('/lifecycle', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const mult = activeAgents.length / agents.length || 0.5;
 

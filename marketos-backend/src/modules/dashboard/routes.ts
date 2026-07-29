@@ -113,11 +113,11 @@ import { AgentsService } from '../agents/service';
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/agents', (req: Request, res: Response) => {
+router.get('/agents', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
   res.status(200).json({
     success: true,
-    data: agentsService.getAllAgents(),
+    data: await agentsService.getAllAgents(),
   });
 });
 
@@ -138,10 +138,10 @@ router.get('/agents', (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/alerts', (req: Request, res: Response) => {
+router.get('/alerts', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
-  const alerts = [];
+  const agents = await agentsService.getAllAgents();
+  const alerts: any[] = [];
   
   // Dynamically generate alerts based on agent status
   const failedAgents = agents.filter(a => a.status === 'ERROR' || a.successRate < 90);
@@ -182,9 +182,9 @@ router.get('/alerts', (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/campaign-health', (req: Request, res: Response) => {
+router.get('/campaign-health', async (req: Request, res: Response) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter(a => a.status === 'RUNNING');
   const performanceMultiplier = activeAgents.length / agents.length || 0.5;
 
