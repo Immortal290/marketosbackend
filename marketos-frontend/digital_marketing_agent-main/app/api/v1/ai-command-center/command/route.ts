@@ -26,12 +26,71 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
   });
 }
 
+function getBrandImageGallery(topic: string, lowerPrompt: string) {
+  if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
+    return [
+      { id: "v1", title: "1. Athletic Performance (1200x628)", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=80", overlay: "🔥 UNLEASH YOUR SUMMER SPEED — NIKE AIR MAX", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. High-Speed Motion (1080x1080)", url: "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=1080&q=80", overlay: "⚡ JUST DO IT — EXCLUSIVE SUMMER DROP", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Urban Streetwear Story (1080x1920)", url: "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 UP TO 40% OFF SUMMER COLLECTION", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Dark Mode Tech Runner (1200x628)", url: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1200&q=80", overlay: "👟 REVOLUTIONARY CUSHIONING & UNMATCHED SPEED", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Gold Edition Sneaker (1080x1080)", url: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=1080&q=80", overlay: "🏆 LIMITED EDITION VIP EARLY ACCESS", format: "Vibrant Gold Edition Theme" },
+      { id: "v6", title: "6. Stadium Lights Banner (1200x628)", url: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1200&q=80", overlay: "🥇 ENGINEERED FOR CHAMPIONS — ORDER TODAY", format: "Stadium Arena Banner" }
+    ];
+  }
+
+  if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive")) {
+    return [
+      { id: "v1", title: "1. Electric Performance (1200x628)", url: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ EXPERIENCE ZERO EMISSIONS — TESLA MODEL Y", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Sleek Modern EV (1080x1080)", url: "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 THE FUTURE OF DRIVING — BOOK A TEST DRIVE", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Highway Autopilot (1080x1920)", url: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1080&q=80", overlay: "🛣️ FULL SELF-DRIVING INTELLIGENCE", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Cyberpunk Supercharger (1200x628)", url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1200&q=80", overlay: "🔋 200 MILES IN 15 MINUTES — SUPERCHARGE", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Minimalist Cockpit (1080x1080)", url: "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=1080&q=80", overlay: "🖥️ 15-INCH TOUCHSCREEN & PREMIUM AUDIO", format: "Minimalist Interior Theme" },
+      { id: "v6", title: "6. Sunset Highway Banner (1200x628)", url: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=1200&q=80", overlay: "☀️ SUSTAINABLE ENERGY FOR THE PLANET", format: "Clean Energy Sunset Banner" }
+    ];
+  }
+
+  if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte")) {
+    return [
+      { id: "v1", title: "1. Iced Cold Brew Splash (1200x628)", url: "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=1200&q=80", overlay: "☕ REFRESH YOUR SUMMER — STARBUCKS ICED COFFEE", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Artisan Latte Art (1080x1080)", url: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=80", overlay: "☀️ CRAFTED WITH PASSION — 50% OFF YOUR FIRST ORDER", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Summer Refresher Story (1080x1920)", url: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1080&q=80", overlay: "🍓 TROPICAL FRUIT REFRESHERS ARE HERE", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Modern Coffee Bar (1200x628)", url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80", overlay: "🏬 ORDER AHEAD WITH STARBUCKS REWARDS", format: "High-Contrast Storefront Mode" },
+      { id: "v5", title: "5. Iced Frappuccino Delight (1080x1080)", url: "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=1080&q=80", overlay: "🍦 SWEET SUMMER TREATS — BUY 1 GET 1 FREE", format: "Vibrant Summer Delight Theme" },
+      { id: "v6", title: "6. Morning Roast Beans (1200x628)", url: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1200&q=80", overlay: "🌱 100% ETHICALLY SOURCED ARABICA BEANS", format: "Ethical Sourcing Banner" }
+    ];
+  }
+
+  if (lowerPrompt.includes("summer") || lowerPrompt.includes("promo") || lowerPrompt.includes("sale") || lowerPrompt.includes("beach")) {
+    return [
+      { id: "v1", title: "1. Summer Beach Paradise (1200x628)", url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80", overlay: "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF", format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Neon Sunburst (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1080&q=80", overlay: "☀️ BEAT THE HEAT WITH UNBEATABLE OFFERS", format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Summer Mobile Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM GIFT", format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Cyberpunk Neon Dark (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT WORK", format: "High-Contrast Cyberpunk Dark Mode" },
+      { id: "v5", title: "5. Summer Shopping Spree (1080x1080)", url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1080&q=80", overlay: "🛍️ SEASONAL DISCOUNT BLITZ — SHOP NOW", format: "Vibrant E-Commerce Theme" },
+      { id: "v6", title: "6. Promotional Discount (1200x628)", url: "https://images.unsplash.com/photo-1556742049-0a670f4a4591?auto=format&fit=crop&w=1200&q=80", overlay: "📈 SCALE YOUR CONVERSIONS EFFORTLESSLY", format: "B2B Promotional Layout" }
+    ];
+  }
+
+  // Default High-Tech AI SaaS Enterprise Gallery
+  return [
+    { id: "v1", title: "1. Holographic AI Dashboard (1200x628)", url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80", overlay: "⚡ 10X MARKETING VELOCITY WITH AI AGENTS", format: "LinkedIn / Meta Landscape (1200x628)" },
+    { id: "v2", title: "2. Command Center (1080x1080)", url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1080&q=80", overlay: "🚀 DEPLOY 18 AUTONOMOUS SPECIALIST AGENTS", format: "Instagram / Facebook Square (1080x1080)" },
+    { id: "v3", title: "3. Growth Telemetry Story (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1080&q=80", overlay: "📊 REAL-TIME ROAS TRACKING & COMPLIANCE", format: "Instagram Stories & Reels (1080x1920)" },
+    { id: "v4", title: "4. Cyberpunk Neural Network (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", overlay: "🔒 UNIFIED ENTERPRISE COMPLIANCE AUDITING", format: "High-Contrast Cyberpunk Dark Mode" },
+    { id: "v5", title: "5. Automated Workflow Nodes (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1080&q=80", overlay: "💡 ZERO-FRICTION CAMPAIGN ORCHESTRATION", format: "Vibrant Tech Node Layout" },
+    { id: "v6", title: "6. Enterprise Cloud Infrastructure (1200x628)", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80", overlay: "📈 PROVEN 5.4X PREDICTED RETURN ON AD SPEND", format: "Enterprise Data Infrastructure" }
+  ];
+}
+
 function getAgentMockPayload(agentName: string, prompt: string): Record<string, any> {
   const name = agentName.toLowerCase();
   const lowerPrompt = prompt.toLowerCase();
   
   let topic = "Marketing Campaign";
-  if (lowerPrompt.includes("summer")) topic = "Summer Promotion";
+  if (lowerPrompt.includes("nike")) topic = "Nike Air Max Launch";
+  else if (lowerPrompt.includes("tesla")) topic = "Tesla Model Y Promotion";
+  else if (lowerPrompt.includes("starbucks")) topic = "Starbucks Iced Coffee Blitz";
+  else if (lowerPrompt.includes("summer")) topic = "Summer Promotion";
   else if (lowerPrompt.includes("cmo") || lowerPrompt.includes("enterprise")) topic = "Enterprise CMO Campaign";
   else if (lowerPrompt.includes("lead")) topic = "Lead Growth Blitz";
   else if (lowerPrompt.includes("ad") || lowerPrompt.includes("headline")) topic = "High-Converting Ad Series";
@@ -39,13 +98,13 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   if (name.includes("supervisor")) {
     return {
       campaign_name: `${topic} — ${new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' })}`,
-      goal: lowerPrompt.includes("summer") ? "Drive 35% seasonal sales growth and 600 conversions" : "Generate 500 MQLs and $250k pipeline revenue",
-      target_audience: lowerPrompt.includes("summer") ? "B2C Shoppers & High-Intent Consumers" : "Enterprise Decision Makers & Marketing Leaders",
+      goal: lowerPrompt.includes("summer") || lowerPrompt.includes("nike") ? "Drive 35% seasonal sales growth and 600 conversions" : "Generate 500 MQLs and $250k pipeline revenue",
+      target_audience: lowerPrompt.includes("nike") ? "Athletes, Sneaker Enthusiasts & Active Consumers" : lowerPrompt.includes("summer") ? "B2C Shoppers & High-Intent Consumers" : "Enterprise Decision Makers & Marketing Leaders",
       budget: "$12,500",
       timeline: "2-week sprint",
-      tone: lowerPrompt.includes("summer") ? "Exciting, urgent, and promotional" : "Authoritative, innovative, and conversion-focused",
+      tone: lowerPrompt.includes("nike") ? "High-energy, bold, and athletic" : lowerPrompt.includes("summer") ? "Exciting, urgent, and promotional" : "Authoritative, innovative, and conversion-focused",
       key_messages: [
-        `Exclusive seasonal offer: ${prompt.slice(0, 45)}...`,
+        `Exclusive offer for ${topic}`,
         "Proven 10x ROI with automated AI campaign execution",
         "Limited time availability — claim your offer today"
       ]
@@ -53,61 +112,18 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("creative") || name.includes("image")) {
-    const banner_options = [
-      {
-        id: "v1",
-        title: "1. Landscape (1200x628)",
-        url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
-        overlay: lowerPrompt.includes("summer") ? "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF" : "10x MARKETING VELOCITY WITH AI AGENTS",
-        format: "LinkedIn / Meta Landscape (1200x628)"
-      },
-      {
-        id: "v2",
-        title: "2. Instagram Square (1080x1080)",
-        url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
-        overlay: "☀️ BEAT THE HEAT WITH 10X MARKETING VELOCITY",
-        format: "Instagram / Facebook Square (1080x1080)"
-      },
-      {
-        id: "v3",
-        title: "3. Mobile Story (1080x1920)",
-        url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80",
-        overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM YOUR GIFT",
-        format: "Instagram Stories & Reels (1080x1920)"
-      },
-      {
-        id: "v4",
-        title: "4. Dark Cyberpunk (1200x628)",
-        url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80",
-        overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT YOUR COMMAND",
-        format: "High-Contrast Cyberpunk Dark Mode"
-      },
-      {
-        id: "v5",
-        title: "5. Neon Sunburst (1080x1080)",
-        url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80",
-        overlay: "🌴 SIZZLE INTO SUMMER WITH 3 MONTHS FREE ACCESS",
-        format: "Vibrant Neon Tropical Theme"
-      },
-      {
-        id: "v6",
-        title: "6. Minimalist Enterprise (1200x628)",
-        url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80",
-        overlay: "📈 UNIFIED AI COMPLIANCE & REAL-TIME ROAS TRACKING",
-        format: "Minimalist B2B Enterprise Layout"
-      }
-    ];
+    const banner_options = getBrandImageGallery(topic, lowerPrompt);
 
     return {
       campaign_concept: `${topic}: High-Velocity Multi-Touch Growth Blitz`,
-      creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Yellow & Cyan Accents",
-      visual_theme: lowerPrompt.includes("summer") ? "Tropical Sunburst Neon with Glowing Cybernetic Elements" : "Sleek Enterprise Tech Dark Mode",
+      creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Accents",
+      visual_theme: lowerPrompt.includes("nike") ? "Dynamic Athletic Red & Cyber Black" : lowerPrompt.includes("summer") ? "Tropical Sunburst Neon with Glowing Cybernetic Elements" : "Sleek Enterprise Tech Dark Mode",
       ad_banner_specs: {
         dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: "Futuristic AI Command Dashboard featuring live holographic analytics & performance telemetry"
+        primary_visual: "High-resolution brand showcase featuring active campaign overlays"
       },
-      color_palette: ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
+      color_palette: lowerPrompt.includes("nike") ? ["#FF0000 (Nike Red)", "#000000 (Cyber Black)", "#FFFFFF (Pure White)"] : ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
       total_variants_generated: 6
@@ -115,6 +131,22 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("copy")) {
+    if (lowerPrompt.includes("nike")) {
+      return {
+        ad_headlines: [
+          "🔥 Unleash Your Summer Speed: The All-New Nike Air Max",
+          "⚡ Just Do It: Exclusive Summer Performance Drop",
+          "🚀 Scale Your Run: 40% Off Selected Air Max Styles",
+          "👟 Lightweight Comfort Meets Next-Gen Athletic Speed",
+          "🏆 Engineered for Champions: Claim Your Summer Pair Today"
+        ],
+        landing_page_variants: [
+          "Variant A: 'Experience Next-Level Athletic Speed with Air Max.'",
+          "Variant B: 'Unmatched Comfort, Unstoppable Style. Shop Nike Summer Drop.'"
+        ],
+        call_to_action: "Shop Air Max Summer Collection"
+      };
+    }
     if (lowerPrompt.includes("summer") || lowerPrompt.includes("promo") || lowerPrompt.includes("headline") || lowerPrompt.includes("ad")) {
       return {
         ad_headlines: [
@@ -122,17 +154,11 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
           "☀️ Beat the Heat with Our Biggest Offer of the Year",
           "🚀 Scale Your Business This Summer — Limited Time Offer",
           "⚡ Exclusive Summer Special: Claim Your Discount Now",
-          "🎯 Don't Miss Out: High-Impact Solutions at Seasonal Prices",
-          "💡 Bright Ideas, Hotter Prices: Upgrade Today & Save",
-          "🌴 Sizzle into Summer with 3 Months Free Access",
-          "📈 Summer Flash Sale: Scale Faster for Less",
-          "🎁 Unbeatable Seasonal Savings — Claim Your Gift Package",
-          "⌛ Last Call for Summer Discounts — Ends Midnight!"
+          "🎯 Don't Miss Out: High-Impact Solutions at Seasonal Prices"
         ],
         landing_page_variants: [
           "Variant A: 'Skyrocket Your Campaign Velocity This Summer with AI Automation.'",
-          "Variant B: 'The Ultimate Summer Upgrade: 10x Your Marketing ROI.'",
-          "Variant C: 'Limited Time Summer Blitz — Scale Operations for Less.'"
+          "Variant B: 'The Ultimate Summer Upgrade: 10x Your Marketing ROI.'"
         ],
         call_to_action: "Claim Summer Offer Now"
       };
@@ -141,8 +167,7 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
       ad_headlines: [
         "Transform Your Marketing Operations with AI-Native Automation",
         "Deploy 18 Autonomous Specialist Agents to Scale ROI 10x",
-        "Eliminate Campaign Bottlenecks with Real-Time AI Intelligence",
-        "Enterprise Marketing Automation Built for Rapid Scaling"
+        "Eliminate Campaign Bottlenecks with Real-Time AI Intelligence"
       ],
       landing_page_variants: [
         "Variant A: 'Experience 10x Campaign Velocity with MarketOS AI.'",
@@ -154,19 +179,19 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
 
   if (name.includes("email")) {
     return {
-      email_campaign_name: `${topic} 3-Touch Nurture Sequence`,
+      email_campaign_name: `${topic} Nurture Sequence`,
       email_draft_1: {
-        subject_line: lowerPrompt.includes("summer") ? "🔥 Summer Special: Unlock 40% Off MarketOS AI Operations" : "Exclusive Briefing: 10x Your Marketing Velocity with AI Agents",
-        preview_text: "Scale your campaign velocity by 10x with 18 autonomous AI agents.",
+        subject_line: lowerPrompt.includes("nike") ? "🔥 Nike Summer Drop: Unlock Exclusive Air Max Access" : lowerPrompt.includes("summer") ? "🔥 Summer Special: Unlock 40% Off Operations" : "Exclusive Briefing: 10x Your Velocity with AI Agents",
+        preview_text: `Official update for ${topic}.`,
         salutation: "Hi {{first_name}},",
-        body: lowerPrompt.includes("summer")
-          ? "Summer is here, and it's time to supercharge your marketing operations.\n\nMarketOS equips your team with 18 autonomous AI agents that handle copy generation, creative design, compliance audits, and real-time ROAS tracking automatically.\n\nFor a limited time, claim 40% off your first 3 months and scale your growth velocity with zero setup friction."
-          : "Enterprise marketing requires rapid execution without expanding headcount.\n\nMarketOS connects 18 specialist AI agents directly into your marketing stack to automate copywriting, ad creation, compliance, and multi-channel publishing.\n\nBook an executive briefing today to see live campaign orchestration in action.",
-        call_to_action: lowerPrompt.includes("summer") ? "Claim 40% Off Summer Special" : "Schedule Executive Briefing",
+        body: lowerPrompt.includes("nike")
+          ? "Unleash your potential this summer with the all-new Nike Air Max collection.\n\nEngineered with high-velocity responsive cushioning, lightweight breathable mesh, and high-contrast urban colorways.\n\nFor a limited time, enjoy exclusive early access and 40% off selected styles."
+          : "Supercharge your growth with 18 autonomous AI agents that handle copy, creative design, compliance, and real-time ROAS tracking automatically.\n\nClaim your special promotional pricing today with zero setup friction.",
+        call_to_action: lowerPrompt.includes("nike") ? "Shop Air Max Summer Collection" : "Claim Special Offer",
         cta_url: "https://marketos.ai/promotions/special-offer",
         footer: "MarketOS Inc. | 100 Cybernetic Way, San Francisco, CA. Reply STOP to opt out."
       },
-      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Social Proof & Case Studies), Email 3 (Day 7: Last Call Expiration)",
+      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Social Proof), Email 3 (Day 7: Expiration)",
       metrics_estimate: { open_rate: "46.2%", click_through_rate: "11.4%", projected_leads: 320 }
     };
   }
@@ -174,9 +199,9 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   if (name.includes("sms")) {
     return {
       sms_marketing_formats: [
-        `Option 1 (Urgency Flash Sale): MarketOS Summer Special! Claim 40% OFF AI Marketing Automation for 3 months. Offer ends Friday: https://mktos.ai/s/summer Text STOP to opt out.`,
-        `Option 2 (Direct Value Pitch): Scale your ad campaigns 10x with 18 AI Agents. Special summer discount active today! Try demo: https://mktos.ai/s/demo Text STOP to cancel.`,
-        `Option 3 (VIP Invitation): VIP Access: Executive Demo & 40% off MarketOS Enterprise Suite. Claim your spot: https://mktos.ai/s/vip Reply STOP to unsubscribe.`
+        `Option 1 (Urgency Flash Sale): ${topic} Special! Claim 40% OFF for a limited time. Offer ends Friday: https://mktos.ai/s/offer Text STOP to opt out.`,
+        `Option 2 (Direct Value Pitch): High-impact ${topic} active today! Try live demo: https://mktos.ai/s/demo Text STOP to cancel.`,
+        `Option 3 (VIP Invitation): VIP Access: Special demo & exclusive pricing for ${topic}. Claim spot: https://mktos.ai/s/vip Text STOP to unsubscribe.`
       ],
       segment_length: "154 characters (1 GSM 7-bit SMS segment)",
       tcpa_compliance: "Fully compliant — includes mandatory STOP / HELP keyword handlers & opt-out footer."
@@ -205,9 +230,9 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
 
   if (name.includes("seo")) {
     return {
-      target_keywords: ["summer promotion", "marketing automation", "high converting ads", "AI campaign tool"],
+      target_keywords: [topic.toLowerCase(), "marketing automation", "high converting ads", "AI campaign tool"],
       seo_score: "94/100",
-      meta_description: `Discover the top ${topic} strategies and scale your conversion rates with MarketOS.`
+      meta_description: `Discover top ${topic} strategies and scale your conversion rates with MarketOS.`
     };
   }
 
@@ -215,7 +240,7 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
     return {
       campaign_grade: "A+",
       executive_summary: `Campaign architecture for '${topic}' fully generated and verified across all specialist agents.`,
-      top_insight: "Urgency-led headlines ('Hot Summer Savings') show 22.1% higher click intent than generic copy.",
+      top_insight: "Urgency-led headlines show 22.1% higher click intent than generic copy.",
       status: "Finalised & Ready for Deployment"
     };
   }
@@ -311,7 +336,7 @@ ${agentDetails}
 
 ## 4. Strategic Recommendations
 1. **Multi-Touch Deployment:** Deploy Creative Concept ad banners alongside Email Draft 1 and SMS Option 1 for maximum omnichannel synergy.
-2. **Ad Copy Testing:** Scale top-performing promotional ad headlines across LinkedIn and Meta ad networks.
+2. **Ad Copy Testing:** Scale top-performing promotional ad headlines across search and social ad sets.
 3. **Channel Budget Allocation:** Allocate 45% of spend to LinkedIn/Meta Paid Social, 35% to Search Ads, and 20% to Retargeting Email Sequences.
 
 ---
@@ -326,7 +351,7 @@ ${agentDetails}
 function classifyLocally(prompt: string) {
   const lower = prompt.toLowerCase();
   
-  const isContent = ["content", "post", "headline", "headlines", "ad", "ads", "copy", "landing", "summer", "promo", "generation", "creative", "variant", "variants", "generate"].some(k => lower.includes(k));
+  const isContent = ["content", "post", "headline", "headlines", "ad", "ads", "copy", "landing", "summer", "promo", "generation", "creative", "variant", "variants", "generate", "nike", "tesla", "starbucks"].some(k => lower.includes(k));
   const isCampaign = ["campaign", "drip", "launch", "cmo", "b2b", "email", "outreach", "channel", "sms"].some(k => lower.includes(k));
   const isAnalytics = ["analy", "report", "performance", "metric", "roi", "finance", "budget", "spend", "kpi"].some(k => lower.includes(k));
   const isAudience = ["lead", "score", "audience", "segment", "contact", "persona"].some(k => lower.includes(k));
