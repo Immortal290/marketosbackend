@@ -59,7 +59,7 @@ function getBrandImageGallery(topic: string, lowerPrompt: string) {
     ];
   }
 
-  if (lowerPrompt.includes("summer") || lowerPrompt.includes("promo") || lowerPrompt.includes("sale") || lowerPrompt.includes("beach")) {
+  if (lowerPrompt.includes("summer") || lowerPrompt.includes("beach")) {
     return [
       { id: "v1", title: "1. Summer Beach Paradise (1200x628)", url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80", overlay: "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF", format: "LinkedIn / Meta Landscape (1200x628)" },
       { id: "v2", title: "2. Neon Sunburst (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1080&q=80", overlay: "☀️ BEAT THE HEAT WITH UNBEATABLE OFFERS", format: "Instagram / Facebook Square (1080x1080)" },
@@ -86,24 +86,23 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   const lowerPrompt = prompt.toLowerCase();
   
   let topic = "Marketing Campaign";
-  if (lowerPrompt.includes("nike")) topic = "Nike Air Max Launch";
-  else if (lowerPrompt.includes("tesla")) topic = "Tesla Model Y Promotion";
-  else if (lowerPrompt.includes("starbucks")) topic = "Starbucks Iced Coffee Blitz";
+  if (lowerPrompt.includes("tesla") || lowerPrompt.includes("ev") || lowerPrompt.includes("car")) topic = "Tesla Model Y Growth Campaign";
+  else if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe")) topic = "Nike Air Max Launch";
+  else if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee")) topic = "Starbucks Iced Coffee Blitz";
   else if (lowerPrompt.includes("summer")) topic = "Summer Promotion";
   else if (lowerPrompt.includes("cmo") || lowerPrompt.includes("enterprise")) topic = "Enterprise CMO Campaign";
   else if (lowerPrompt.includes("lead")) topic = "Lead Growth Blitz";
-  else if (lowerPrompt.includes("ad") || lowerPrompt.includes("headline")) topic = "High-Converting Ad Series";
 
   if (name.includes("supervisor")) {
     return {
       campaign_name: `${topic} — ${new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' })}`,
-      goal: lowerPrompt.includes("summer") || lowerPrompt.includes("nike") ? "Drive 35% seasonal sales growth and 600 conversions" : "Generate 500 MQLs and $250k pipeline revenue",
-      target_audience: lowerPrompt.includes("nike") ? "Athletes, Sneaker Enthusiasts & Active Consumers" : lowerPrompt.includes("summer") ? "B2C Shoppers & High-Intent Consumers" : "Enterprise Decision Makers & Marketing Leaders",
-      budget: "$12,500",
-      timeline: "2-week sprint",
-      tone: lowerPrompt.includes("nike") ? "High-energy, bold, and athletic" : lowerPrompt.includes("summer") ? "Exciting, urgent, and promotional" : "Authoritative, innovative, and conversion-focused",
+      goal: lowerPrompt.includes("tesla") ? "Drive 1,200 VIP test drive bookings & $15M vehicle orders" : lowerPrompt.includes("nike") ? "Drive 35% seasonal sales growth and 600 conversions" : "Generate 500 MQLs and $250k pipeline revenue",
+      target_audience: lowerPrompt.includes("tesla") ? "EV Enthusiasts, Eco-Conscious Tech Drivers, Premium Car Buyers" : lowerPrompt.includes("nike") ? "Athletes, Sneaker Enthusiasts & Active Consumers" : "Enterprise Decision Makers & Marketing Leaders",
+      budget: lowerPrompt.includes("tesla") ? "$50,000" : "$12,500",
+      timeline: "3-week national sprint",
+      tone: lowerPrompt.includes("tesla") ? "Futuristic, sleek, innovative, and sustainable" : lowerPrompt.includes("nike") ? "High-energy, bold, and athletic" : "Authoritative, innovative, and conversion-focused",
       key_messages: [
-        `Exclusive offer for ${topic}`,
+        `Official national campaign for ${topic}`,
         "Proven 10x ROI with automated AI campaign execution",
         "Limited time availability — claim your offer today"
       ]
@@ -115,14 +114,14 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
 
     return {
       campaign_concept: `${topic}: High-Velocity Multi-Touch Growth Blitz`,
-      creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Accents",
-      visual_theme: lowerPrompt.includes("nike") ? "Dynamic Athletic Red & Cyber Black" : lowerPrompt.includes("summer") ? "Tropical Sunburst Neon with Glowing Cybernetic Elements" : "Sleek Enterprise Tech Dark Mode",
+      creative_direction: lowerPrompt.includes("tesla") ? "Sleek Cyberpunk Dark Mode with Vibrant Electric Cyan Accents" : "Modern Cyberpunk Neo-Brutalist with High-Contrast Accents",
+      visual_theme: lowerPrompt.includes("tesla") ? "High-Contrast EV Performance with Holographic Cockpit Overlays" : lowerPrompt.includes("nike") ? "Dynamic Athletic Red & Cyber Black" : "Sleek Enterprise Tech Dark Mode",
       ad_banner_specs: {
         dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: "High-resolution brand showcase featuring active campaign overlays"
+        primary_visual: "High-resolution vehicle & brand showcase featuring active campaign overlays"
       },
-      color_palette: lowerPrompt.includes("nike") ? ["#FF0000 (Nike Red)", "#000000 (Cyber Black)", "#FFFFFF (Pure White)"] : ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
+      color_palette: lowerPrompt.includes("tesla") ? ["#E82127 (Tesla Red)", "#000000 (Obsidian Black)", "#00F0FF (Electric Cyan)", "#FFFFFF (Pure White)"] : ["#FFDE00 (Neo Yellow)", "#00F0FF (Cyan)", "#000000 (Ink Black)", "#FF007F (Pink)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
       total_variants_generated: 6
@@ -130,7 +129,23 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("copy")) {
-    if (lowerPrompt.includes("nike")) {
+    if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("ev")) {
+      return {
+        ad_headlines: [
+          "⚡ Experience Zero Emissions: The All-New Tesla Model Y",
+          "🚀 The Future of Driving Is Here — Book Your VIP Test Drive Today",
+          "🔋 Charge 200 Miles in 15 Minutes: Supercharge Your Journey",
+          "🛣️ Full Self-Driving Intelligence Meets Unmatched EV Performance",
+          "🏆 Ranked #1 Electric SUV: Order Your Model Y Today"
+        ],
+        landing_page_variants: [
+          "Variant A: 'Zero Emissions. Infinite Acceleration. Experience Tesla Model Y.'",
+          "Variant B: 'The Safest, Most Capable Electric SUV Ever Built.'"
+        ],
+        call_to_action: "Book VIP Tesla Test Drive"
+      };
+    }
+    if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe")) {
       return {
         ad_headlines: [
           "🔥 Unleash Your Summer Speed: The All-New Nike Air Max",
@@ -146,7 +161,23 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
         call_to_action: "Shop Air Max Summer Collection"
       };
     }
-    if (lowerPrompt.includes("summer") || lowerPrompt.includes("promo") || lowerPrompt.includes("headline") || lowerPrompt.includes("ad")) {
+    if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee")) {
+      return {
+        ad_headlines: [
+          "☕ Refresh Your Summer: Starbucks Cold Brew Special",
+          "☀️ Artisan Latte Craftsmanship — 50% Off First Order",
+          "🍓 Tropical Fruit Refreshers Are Now In Season",
+          "🏬 Order Ahead & Earn Double Stars with Starbucks Rewards",
+          "🍦 Beat the Heat: Buy 1 Get 1 Free Iced Frappuccino"
+        ],
+        landing_page_variants: [
+          "Variant A: 'Sip Into Summer: Handcrafted Cold Brews Delivered.'",
+          "Variant B: 'Your Daily Coffee Upgrade. Claim Starbucks Rewards Today.'"
+        ],
+        call_to_action: "Order Starbucks App Ahead"
+      };
+    }
+    if (lowerPrompt.includes("summer")) {
       return {
         ad_headlines: [
           "🔥 Hot Summer Savings: Up to 40% Off Premium Package!",
@@ -166,7 +197,8 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
       ad_headlines: [
         "Transform Your Marketing Operations with AI-Native Automation",
         "Deploy 18 Autonomous Specialist Agents to Scale ROI 10x",
-        "Eliminate Campaign Bottlenecks with Real-Time AI Intelligence"
+        "Eliminate Campaign Bottlenecks with Real-Time AI Intelligence",
+        "Enterprise Marketing Automation Built for Rapid Scaling"
       ],
       landing_page_variants: [
         "Variant A: 'Experience 10x Campaign Velocity with MarketOS AI.'",
@@ -177,27 +209,51 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("email")) {
+    let subject = "Exclusive Briefing: 10x Your Velocity with AI Agents";
+    let bodyText = "Supercharge your growth with 18 autonomous AI agents that handle copy, creative design, compliance, and real-time ROAS tracking automatically.\n\nClaim your special promotional pricing today with zero setup friction.";
+    let cta = "Schedule Executive Briefing";
+
+    if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("ev")) {
+      subject = "⚡ Experience the Future: Book Your Tesla Model Y VIP Test Drive Today";
+      bodyText = "The future of sustainable transportation is at your fingertips.\n\nThe Tesla Model Y combines dual-motor all-wheel drive, 330 miles of EPA-estimated range, and 0-60 mph acceleration in just 3.5 seconds.\n\nExperience autopilot navigation, premium immersive sound, and 15-minute Supercharging.\n\nSchedule your complimentary VIP test drive at your nearest Tesla Center today.";
+      cta = "Book VIP Tesla Test Drive";
+    } else if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe")) {
+      subject = "🔥 Nike Summer Drop: Unlock Exclusive Air Max Early Access";
+      bodyText = "Unleash your potential this summer with the all-new Nike Air Max collection.\n\nEngineered with high-velocity responsive cushioning, lightweight breathable mesh, and high-contrast urban colorways.\n\nFor a limited time, enjoy exclusive early access and 40% off selected styles.";
+      cta = "Shop Air Max Summer Collection";
+    } else if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee")) {
+      subject = "☕ Refresh Your Day: 50% Off Starbucks Cold Brew & Rewards Bonus";
+      bodyText = "Sip into summer with Starbucks handcrafted Cold Brews & Refreshers.\n\nEnjoy ethically sourced Arabica beans, custom flavor syrups, and double stars on every mobile app order.\n\nClaim your 50% off seasonal welcome reward today.";
+      cta = "Order Starbucks Mobile App";
+    } else if (lowerPrompt.includes("summer")) {
+      subject = "🔥 Summer Special: Unlock 40% Off MarketOS AI Operations";
+      bodyText = "Summer is here, and it's time to supercharge your marketing operations.\n\nMarketOS equips your team with 18 autonomous AI agents that handle copy generation, creative design, compliance audits, and real-time ROAS tracking automatically.\n\nFor a limited time, claim 40% off your first 3 months.";
+      cta = "Claim 40% Off Summer Offer";
+    }
+
     return {
       email_campaign_name: `${topic} Nurture Sequence`,
       email_draft_1: {
-        subject_line: lowerPrompt.includes("nike") ? "🔥 Nike Summer Drop: Unlock Exclusive Air Max Access" : lowerPrompt.includes("summer") ? "🔥 Summer Special: Unlock 40% Off Operations" : "Exclusive Briefing: 10x Your Velocity with AI Agents",
-        preview_text: `Official update for ${topic}.`,
+        subject_line: subject,
+        preview_text: `Official campaign update for ${topic}.`,
         salutation: "Hi {{first_name}},",
-        body: lowerPrompt.includes("nike")
-          ? "Unleash your potential this summer with the all-new Nike Air Max collection.\n\nEngineered with high-velocity responsive cushioning, lightweight breathable mesh, and high-contrast urban colorways.\n\nFor a limited time, enjoy exclusive early access and 40% off selected styles."
-          : "Supercharge your growth with 18 autonomous AI agents that handle copy, creative design, compliance, and real-time ROAS tracking automatically.\n\nClaim your special promotional pricing today with zero setup friction.",
-        call_to_action: lowerPrompt.includes("nike") ? "Shop Air Max Summer Collection" : "Claim Special Offer",
+        body: bodyText,
+        call_to_action: cta,
         cta_url: "https://marketos.ai/promotions/special-offer",
         footer: "MarketOS Inc. | 100 Cybernetic Way, San Francisco, CA. Reply STOP to opt out."
       },
-      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Social Proof), Email 3 (Day 7: Expiration)",
+      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Case Studies & Social Proof), Email 3 (Day 7: Offer Expiration)",
       metrics_estimate: { open_rate: "46.2%", click_through_rate: "11.4%", projected_leads: 320 }
     };
   }
 
   if (name.includes("sms")) {
     return {
-      sms_marketing_formats: [
+      sms_marketing_formats: lowerPrompt.includes("tesla") ? [
+        "Option 1 (VIP Test Drive): Tesla Alert: Experience Model Y instant torque! Book your VIP test drive today: https://tesla.com/td/y Text STOP to opt out.",
+        "Option 2 (Supercharger Flash): Supercharge your journey. Order Tesla Model Y with $1,000 seasonal incentive: https://tesla.com/order Text STOP to cancel.",
+        "Option 3 (Autonomous Delivery): Ready for the future? Custom-configure your Model Y in 2 minutes: https://tesla.com/config Text STOP to unsubscribe."
+      ] : [
         `Option 1 (Urgency Flash Sale): ${topic} Special! Claim 40% OFF for a limited time. Offer ends Friday: https://mktos.ai/s/offer Text STOP to opt out.`,
         `Option 2 (Direct Value Pitch): High-impact ${topic} active today! Try live demo: https://mktos.ai/s/demo Text STOP to cancel.`,
         `Option 3 (VIP Invitation): VIP Access: Special demo & exclusive pricing for ${topic}. Claim spot: https://mktos.ai/s/vip Text STOP to unsubscribe.`
