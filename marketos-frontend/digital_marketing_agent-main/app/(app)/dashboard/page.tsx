@@ -359,14 +359,27 @@ export default function MissionControlPage() {
       }).catch((err) => console.warn("[WorkflowEngine] Start workflow fetch warning:", err));
 
       // ── Step 2: Stream GLM Query Events (SSE) ──
-      const res = await fetch("/api/v1/ai-command-center/query/stream", {
+      let res = await fetch("/api/v1/ai-command-center/query/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: prompt,
+          prompt: prompt,
           workspace_id: "00000000-0000-0000-0000-000000000000",
         }),
-      });
+      }).catch(() => null);
+
+      if (!res || !res.ok || !res.body) {
+        res = await fetch("/api/v1/ai-command-center/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: prompt,
+            prompt: prompt,
+            workspace_id: "00000000-0000-0000-0000-000000000000",
+          }),
+        });
+      }
 
       if (!res.ok || !res.body) {
         throw new Error(`HTTP ${res.status} — ${await res.text().catch(() => "")}`);
