@@ -21,6 +21,40 @@ router.get('/', controller.getAllAgents);
 
 /**
  * @openapi
+ * /agents/{agentType}/run:
+ *   post:
+ *     summary: Run a single agent on the Python service
+ *     description: Proxies execution to the agent service at AGENT_SERVICE_URL. Accepts a LangGraph state dict and returns the agent's output wrapped in the standard envelope.
+ *     tags: [Agents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: agentType
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: supervisor
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               state:
+ *                 type: object
+ *                 description: LangGraph state dict to pass to the agent
+ *     responses:
+ *       200:
+ *         description: Agent output
+ *       404:
+ *         description: Agent not found in Python registry
+ */
+router.post('/:agentType/run', controller.runAgent);
+
+/**
+ * @openapi
  * /agents/{agentType}:
  *   get:
  *     summary: Get agent status by type

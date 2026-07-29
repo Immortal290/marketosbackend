@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../../lib/logger';
+import agentClient from '../../lib/agentClient';
 
 const router = Router();
 
@@ -433,6 +435,276 @@ router.post('/automation-rules', (req: Request, res: Response) => {
  */
 router.delete('/automation-rules/:id', (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: null });
+});
+
+// ── Agent Service Pipeline Proxy Routes ────────────────────────────────────
+// These routes forward requests to the Python agent service running at
+// AGENT_SERVICE_URL (e.g. http://renewed-dedication.railway.internal:8000)
+// via Railway's private networking (no public proxy, real app port).
+
+/**
+ * @openapi
+ * /ai-command-center/pipeline/campaign:
+ *   post:
+ *     summary: Run the full campaign pipeline (sync)
+ *     description: Executes the 4-agent campaign pipeline synchronously via the Python agent service. Returns the complete campaign result.
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_intent]
+ *             properties:
+ *               user_intent:     { type: string, example: "Launch a Diwali sale campaign for our skincare brand" }
+ *               channels:        { type: array, items: { type: string }, example: ["email", "sms"] }
+ *               recipient_email: { type: string, format: email }
+ *               recipient_phone: { type: string }
+ *               sender_name:     { type: string, default: "MarketOS" }
+ *               company_name:    { type: string, default: "MarketOS" }
+ *               workspace_id:    { type: string, default: "default" }
+ *     responses:
+ *       200:
+ *         description: Campaign pipeline result
+ *       502:
+ *         description: Agent service unavailable
+ */
+router.post('/pipeline/campaign', async (req: Request, res: Response) => {
+  try {
+    const result = await agentClient.runCampaignSync(req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Campaign pipeline error:', message);
+    res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/pipeline/campaign/async:
+ *   post:
+ *     summary: Run the campaign pipeline asynchronously (Kafka-backed, 202)
+ *     description: Submits the campaign intent to Kafka via the agent service and returns immediately with a campaign_id and poll URL.
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_intent]
+ *             properties:
+ *               user_intent: { type: string }
+ *               channels:    { type: array, items: { type: string } }
+ *               workspace_id: { type: string }
+ *     responses:
+ *       202:
+ *         description: Campaign accepted — poll /pipeline/{id}/status
+ *       502:
+ *         description: Agent service unavailable
+ */
+router.post('/pipeline/campaign/async', async (req: Request, res: Response) => {
+  try {
+    const result = await agentClient.runCampaignAsync(req.body);
+    res.status(202).json({ success: true, data: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Async campaign error:', message);
+    res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/pipeline/{campaignId}/status:
+ *   get:
+ *     summary: Poll async campaign status
+ *     description: Polls the agent service for the status of an asynchronous campaign.
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: campaignId
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Campaign status
+ *       502:
+ *         description: Agent service unavailable
+ */
+router.get('/pipeline/:campaignId/status', async (req: Request, res: Response) => {
+  try {
+    const result = await agentClient.getCampaignStatus(req.params.campaignId);
+    res.status(200).json({ success: true, data: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Campaign status error:', message);
+    res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/pipeline/campaign/stream:
+ *   post:
+ *     summary: Stream campaign pipeline via SSE
+ *     description: Runs the campaign pipeline on the agent service and streams Server-Sent Events back to the client. Each event contains the node name, trace, and any errors.
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_intent]
+ *             properties:
+ *               user_intent: { type: string }
+ *               channels:    { type: array, items: { type: string } }
+ *               workspace_id: { type: string }
+ *     responses:
+ *       200:
+ *         description: SSE stream
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *       502:
+ *         description: Agent service unavailable
+ */
+router.post('/pipeline/campaign/stream', async (req: Request, res: Response) => {
+  try {
+    const stream = await agentClient.streamCampaign(req.body);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Pipe Web Streams API ReadableStream → Node.js Writable (res)
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn('[AI CC] Stream pipe error:', pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Campaign stream error:', message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+    } else {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/query/stream:
+ *   post:
+ *     summary: GLM-Orchestrated query pipeline (SSE)
+ *     description: Sends a natural language query to the GLM-5.2 orchestrator on the agent service. Returns a Server-Sent Events stream of stage-by-stage results.
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [query]
+ *             properties:
+ *               query:        { type: string, example: "Analyse our Q3 email performance and suggest improvements" }
+ *               workspace_id: { type: string, default: "default" }
+ *     responses:
+ *       200:
+ *         description: SSE stream
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *       502:
+ *         description: Agent service unavailable
+ */
+router.post('/query/stream', async (req: Request, res: Response) => {
+  try {
+    const stream = await agentClient.streamQuery(req.body);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Connection', 'keep-alive');
+
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn('[AI CC] Query stream pipe error:', pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Query stream error:', message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+    } else {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/agent-service/health:
+ *   get:
+ *     summary: Check agent service health
+ *     description: Proxies to GET /v1/health on the Python agent service and returns infrastructure status (Kafka, PostgreSQL, Redis, ClickHouse).
+ *     tags: [AI Command Center]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Agent service health
+ *       502:
+ *         description: Agent service unreachable
+ */
+router.get('/agent-service/health', async (_req: Request, res: Response) => {
+  try {
+    const health = await agentClient.getHealth();
+    res.status(health.data?.status === 'healthy' ? 200 : 207).json({ success: true, data: health });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[AI CC] Agent service health check failed:', message);
+    res.status(502).json({ success: false, error: 'Agent service unreachable', detail: message });
+  }
 });
 
 export default router;

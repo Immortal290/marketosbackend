@@ -4,10 +4,26 @@ import { AgentsService } from './service';
 export class AgentsController {
   private service = new AgentsService();
 
-  public getAllAgents = (req: Request, res: Response, next: NextFunction) => {
+  public getAllAgents = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const agents = this.service.getAllAgents();
+      const agents = await this.service.getAllAgents();
       res.status(200).json({ success: true, data: agents });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /agents/:agentType/run
+   * Proxy a single-agent execution to the Python agent service.
+   */
+  public runAgent = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { agentType } = req.params;
+      const state: Record<string, unknown> = req.body.state ?? req.body ?? {};
+
+      const result = await this.service.runAgent(agentType, state);
+      res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
