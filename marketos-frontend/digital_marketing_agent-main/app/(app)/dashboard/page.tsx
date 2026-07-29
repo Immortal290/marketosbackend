@@ -246,6 +246,9 @@ function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
   );
 }
 
+import { AgentApprovalModal, PendingApprovalData } from "@/components/ui/AgentApprovalModal";
+import { io as socketIOClient } from "socket.io-client";
+
 /* ══ MAIN PAGE ══════════════════════════════════════════════════════════════ */
 export default function MissionControlPage() {
   const [commandInput, setCommandInput]   = useState("");
@@ -256,9 +259,70 @@ export default function MissionControlPage() {
   const [documentation, setDocumentation] = useState("");
   const [lastPrompt, setLastPrompt]       = useState("");
 
+  // Workflow & Approval Modal States
+  const [pendingApproval, setPendingApproval] = useState<PendingApprovalData | null>(null);
+  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+  const [liveActivities, setLiveActivities] = useState<string[]>([]);
+  const [agentStatusMap, setAgentStatusMap] = useState<Record<string, { status: string; task: string }>>({});
+
   const { data: kpisData }    = useSWR("/dashboard/kpis?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
   const { data: agentsData }  = useSWR("/dashboard/agents?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
   const { data: activityData }= useSWR("/dashboard/activity?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
+
+  // Setup Socket.io real-time listener for workflows & agent events
+  useEffect(() => {
+    const socket = socketIOClient(process.env.NEXT_PUBLIC_API_BASE_URL || "", {
+      transports: ["websocket", "polling"],
+    });
+
+    socket.on("workflow:step_update", (data: any) => {
+      const { runId, agentName, status, output, requiresApproval } = data;
+
+      // Update Live Agent Status Map
+      setAgentStatusMap((prev) => ({
+        ...prev,
+        [agentName]: {
+          status: status === "running" ? "RUNNING" : status === "awaiting_approval" ? "AWAITING APPROVAL" : status === "done" ? "DONE" : "IDLE",
+          task: status === "running" ? `Executing task for workflow run ${runId.slice(0, 8)}...` : `Completed workflow step`,
+        },
+      }));
+
+      // Append to Recent Activity
+      const activityMsg = `[${agentName}] ${status.toUpperCase()} — Workflow run ${runId.slice(0, 8)}`;
+      setLiveActivities((prev) => [activityMsg, ...prev.slice(0, 15)]);
+
+      // If awaiting approval, pop up approval modal
+      if (status === "awaiting_approval" || requiresApproval) {
+        setPendingApproval({
+          runId,
+          agentName,
+          output: output || { status: "awaiting_approval", note: "Human authorization required before proceeding" },
+        });
+        setIsApprovalModalOpen(true);
+      }
+    });
+
+    socket.on("workflow:awaiting_approval", (data: any) => {
+      setPendingApproval({
+        runId: data.runId,
+        agentName: data.agentName,
+        output: data.output || {},
+      });
+      setIsApprovalModalOpen(true);
+    });
+
+    socket.on("agentEvent", (eventData: any) => {
+      const payload = eventData?.payload;
+      if (payload && payload.message) {
+        setLiveActivities((prev) => [`[${payload.agent_name || "Agent"}] ${payload.message}`, ...prev.slice(0, 15)]);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
 
   const displayKpis = kpisData ? [
     { label: "Active Campaigns", value: kpisData.activeCampaigns?.toString() || "0", tone: "info" as const },
@@ -287,10 +351,14 @@ export default function MissionControlPage() {
     setLastPrompt(prompt);
 
     try {
-      // ── Use the real GLM-Orchestrated query/stream SSE endpoint ──
-      // This hits the Python agent service via Railway private networking and
-      // streams real-time stage events: INIT → GLM_REASONING → AB_TEST →
-      // AGENT_EXEC (×N agents) → SYNTHESIS → COMPLETE
+      // ── Step 1: Start Workflow Engine Run (PostgreSQL + Socket.io) ──
+      fetch("/api/v1/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: prompt }),
+      }).catch((err) => console.warn("[WorkflowEngine] Start workflow fetch warning:", err));
+
+      // ── Step 2: Stream GLM Query Events (SSE) ──
       const res = await fetch("/api/v1/ai-command-center/query/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -316,7 +384,6 @@ export default function MissionControlPage() {
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          // Handle SSE "event: end" terminator
           if (line.startsWith("event:") && line.includes("end")) continue;
 
           if (!line.startsWith("data: ")) continue;
@@ -326,10 +393,8 @@ export default function MissionControlPage() {
           try {
             const ev: StageEvent = JSON.parse(jsonStr);
 
-            // Always append to the live terminal log
             setSseEvents(prev => [...prev, ev]);
 
-            // ── Capture A/B Test output ────────────────────────────────
             if (ev.stage === "AB_TEST" && ev.status === "completed" && ev.data?.ab_result) {
               const abResult = ev.data.ab_result;
               const output: AgentOutput = {
@@ -345,9 +410,7 @@ export default function MissionControlPage() {
               });
             }
 
-            // ── Capture each specialist agent output ───────────────────
             if (ev.stage === "AGENT_EXEC" && ev.status === "completed") {
-              // agent_key comes from the orchestrator's data payload
               const agentKey = (ev.data?.agent_key as string)
                 || (ev.agent || "")
                     .toLowerCase()
@@ -371,7 +434,6 @@ export default function MissionControlPage() {
               });
             }
 
-            // ── Capture GLM synthesis document ─────────────────────────
             if (
               (ev.stage === "SYNTHESIS" || ev.stage === "COMPLETE") &&
               ev.status === "completed" &&
@@ -380,7 +442,6 @@ export default function MissionControlPage() {
               setDocumentation(ev.data.documentation as string);
             }
 
-            // ── Pipeline error ─────────────────────────────────────────
             if (ev.error) {
               toast.error(`Pipeline error: ${ev.error}`);
               setIsExecuting(false);
@@ -558,21 +619,31 @@ export default function MissionControlPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <NeoCard title="Autonomous Agents" accent="pink">
           <ul className="flex flex-col gap-2">
-            {(agentsData || agents).map((agent: any) => (
-              <li key={agent.name} className="flex flex-col gap-1 border-b-neo border-neo-ink pb-2 last:border-0 last:pb-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold">{agent.name}</span>
-                  <NeoBadge tone={agent.status === "ERROR" ? "danger" : "success"}>{agent.status}</NeoBadge>
-                </div>
-                <p className="font-mono text-xs text-black/60">{agent.currentTask || agent.task}</p>
-              </li>
-            ))}
+            {(agentsData || agents).map((agent: any) => {
+              const liveState = agentStatusMap[agent.name];
+              const currentStatus = liveState ? liveState.status : agent.status;
+              const currentTask = liveState ? liveState.task : (agent.currentTask || agent.task);
+              const tone = currentStatus === "RUNNING" ? "info" : currentStatus === "AWAITING APPROVAL" ? "warning" : currentStatus === "DONE" ? "success" : agent.status === "ERROR" ? "danger" : "success";
+
+              return (
+                <li key={agent.name} className="flex flex-col gap-1 border-b-neo border-neo-ink pb-2 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">{agent.name}</span>
+                    <NeoBadge tone={tone}>{currentStatus}</NeoBadge>
+                  </div>
+                  <p className="font-mono text-xs text-black/60">{currentTask}</p>
+                </li>
+              );
+            })}
           </ul>
         </NeoCard>
         <NeoCard title="Recent Activity" accent="lime">
           <ul className="flex list-disc flex-col gap-2 pl-5">
-            {(activityData ? activityData.map((a: any) => a.message) : activity).map((item: any, i: number) => (
-              <li key={i} className="font-medium">{item}</li>
+            {[
+              ...liveActivities,
+              ...(activityData ? activityData.map((a: any) => a.message) : activity)
+            ].slice(0, 8).map((item: any, i: number) => (
+              <li key={i} className="font-medium text-xs font-mono">{item}</li>
             ))}
           </ul>
         </NeoCard>
@@ -596,6 +667,17 @@ export default function MissionControlPage() {
           </div>
         </NeoCard>
       </section>
+
+      {/* Agent Approval Modal */}
+      <AgentApprovalModal
+        data={pendingApproval}
+        isOpen={isApprovalModalOpen}
+        onClose={() => setIsApprovalModalOpen(false)}
+        onDecision={(decision, runId) => {
+          console.log(`[WorkflowDecision] Run ${runId} decision: ${decision}`);
+        }}
+      />
     </div>
   );
 }
+

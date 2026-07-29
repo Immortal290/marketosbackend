@@ -76,8 +76,12 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+import workflowEngineRoutes from './modules/workflow_engine/routes';
+
 // API Routes
 app.use('/api/v1', routes);
+app.use('/api/workflows', workflowEngineRoutes);
+app.use('/api/v1/workflows', workflowEngineRoutes);
 
 // Global Error Handling
 app.use(errorHandler);

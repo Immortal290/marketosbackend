@@ -240,12 +240,148 @@ var kafka = new import_kafkajs.Kafka({
 var producer = kafka.producer();
 var consumer = kafka.consumer({ groupId: "marketos-group" });
 
+// src/lib/agentClient.ts
+var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+async function agentFetch(path, opts = {}) {
+  const { method = "GET", body, timeoutMs = 3e4 } = opts;
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller2 = new AbortController();
+  const timer = setTimeout(() => controller2.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body !== void 0 ? JSON.stringify(body) : void 0,
+      signal: controller2.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return response.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
+    }
+    throw err;
+  }
+}
+async function agentFetchStream(path, body, timeoutMs = 12e4) {
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller2 = new AbortController();
+  const timer = setTimeout(() => controller2.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller2.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok || !response.body) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
+      );
+    }
+    return response.body;
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+async function getAgentServiceHealth() {
+  return agentFetch("/v1/health");
+}
+async function listAgents() {
+  return agentFetch("/v1/agents");
+}
+async function runAgent(agentName, state) {
+  return agentFetch(`/v1/agents/${agentName}/run`, {
+    method: "POST",
+    body: { state },
+    timeoutMs: 6e4
+  });
+}
+async function runCampaignSync(opts) {
+  return agentFetch("/v1/pipeline/campaign", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 12e4
+  });
+}
+async function runCampaignAsync(opts) {
+  return agentFetch("/v1/pipeline/campaign/async", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 15e3
+  });
+}
+async function getCampaignStatus(campaignId) {
+  return agentFetch(`/v1/pipeline/${campaignId}/status`);
+}
+async function streamCampaign(opts) {
+  return agentFetchStream("/v1/pipeline/campaign/stream", opts);
+}
+async function streamQuery(opts) {
+  return agentFetchStream("/v1/query/stream", opts, 18e4);
+}
+var agentClient = {
+  baseUrl: AGENT_SERVICE_URL,
+  getHealth: getAgentServiceHealth,
+  listAgents,
+  runAgent,
+  runCampaignSync,
+  runCampaignAsync,
+  getCampaignStatus,
+  streamCampaign,
+  streamQuery
+};
+var agentClient_default = agentClient;
+
 // src/modules/agents/service.ts
+function metaToAgent(meta, index) {
+  const typeKey = meta.name.toUpperCase().replace(/-/g, "_");
+  return {
+    id: `agent-${index + 1}`,
+    name: meta.name.split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(""),
+    type: typeKey,
+    status: "IDLE",
+    currentTask: null,
+    queueLength: 0,
+    successRate: 98,
+    runtimeMs: 0,
+    tokenUsage: 0,
+    costUsd: 0
+  };
+}
 var AgentsService = class {
   repository = new AgentsRepository();
-  getAllAgents() {
+  /**
+   * Return live agent list from the Python service, with fallback to the
+   * static mock registry if the service is unavailable.
+   */
+  async getAllAgents() {
+    try {
+      const response = await agentClient_default.listAgents();
+      if (response.ok && Array.isArray(response.data?.agents)) {
+        return response.data.agents.map((meta, i) => metaToAgent(meta, i));
+      }
+    } catch (err) {
+      logger.warn("[AgentsService] Agent service unavailable \u2014 falling back to static data:", err);
+    }
     return this.repository.getAllAgents();
   }
+  /**
+   * Synchronous version for backwards-compatible callers that don't await.
+   * Prefer getAllAgents() for new code.
+   */
   getAgentByType(type) {
     return this.repository.getAgentByType(type);
   }
@@ -255,14 +391,21 @@ var AgentsService = class {
   getAgentMemory(type, memType, search, page = 1, limit = 20) {
     return this.repository.getAgentMemory(type, memType, search, page, limit);
   }
+  /**
+   * Run a single named agent on the Python service.
+   */
+  async runAgent(agentName, state) {
+    return agentClient_default.runAgent(agentName, state);
+  }
+  /**
+   * Execute a control command against an agent via Kafka.
+   */
   async executeCommand(type, payload) {
     try {
       const topic = `agent.${type.toLowerCase()}.commands`;
       await producer.send({
         topic,
-        messages: [
-          { value: JSON.stringify(payload) }
-        ]
+        messages: [{ value: JSON.stringify(payload) }]
       });
       logger.info(`Successfully dispatched command to topic ${topic}`);
       return true;
@@ -278,16 +421,16 @@ var router = (0, import_express.Router)();
 var controller = new DashboardController();
 router.get("/kpis", controller.getKpis);
 router.get("/activity", controller.getActivityFeed);
-router.get("/agents", (req, res) => {
+router.get("/agents", async (req, res) => {
   const agentsService = new AgentsService();
   res.status(200).json({
     success: true,
-    data: agentsService.getAllAgents()
+    data: await agentsService.getAllAgents()
   });
 });
-router.get("/alerts", (req, res) => {
+router.get("/alerts", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const alerts = [];
   const failedAgents = agents.filter((a) => a.status === "ERROR" || a.successRate < 90);
   failedAgents.forEach((agent) => {
@@ -312,9 +455,9 @@ router.get("/alerts", (req, res) => {
   }
   res.status(200).json({ success: true, data: alerts });
 });
-router.get("/campaign-health", (req, res) => {
+router.get("/campaign-health", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const performanceMultiplier = activeAgents.length / agents.length || 0.5;
   res.status(200).json({

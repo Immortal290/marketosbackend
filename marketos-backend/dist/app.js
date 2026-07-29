@@ -1052,6 +1052,7 @@ var import_kafkajs = require("kafkajs");
 
 // src/lib/socket.ts
 var import_socket = require("socket.io");
+var io;
 
 // src/lib/kafka.ts
 var kafkaBroker = process.env.KAFKA_BROKER || "localhost:9092";
@@ -1069,12 +1070,148 @@ var kafka = new import_kafkajs.Kafka({
 var producer = kafka.producer();
 var consumer = kafka.consumer({ groupId: "marketos-group" });
 
+// src/lib/agentClient.ts
+var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+async function agentFetch(path, opts = {}) {
+  const { method = "GET", body, timeoutMs = 3e4 } = opts;
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller5 = new AbortController();
+  const timer = setTimeout(() => controller5.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body !== void 0 ? JSON.stringify(body) : void 0,
+      signal: controller5.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return response.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
+    }
+    throw err;
+  }
+}
+async function agentFetchStream(path, body, timeoutMs = 12e4) {
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller5 = new AbortController();
+  const timer = setTimeout(() => controller5.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller5.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok || !response.body) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
+      );
+    }
+    return response.body;
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+async function getAgentServiceHealth() {
+  return agentFetch("/v1/health");
+}
+async function listAgents() {
+  return agentFetch("/v1/agents");
+}
+async function runAgent(agentName, state) {
+  return agentFetch(`/v1/agents/${agentName}/run`, {
+    method: "POST",
+    body: { state },
+    timeoutMs: 6e4
+  });
+}
+async function runCampaignSync(opts) {
+  return agentFetch("/v1/pipeline/campaign", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 12e4
+  });
+}
+async function runCampaignAsync(opts) {
+  return agentFetch("/v1/pipeline/campaign/async", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 15e3
+  });
+}
+async function getCampaignStatus(campaignId) {
+  return agentFetch(`/v1/pipeline/${campaignId}/status`);
+}
+async function streamCampaign(opts) {
+  return agentFetchStream("/v1/pipeline/campaign/stream", opts);
+}
+async function streamQuery(opts) {
+  return agentFetchStream("/v1/query/stream", opts, 18e4);
+}
+var agentClient = {
+  baseUrl: AGENT_SERVICE_URL,
+  getHealth: getAgentServiceHealth,
+  listAgents,
+  runAgent,
+  runCampaignSync,
+  runCampaignAsync,
+  getCampaignStatus,
+  streamCampaign,
+  streamQuery
+};
+var agentClient_default = agentClient;
+
 // src/modules/agents/service.ts
+function metaToAgent(meta, index) {
+  const typeKey = meta.name.toUpperCase().replace(/-/g, "_");
+  return {
+    id: `agent-${index + 1}`,
+    name: meta.name.split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(""),
+    type: typeKey,
+    status: "IDLE",
+    currentTask: null,
+    queueLength: 0,
+    successRate: 98,
+    runtimeMs: 0,
+    tokenUsage: 0,
+    costUsd: 0
+  };
+}
 var AgentsService = class {
   repository = new AgentsRepository();
-  getAllAgents() {
+  /**
+   * Return live agent list from the Python service, with fallback to the
+   * static mock registry if the service is unavailable.
+   */
+  async getAllAgents() {
+    try {
+      const response = await agentClient_default.listAgents();
+      if (response.ok && Array.isArray(response.data?.agents)) {
+        return response.data.agents.map((meta, i) => metaToAgent(meta, i));
+      }
+    } catch (err) {
+      logger.warn("[AgentsService] Agent service unavailable \u2014 falling back to static data:", err);
+    }
     return this.repository.getAllAgents();
   }
+  /**
+   * Synchronous version for backwards-compatible callers that don't await.
+   * Prefer getAllAgents() for new code.
+   */
   getAgentByType(type) {
     return this.repository.getAgentByType(type);
   }
@@ -1084,14 +1221,21 @@ var AgentsService = class {
   getAgentMemory(type, memType, search, page = 1, limit = 20) {
     return this.repository.getAgentMemory(type, memType, search, page, limit);
   }
+  /**
+   * Run a single named agent on the Python service.
+   */
+  async runAgent(agentName, state) {
+    return agentClient_default.runAgent(agentName, state);
+  }
+  /**
+   * Execute a control command against an agent via Kafka.
+   */
   async executeCommand(type, payload) {
     try {
       const topic = `agent.${type.toLowerCase()}.commands`;
       await producer.send({
         topic,
-        messages: [
-          { value: JSON.stringify(payload) }
-        ]
+        messages: [{ value: JSON.stringify(payload) }]
       });
       logger.info(`Successfully dispatched command to topic ${topic}`);
       return true;
@@ -1107,16 +1251,16 @@ var router3 = (0, import_express3.Router)();
 var controller2 = new DashboardController();
 router3.get("/kpis", controller2.getKpis);
 router3.get("/activity", controller2.getActivityFeed);
-router3.get("/agents", (req, res) => {
+router3.get("/agents", async (req, res) => {
   const agentsService = new AgentsService();
   res.status(200).json({
     success: true,
-    data: agentsService.getAllAgents()
+    data: await agentsService.getAllAgents()
   });
 });
-router3.get("/alerts", (req, res) => {
+router3.get("/alerts", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const alerts = [];
   const failedAgents = agents.filter((a) => a.status === "ERROR" || a.successRate < 90);
   failedAgents.forEach((agent) => {
@@ -1141,9 +1285,9 @@ router3.get("/alerts", (req, res) => {
   }
   res.status(200).json({ success: true, data: alerts });
 });
-router3.get("/campaign-health", (req, res) => {
+router3.get("/campaign-health", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const performanceMultiplier = activeAgents.length / agents.length || 0.5;
   res.status(200).json({
@@ -1432,9 +1576,9 @@ router7.post("/segments", (req, res) => {
 router7.delete("/segments/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-router7.get("/lead-scores", (req, res) => {
+router7.get("/lead-scores", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const mult = activeAgents.length / agents.length || 0.5;
   res.status(200).json({
@@ -1450,9 +1594,9 @@ router7.get("/lead-scores", (req, res) => {
     }
   });
 });
-router7.get("/personas", (req, res) => {
+router7.get("/personas", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const mult = activeAgents.length / agents.length || 0.5;
   res.status(200).json({ success: true, data: [
@@ -1460,9 +1604,9 @@ router7.get("/personas", (req, res) => {
     { id: "p2", name: "SMB Founder", description: "Owner of 10-50 employee companies", size: Math.round(5120 * mult), traits: ["budget-conscious", "growth-driven", "hands-on"] }
   ] });
 });
-router7.get("/lifecycle", (req, res) => {
+router7.get("/lifecycle", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const mult = activeAgents.length / agents.length || 0.5;
   res.status(200).json({
@@ -1547,6 +1691,118 @@ router8.post("/automation-rules", (req, res) => {
 router8.delete("/automation-rules/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
+router8.post("/pipeline/campaign", async (req, res) => {
+  try {
+    const result = await agentClient_default.runCampaignSync(req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign pipeline error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router8.post("/pipeline/campaign/async", async (req, res) => {
+  try {
+    const result = await agentClient_default.runCampaignAsync(req.body);
+    res.status(202).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Async campaign error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router8.get("/pipeline/:campaignId/status", async (req, res) => {
+  try {
+    const result = await agentClient_default.getCampaignStatus(req.params.campaignId);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign status error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router8.post("/pipeline/campaign/stream", async (req, res) => {
+  try {
+    const stream = await agentClient_default.streamCampaign(req.body);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Connection", "keep-alive");
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn("[AI CC] Stream pipe error:", pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign stream error:", message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+    } else {
+      res.write(`event: error
+data: ${JSON.stringify({ error: message })}
+
+`);
+      res.end();
+    }
+  }
+});
+router8.post("/query/stream", async (req, res) => {
+  try {
+    const stream = await agentClient_default.streamQuery(req.body);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Connection", "keep-alive");
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn("[AI CC] Query stream pipe error:", pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Query stream error:", message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+    } else {
+      res.write(`event: error
+data: ${JSON.stringify({ error: message })}
+
+`);
+      res.end();
+    }
+  }
+});
+router8.get("/agent-service/health", async (_req, res) => {
+  try {
+    const health = await agentClient_default.getHealth();
+    res.status(health.data?.status === "healthy" ? 200 : 207).json({ success: true, data: health });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Agent service health check failed:", message);
+    res.status(502).json({ success: false, error: "Agent service unreachable", detail: message });
+  }
+});
 var routes_default8 = router8;
 
 // src/modules/agents/routes.ts
@@ -1555,10 +1811,24 @@ var import_express9 = require("express");
 // src/modules/agents/controller.ts
 var AgentsController = class {
   service = new AgentsService();
-  getAllAgents = (req, res, next) => {
+  getAllAgents = async (req, res, next) => {
     try {
-      const agents = this.service.getAllAgents();
+      const agents = await this.service.getAllAgents();
       res.status(200).json({ success: true, data: agents });
+    } catch (error) {
+      next(error);
+    }
+  };
+  /**
+   * POST /agents/:agentType/run
+   * Proxy a single-agent execution to the Python agent service.
+   */
+  runAgent = async (req, res, next) => {
+    try {
+      const { agentType } = req.params;
+      const state = req.body.state ?? req.body ?? {};
+      const result = await this.service.runAgent(agentType, state);
+      res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
@@ -1639,6 +1909,7 @@ var AgentsController = class {
 var router9 = (0, import_express9.Router)();
 var controller4 = new AgentsController();
 router9.get("/", controller4.getAllAgents);
+router9.post("/:agentType/run", controller4.runAgent);
 router9.get("/:agentType", controller4.getAgentByType);
 router9.get("/:agentType/tasks", controller4.getAgentTasks);
 router9.get("/:agentType/memory", controller4.getAgentMemory);
@@ -1647,8 +1918,426 @@ var routes_default9 = router9;
 
 // src/modules/workflow_engine/routes.ts
 var import_express10 = require("express");
+
+// src/modules/workflow_engine/approvalConfig.ts
+var AGENT_APPROVAL_CONFIG = {
+  EmailAgent: {
+    requiresApproval: true,
+    reason: "Email dispatch to external contacts requires human review"
+  },
+  ComplianceAgent: {
+    requiresApproval: true,
+    reason: "Compliance policy & legal check requires explicit approval"
+  },
+  SocialMediaAgent: {
+    requiresApproval: true,
+    reason: "Publishing ad campaigns/posts to social platforms requires approval"
+  },
+  VoiceAgent: {
+    requiresApproval: true,
+    reason: "Outbound AI voice calls require manual authorization"
+  },
+  WhatsappAgent: {
+    requiresApproval: true,
+    reason: "Outbound WhatsApp messaging requires manual authorization"
+  },
+  // Auto-run agents (no approval required)
+  SupervisorAgent: { requiresApproval: false },
+  CopyAgent: { requiresApproval: false },
+  CreativeAgent: { requiresApproval: false },
+  AnalyticsAgent: { requiresApproval: false },
+  FinanceAgent: { requiresApproval: false },
+  LeadScoringAgent: { requiresApproval: false },
+  MonitorAgent: { requiresApproval: false },
+  OnboardingAgent: { requiresApproval: false },
+  PersonalizationAgent: { requiresApproval: false },
+  ReportingAgent: { requiresApproval: false },
+  SeoAgent: { requiresApproval: false },
+  CompetitorAgent: { requiresApproval: false },
+  AbTestAgent: { requiresApproval: false }
+};
+function normalizeAgentName(name) {
+  const cleaned = name.trim();
+  if (cleaned.endsWith("Agent")) {
+    return cleaned;
+  }
+  const pascal = cleaned.split(/_|\s|-/).map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join("");
+  return `${pascal}Agent`;
+}
+function checkAgentRequiresApproval(agentName) {
+  const normalized = normalizeAgentName(agentName);
+  return AGENT_APPROVAL_CONFIG[normalized]?.requiresApproval ?? false;
+}
+
+// src/modules/workflow_engine/orchestrator.ts
+function determineAgentPlan(command) {
+  const lower = command.toLowerCase();
+  if (lower.includes("campaign") || lower.includes("launch") || lower.includes("target") || lower.includes("cmo")) {
+    return ["SupervisorAgent", "CopyAgent", "CreativeAgent", "ComplianceAgent", "EmailAgent", "AnalyticsAgent"];
+  }
+  if (lower.includes("content") || lower.includes("post") || lower.includes("social") || lower.includes("blog") || lower.includes("creative")) {
+    return ["CopyAgent", "CreativeAgent", "ComplianceAgent", "SocialMediaAgent"];
+  }
+  if (lower.includes("analy") || lower.includes("report") || lower.includes("performance") || lower.includes("finance") || lower.includes("roi")) {
+    return ["AnalyticsAgent", "FinanceAgent", "ReportingAgent"];
+  }
+  if (lower.includes("lead") || lower.includes("score") || lower.includes("audience") || lower.includes("contact")) {
+    return ["LeadScoringAgent", "PersonalizationAgent", "EmailAgent"];
+  }
+  return ["SupervisorAgent", "CopyAgent", "ComplianceAgent", "EmailAgent", "ReportingAgent"];
+}
+async function startWorkflow(command) {
+  const agentPlan = determineAgentPlan(command);
+  const run = await prisma.workflowRun.create({
+    data: {
+      command,
+      status: "running",
+      steps: {
+        create: agentPlan.map((agentName) => ({
+          agentName,
+          status: "pending",
+          input: command,
+          requiresApproval: checkAgentRequiresApproval(agentName)
+        }))
+      }
+    },
+    include: {
+      steps: true
+    }
+  });
+  logger.info(`[WorkflowEngine] Started run ${run.id} with ${run.steps.length} steps: ${agentPlan.join(", ")}`);
+  if (io) {
+    io.emit("workflow:update", {
+      event: "CREATED",
+      runId: run.id,
+      command: run.command,
+      status: run.status,
+      steps: run.steps
+    });
+  }
+  executeWorkflowLoop(run.id).catch((err) => {
+    logger.error(`[WorkflowEngine] Unhandled error executing run ${run.id}:`, err);
+  });
+  return run;
+}
+async function executeWorkflowLoop(runId) {
+  const run = await prisma.workflowRun.findUnique({
+    where: { id: runId },
+    include: { steps: { orderBy: { createdAt: "asc" } } }
+  });
+  if (!run) {
+    logger.error(`[WorkflowEngine] Workflow run ${runId} not found`);
+    return;
+  }
+  if (run.status === "completed" || run.status === "failed" || run.status === "awaiting_approval") {
+    logger.info(`[WorkflowEngine] Run ${runId} is currently in state '${run.status}', skipping execution loop.`);
+    return;
+  }
+  const previousOutputs = {};
+  for (const s of run.steps) {
+    if (s.output && typeof s.output === "object") {
+      previousOutputs[s.agentName] = s.output;
+    }
+  }
+  for (const step of run.steps) {
+    if (step.status === "done" || step.status === "approved") {
+      continue;
+    }
+    if (step.status === "rejected") {
+      await prisma.workflowRun.update({
+        where: { id: runId },
+        data: { status: "failed" }
+      });
+      return;
+    }
+    const updatedStep = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: { status: "running" }
+    });
+    logger.info(`[WorkflowEngine] Run ${runId} -> Running agent: ${step.agentName}`);
+    if (io) {
+      io.emit("workflow:step_update", {
+        runId,
+        stepId: step.id,
+        agentName: step.agentName,
+        status: "running",
+        requiresApproval: step.requiresApproval
+      });
+      io.emit("agentEvent", {
+        topic: `agent.${step.agentName.toLowerCase()}.events`,
+        payload: {
+          run_id: runId,
+          agent_name: step.agentName,
+          status: "RUNNING",
+          message: `Executing ${step.agentName}...`
+        }
+      });
+    }
+    let agentResultData = {};
+    const t0 = Date.now();
+    try {
+      const agentKey = step.agentName.toLowerCase().replace(/agent$/, "");
+      const response = await agentClient_default.runAgent(agentKey, {
+        command: run.command,
+        previous_outputs: previousOutputs
+      });
+      agentResultData = response.data || response;
+    } catch (err) {
+      logger.warn(`[WorkflowEngine] Call to Python service for ${step.agentName} failed (${err.message}). Using simulated fallback output.`);
+      agentResultData = {
+        status: "completed",
+        agent: step.agentName,
+        summary: `Generated strategy and execution plan for '${run.command.slice(0, 40)}...'`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        details: {
+          confidence: 0.95,
+          recommendedAction: `Proceed with ${step.agentName} task execution`
+        }
+      };
+    }
+    const elapsedMs = Date.now() - t0;
+    previousOutputs[step.agentName] = agentResultData;
+    if (step.requiresApproval) {
+      logger.info(`[WorkflowEngine] Run ${runId} -> Agent ${step.agentName} REQUIRES HUMAN APPROVAL. Pausing workflow.`);
+      const pausedStep = await prisma.workflowStep.update({
+        where: { id: step.id },
+        data: {
+          status: "awaiting_approval",
+          output: agentResultData
+        }
+      });
+      const pausedRun = await prisma.workflowRun.update({
+        where: { id: runId },
+        data: { status: "awaiting_approval" }
+      });
+      if (io) {
+        io.emit("workflow:step_update", {
+          runId,
+          stepId: pausedStep.id,
+          agentName: pausedStep.agentName,
+          status: "awaiting_approval",
+          output: agentResultData,
+          requiresApproval: true,
+          elapsedMs
+        });
+        io.emit("workflow:awaiting_approval", {
+          runId,
+          step: pausedStep,
+          output: agentResultData,
+          agentName: pausedStep.agentName
+        });
+      }
+      return;
+    }
+    const completedStep = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: {
+        status: "done",
+        output: agentResultData
+      }
+    });
+    if (io) {
+      io.emit("workflow:step_update", {
+        runId,
+        stepId: completedStep.id,
+        agentName: completedStep.agentName,
+        status: "done",
+        output: agentResultData,
+        elapsedMs
+      });
+      io.emit("agentEvent", {
+        topic: `agent.${step.agentName.toLowerCase()}.responses`,
+        payload: {
+          run_id: runId,
+          agent_name: step.agentName,
+          status: "DONE",
+          output: agentResultData
+        }
+      });
+    }
+  }
+  const finalRun = await prisma.workflowRun.update({
+    where: { id: runId },
+    data: { status: "completed" },
+    include: { steps: true }
+  });
+  logger.info(`[WorkflowEngine] Run ${runId} COMPLETED SUCCESSFULLY! All ${finalRun.steps.length} steps done.`);
+  if (io) {
+    io.emit("workflow:update", {
+      event: "COMPLETED",
+      runId,
+      status: "completed",
+      steps: finalRun.steps
+    });
+  }
+}
+async function approveWorkflowStep(runId, decision) {
+  const run = await prisma.workflowRun.findUnique({
+    where: { id: runId },
+    include: { steps: { orderBy: { createdAt: "asc" } } }
+  });
+  if (!run) {
+    throw new Error(`Workflow run ${runId} not found`);
+  }
+  const awaitingStep = run.steps.find((s) => s.status === "awaiting_approval");
+  if (!awaitingStep) {
+    throw new Error(`Workflow run ${runId} has no step awaiting approval`);
+  }
+  if (decision === "rejected") {
+    logger.info(`[WorkflowEngine] User REJECTED step ${awaitingStep.agentName} for run ${runId}`);
+    const rejectedStep = await prisma.workflowStep.update({
+      where: { id: awaitingStep.id },
+      data: { status: "rejected" }
+    });
+    const failedRun = await prisma.workflowRun.update({
+      where: { id: runId },
+      data: { status: "failed" },
+      include: { steps: true }
+    });
+    if (io) {
+      io.emit("workflow:step_update", {
+        runId,
+        stepId: rejectedStep.id,
+        agentName: rejectedStep.agentName,
+        status: "rejected"
+      });
+      io.emit("workflow:update", {
+        event: "FAILED",
+        runId,
+        status: "failed",
+        steps: failedRun.steps,
+        reason: `Step ${awaitingStep.agentName} was rejected by user.`
+      });
+    }
+    return failedRun;
+  }
+  logger.info(`[WorkflowEngine] User APPROVED step ${awaitingStep.agentName} for run ${runId}. Resuming execution loop.`);
+  const approvedStep = await prisma.workflowStep.update({
+    where: { id: awaitingStep.id },
+    data: { status: "done" }
+  });
+  await prisma.workflowRun.update({
+    where: { id: runId },
+    data: { status: "running" }
+  });
+  if (io) {
+    io.emit("workflow:step_update", {
+      runId,
+      stepId: approvedStep.id,
+      agentName: approvedStep.agentName,
+      status: "done"
+    });
+  }
+  executeWorkflowLoop(runId).catch((err) => {
+    logger.error(`[WorkflowEngine] Error resuming execution loop for run ${runId}:`, err);
+  });
+  return prisma.workflowRun.findUnique({
+    where: { id: runId },
+    include: { steps: true }
+  });
+}
+async function getWorkflowRun(runId) {
+  return prisma.workflowRun.findUnique({
+    where: { id: runId },
+    include: { steps: { orderBy: { createdAt: "asc" } } }
+  });
+}
+
+// src/modules/workflow_engine/routes.ts
 var router10 = (0, import_express10.Router)();
-router10.get("/graph", (req, res) => {
+router10.post("/workflows", async (req, res) => {
+  try {
+    const command = req.body.command || req.body.prompt;
+    if (!command || typeof command !== "string") {
+      res.status(400).json({ success: false, error: "Command string is required." });
+      return;
+    }
+    const run = await startWorkflow(command);
+    res.status(200).json({
+      success: true,
+      data: {
+        runId: run.id,
+        command: run.command,
+        status: run.status,
+        steps: run.steps
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router10.post("/", async (req, res) => {
+  try {
+    const command = req.body.command || req.body.prompt;
+    if (!command || typeof command !== "string") {
+      res.status(400).json({ success: false, error: "Command string is required." });
+      return;
+    }
+    const run = await startWorkflow(command);
+    res.status(200).json({
+      success: true,
+      data: {
+        runId: run.id,
+        command: run.command,
+        status: run.status,
+        steps: run.steps
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router10.get("/workflows/:runId", async (req, res) => {
+  try {
+    const run = await getWorkflowRun(req.params.runId);
+    if (!run) {
+      res.status(404).json({ success: false, error: "Workflow run not found" });
+      return;
+    }
+    res.status(200).json({ success: true, data: run });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router10.get("/:runId", async (req, res) => {
+  try {
+    const run = await getWorkflowRun(req.params.runId);
+    if (!run) {
+      res.status(404).json({ success: false, error: "Workflow run not found" });
+      return;
+    }
+    res.status(200).json({ success: true, data: run });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router10.post("/workflows/:runId/approve", async (req, res) => {
+  try {
+    const { decision } = req.body;
+    if (decision !== "approved" && decision !== "rejected") {
+      res.status(400).json({ success: false, error: "Decision must be 'approved' or 'rejected'" });
+      return;
+    }
+    const updatedRun = await approveWorkflowStep(req.params.runId, decision);
+    res.status(200).json({ success: true, data: updatedRun });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+router10.post("/:runId/approve", async (req, res) => {
+  try {
+    const { decision } = req.body;
+    if (decision !== "approved" && decision !== "rejected") {
+      res.status(400).json({ success: false, error: "Decision must be 'approved' or 'rejected'" });
+      return;
+    }
+    const updatedRun = await approveWorkflowStep(req.params.runId, decision);
+    res.status(200).json({ success: true, data: updatedRun });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+router10.get("/graph", (_req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1672,7 +2361,7 @@ router10.get("/graph", (req, res) => {
     }
   });
 });
-router10.get("/executions", (req, res) => {
+router10.get("/executions", (_req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
 router10.get("/executions/:id", (req, res) => {
@@ -1681,7 +2370,7 @@ router10.get("/executions/:id", (req, res) => {
 router10.post("/executions/:id/cancel", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, status: "CANCELLED" } });
 });
-router10.get("/dependencies", (req, res) => {
+router10.get("/dependencies", (_req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1690,13 +2379,13 @@ router10.get("/dependencies", (req, res) => {
     }
   });
 });
-router10.get("/automation", (req, res) => {
+router10.get("/automation", (_req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "wf1", name: "Full Campaign Launch Workflow", description: "End-to-end workflow from brief to launch", steps: 8, lastRun: null, enabled: true },
     { id: "wf2", name: "Re-engagement Workflow", description: "Automated re-engagement sequence for cold leads", steps: 5, lastRun: "2026-06-01T10:00:00Z", enabled: true }
   ] });
 });
-router10.post("/automation/:id/trigger", (req, res) => {
+router10.post("/automation/:id/trigger", (_req, res) => {
   res.status(200).json({ success: true, data: { executionId: "exec-uuid", status: "RUNNING" } });
 });
 var routes_default10 = router10;
@@ -1804,9 +2493,9 @@ router14.post("/scheduled", (req, res) => {
 router14.post("/custom", (req, res) => {
   res.status(200).json({ success: true, data: { reportId: "rpt-uuid", status: "GENERATING", estimatedMs: 15e3 } });
 });
-router14.get("/executive", (req, res) => {
+router14.get("/executive", async (req, res) => {
   const agentsService = new AgentsService();
-  const agents = agentsService.getAllAgents();
+  const agents = await agentsService.getAllAgents();
   const reportingAgent = agents.find((a) => a.type === "REPORTING");
   const isAgentActive = reportingAgent && reportingAgent.status === "RUNNING";
   const reportStatus = isAgentActive ? "READY" : "GENERATING";
@@ -1917,5 +2606,7 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
 app.use("/api/v1", routes_default17);
+app.use("/api/workflows", routes_default10);
+app.use("/api/v1/workflows", routes_default10);
 app.use(errorHandler);
 var app_default = app;

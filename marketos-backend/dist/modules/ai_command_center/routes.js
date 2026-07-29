@@ -1,7 +1,9 @@
 "use strict";
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -15,6 +17,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/modules/ai_command_center/routes.ts
@@ -24,6 +34,151 @@ __export(routes_exports, {
 });
 module.exports = __toCommonJS(routes_exports);
 var import_express = require("express");
+
+// src/lib/logger.ts
+var import_winston = __toESM(require("winston"));
+var import_fs = __toESM(require("fs"));
+var { combine, timestamp, printf, colorize } = import_winston.default.format;
+var customFormat = printf(({ level, message, timestamp: timestamp2, ...metadata }) => {
+  let msg = `${timestamp2} [${level}]: ${message}`;
+  if (Object.keys(metadata).length > 0) {
+    msg += ` ${JSON.stringify(metadata)}`;
+  }
+  return msg;
+});
+var isProduction = process.env.NODE_ENV === "production";
+var transports = [
+  new import_winston.default.transports.Console({
+    format: combine(
+      colorize(),
+      timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+      customFormat
+    )
+  })
+];
+if (!isProduction) {
+  try {
+    if (!import_fs.default.existsSync("logs")) import_fs.default.mkdirSync("logs", { recursive: true });
+    transports.push(new import_winston.default.transports.File({ filename: "logs/error.log", level: "error" }));
+    transports.push(new import_winston.default.transports.File({ filename: "logs/combined.log" }));
+  } catch (_e) {
+  }
+}
+var logger = import_winston.default.createLogger({
+  level: isProduction ? "info" : "debug",
+  format: combine(
+    timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    import_winston.default.format.json()
+  ),
+  transports
+});
+
+// src/lib/agentClient.ts
+var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+async function agentFetch(path, opts = {}) {
+  const { method = "GET", body, timeoutMs = 3e4 } = opts;
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body !== void 0 ? JSON.stringify(body) : void 0,
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return response.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
+    }
+    throw err;
+  }
+}
+async function agentFetchStream(path, body, timeoutMs = 12e4) {
+  const url = `${AGENT_SERVICE_URL}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!response.ok || !response.body) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
+      );
+    }
+    return response.body;
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+async function getAgentServiceHealth() {
+  return agentFetch("/v1/health");
+}
+async function listAgents() {
+  return agentFetch("/v1/agents");
+}
+async function runAgent(agentName, state) {
+  return agentFetch(`/v1/agents/${agentName}/run`, {
+    method: "POST",
+    body: { state },
+    timeoutMs: 6e4
+  });
+}
+async function runCampaignSync(opts) {
+  return agentFetch("/v1/pipeline/campaign", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 12e4
+  });
+}
+async function runCampaignAsync(opts) {
+  return agentFetch("/v1/pipeline/campaign/async", {
+    method: "POST",
+    body: opts,
+    timeoutMs: 15e3
+  });
+}
+async function getCampaignStatus(campaignId) {
+  return agentFetch(`/v1/pipeline/${campaignId}/status`);
+}
+async function streamCampaign(opts) {
+  return agentFetchStream("/v1/pipeline/campaign/stream", opts);
+}
+async function streamQuery(opts) {
+  return agentFetchStream("/v1/query/stream", opts, 18e4);
+}
+var agentClient = {
+  baseUrl: AGENT_SERVICE_URL,
+  getHealth: getAgentServiceHealth,
+  listAgents,
+  runAgent,
+  runCampaignSync,
+  runCampaignAsync,
+  getCampaignStatus,
+  streamCampaign,
+  streamQuery
+};
+var agentClient_default = agentClient;
+
+// src/modules/ai_command_center/routes.ts
 var router = (0, import_express.Router)();
 router.post("/command", (req, res) => {
   const prompt = req.body.prompt?.toLowerCase() || "";
@@ -89,5 +244,117 @@ router.post("/automation-rules", (req, res) => {
 });
 router.delete("/automation-rules/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
+});
+router.post("/pipeline/campaign", async (req, res) => {
+  try {
+    const result = await agentClient_default.runCampaignSync(req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign pipeline error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router.post("/pipeline/campaign/async", async (req, res) => {
+  try {
+    const result = await agentClient_default.runCampaignAsync(req.body);
+    res.status(202).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Async campaign error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router.get("/pipeline/:campaignId/status", async (req, res) => {
+  try {
+    const result = await agentClient_default.getCampaignStatus(req.params.campaignId);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign status error:", message);
+    res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router.post("/pipeline/campaign/stream", async (req, res) => {
+  try {
+    const stream = await agentClient_default.streamCampaign(req.body);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Connection", "keep-alive");
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn("[AI CC] Stream pipe error:", pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Campaign stream error:", message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+    } else {
+      res.write(`event: error
+data: ${JSON.stringify({ error: message })}
+
+`);
+      res.end();
+    }
+  }
+});
+router.post("/query/stream", async (req, res) => {
+  try {
+    const stream = await agentClient_default.streamQuery(req.body);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Connection", "keep-alive");
+    const reader = stream.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (pipeErr) {
+        logger.warn("[AI CC] Query stream pipe error:", pipeErr);
+      } finally {
+        res.end();
+      }
+    };
+    pump();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Query stream error:", message);
+    if (!res.headersSent) {
+      res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+    } else {
+      res.write(`event: error
+data: ${JSON.stringify({ error: message })}
+
+`);
+      res.end();
+    }
+  }
+});
+router.get("/agent-service/health", async (_req, res) => {
+  try {
+    const health = await agentClient_default.getHealth();
+    res.status(health.data?.status === "healthy" ? 200 : 207).json({ success: true, data: health });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("[AI CC] Agent service health check failed:", message);
+    res.status(502).json({ success: false, error: "Agent service unreachable", detail: message });
+  }
 });
 var routes_default = router;

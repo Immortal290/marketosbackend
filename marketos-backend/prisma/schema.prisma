@@ -76,3 +76,44 @@ enum CampaignStatus {
   COMPLETED
   CANCELLED
 }
+
+enum WorkflowRunStatus {
+  running
+  awaiting_approval
+  completed
+  failed
+}
+
+enum WorkflowStepStatus {
+  pending
+  running
+  done
+  awaiting_approval
+  approved
+  rejected
+}
+
+model WorkflowRun {
+  id        String            @id @default(uuid())
+  command   String
+  status    WorkflowRunStatus @default(running)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  steps WorkflowStep[]
+}
+
+model WorkflowStep {
+  id               String             @id @default(uuid())
+  runId            String
+  agentName        String
+  status           WorkflowStepStatus @default(pending)
+  input            String?
+  output           Json?
+  requiresApproval Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  run WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+

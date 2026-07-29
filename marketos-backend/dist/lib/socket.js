@@ -34,7 +34,7 @@ __export(socket_exports, {
   io: () => io
 });
 module.exports = __toCommonJS(socket_exports);
-var import_socket2 = require("socket.io");
+var import_socket = require("socket.io");
 
 // src/lib/logger.ts
 var import_winston = __toESM(require("winston"));
@@ -144,63 +144,13 @@ var AgentsRepository = class {
   }
 };
 
-// src/lib/kafka.ts
-var import_kafkajs = require("kafkajs");
-var kafkaBroker = process.env.KAFKA_BROKER || "localhost:9092";
-var clientId = process.env.KAFKA_CLIENT_ID || "marketos-backend";
-var kafka = new import_kafkajs.Kafka({
-  clientId,
-  brokers: [kafkaBroker],
-  // Reduce retry aggressiveness so startup isn't blocked for minutes
-  retry: {
-    retries: 3,
-    initialRetryTime: 300,
-    maxRetryTime: 3e3
-  }
-});
-var producer = kafka.producer();
-var consumer = kafka.consumer({ groupId: "marketos-group" });
-
-// src/modules/agents/service.ts
-var AgentsService = class {
-  repository = new AgentsRepository();
-  getAllAgents() {
-    return this.repository.getAllAgents();
-  }
-  getAgentByType(type) {
-    return this.repository.getAgentByType(type);
-  }
-  getAgentTasks(type, status, page = 1, limit = 20) {
-    return this.repository.getAgentTasks(type, status, page, limit);
-  }
-  getAgentMemory(type, memType, search, page = 1, limit = 20) {
-    return this.repository.getAgentMemory(type, memType, search, page, limit);
-  }
-  async executeCommand(type, payload) {
-    try {
-      const topic = `agent.${type.toLowerCase()}.commands`;
-      await producer.send({
-        topic,
-        messages: [
-          { value: JSON.stringify(payload) }
-        ]
-      });
-      logger.info(`Successfully dispatched command to topic ${topic}`);
-      return true;
-    } catch (error) {
-      logger.error("Failed to dispatch command to Kafka:", error);
-      return false;
-    }
-  }
-};
-
 // src/lib/socket.ts
 var io;
 function jitter(base, pct = 0.05) {
   return parseFloat((base * (1 + (Math.random() * 2 - 1) * pct)).toFixed(2));
 }
 function buildAnalyticsSnapshot() {
-  const agentsService = new AgentsService();
+  const agentsService = new AgentsRepository();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const avgSuccessRate = activeAgents.length > 0 ? activeAgents.reduce((acc, a) => acc + a.successRate, 0) / activeAgents.length : 90;
@@ -239,7 +189,7 @@ function buildAnalyticsSnapshot() {
   };
 }
 function buildDashboardSnapshot() {
-  const agentsService = new AgentsService();
+  const agentsService = new AgentsRepository();
   const agents = agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
   const performanceMultiplier = agents.length > 0 ? activeAgents.length / agents.length : 1;
@@ -265,7 +215,7 @@ function buildDashboardSnapshot() {
 }
 var initSocket = (server) => {
   const corsOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()) : "*";
-  io = new import_socket2.Server(server, {
+  io = new import_socket.Server(server, {
     cors: {
       origin: corsOrigins,
       methods: ["GET", "POST"],
