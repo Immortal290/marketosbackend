@@ -283,7 +283,7 @@ export default function AnalyticsPage() {
       </section>
 
       {/* Funnel Data */}
-      {funnelData && (
+      {Array.isArray(funnelData) && (
         <section>
           <NeoCard title="Conversion Funnel" accent="lime">
             <div className="flex flex-col gap-2">

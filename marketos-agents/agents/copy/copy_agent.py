@@ -88,8 +88,8 @@ SCORING CRITERIA (score 0–100):
 OUTPUT RULES:
 - Respond ONLY with valid JSON — no prose, no markdown code blocks
 - HTML must be properly escaped inside the JSON string
-- Unsplash Search Query: Provide a short 2-3 word `hero_image_query` for the Unsplash photo API (e.g. "autumn skincare" or "winter jacket").
-- Gemini Imagen Prompt: Provide a highly descriptive `hero_image_prompt` (max 400 chars) as a fallback (e.g. "Minimalist 3D render of a Vitamin C bottle on bright orange pedestal..."). MUST specify NO TEXT, typography, or words.
+- Unsplash Search Query: Provide a short 2-3 word `hero_image_query` that is SPECIFIC to the actual product/brand in the campaign brief (e.g. "dark chocolate bar" for a chocolate brand, "mountain hiking gear" for an outdoor brand). DO NOT default to skincare or generic queries.
+- Gemini Imagen Prompt: Provide a highly descriptive `hero_image_prompt` (max 400 chars) as a fallback that is 100% specific to the campaign's product. MUST specify NO TEXT, typography, or words.
 - All scores must be numbers (not strings)
 
 REQUIRED JSON SCHEMA:
@@ -99,12 +99,13 @@ REQUIRED JSON SCHEMA:
       "variant_id": "V-001",
       "subject_line": "compelling subject line under 50 characters",
       "preview_text": "preview text under 90 characters (shown after subject in inbox)",
+      "copy_nature": "Detailed breakdown of copywriting framework (AIDA/PAS), targeted emotional hooks, value proposition, and customer friction points addressed",
       "body_html": "<complete responsive HTML email here>",
       "body_text": "plain text version of the email body",
       "cta_text": "CTA button text",
       "cta_url": "https://example.com/offer",
-      "hero_image_query": "autumn skincare",
-      "hero_image_prompt": "A professional flat lay of organic skincare products with autumn leaves and golden lighting, high resolution, soft bokeh.",
+      "hero_image_query": "dark rich chocolate squares",
+      "hero_image_prompt": "A luxurious overhead flat lay of artisan dark chocolate bars broken into pieces on black marble, rich and decadent, professional studio lighting, no text or typography.",
       "readability_score": 82.0,
       "tone_alignment_score": 91.0,
       "spam_risk_score": 8.0,
@@ -125,7 +126,7 @@ Do not use a rigid generic template. Generate a tailored, high-end HTML design s
 Visual Excellence Requirements:
 1. Typography: Use clean sans-serif stacks (Inter, Roboto, Helvetica).
 2. Card Layout: Use a modern "card" aesthetic with subtle border-radii (8-12px) and balanced padding.
-3. Color Palette: Choose a theme-consistent, vibrant color palette (e.g., sleek dark themes with electric accents, or airy minimalist skincare themes). 
+3. Color Palette: Choose a theme-consistent, vibrant color palette MATCHED to the actual campaign product/brand (e.g., deep brown and gold for chocolate, electric blue for tech, muted earth tones for organic food). NEVER default to generic skincare colors.
 4. Components:
    - Preheader (subtle)
    - Brand Header Area

@@ -7,7 +7,7 @@ from core.database import Base
 class Campaign(Base):
     __tablename__ = "campaigns"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     campaign_id = Column(String(16), unique=True, nullable=False)
     workspace_id = Column(String(64), nullable=False, default='default')
     campaign_name = Column(Text, nullable=False)
@@ -34,7 +34,7 @@ class Campaign(Base):
 class CopyVariant(Base):
     __tablename__ = "copy_variants"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     campaign_id = Column(String(16), ForeignKey("campaigns.campaign_id"))
     variant_id = Column(String(16), nullable=False)
     subject_line = Column(Text)

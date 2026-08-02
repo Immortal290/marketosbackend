@@ -7,7 +7,7 @@ from core.database import Base
 class EpisodicMemory(Base):
     __tablename__ = "agent_episodic_memory"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     workspace_id = Column(String(64), nullable=False, default='default')
     agent_name = Column(String(64), nullable=False)
     event_type = Column(String(64))
@@ -25,7 +25,7 @@ class EpisodicMemory(Base):
 class SemanticMemory(Base):
     __tablename__ = "agent_semantic_memory"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     workspace_id = Column(String(64), nullable=False, default='default')
     category = Column(String(64))
     key = Column(String(256))

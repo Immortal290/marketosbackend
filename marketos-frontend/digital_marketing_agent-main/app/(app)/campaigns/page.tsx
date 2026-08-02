@@ -78,7 +78,7 @@ export default function CampaignsPage() {
 
   const { data: apiCampaigns } = useSWR("/campaigns?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
 
-  const displayCampaigns = apiCampaigns ? apiCampaigns.map((c: any, i: number) => ({
+  const displayCampaigns = Array.isArray(apiCampaigns) ? apiCampaigns.map((c: any, i: number) => ({
     id: c.id,
     name: c.name,
     status: c.status?.toLowerCase() || "active",

@@ -73,7 +73,7 @@ export default function AudiencePage() {
 
   const { data: apiSegments } = useSWR("/audience/segments?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
 
-  const displaySegments = apiSegments ? apiSegments.map((s: any, i: number) => ({
+  const displaySegments = Array.isArray(apiSegments) ? apiSegments.map((s: any, i: number) => ({
     id: s.id,
     name: s.name,
     size: s.size?.toLocaleString() || "0",

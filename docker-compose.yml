@@ -17,7 +17,7 @@ services:
 
   # ── PostgreSQL ──────────────────────────────────────────────────────────────
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: marketos_db
     restart: unless-stopped
     environment:
@@ -126,22 +126,71 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
       - KAFKA_BROKERS=redpanda:9092
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketos}?schema=public
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      # ← Remove ?schema=public — invalid for Python asyncpg/psycopg2 drivers
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketos}
+      # LLM providers
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      # Email & messaging
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_EMAIL=${SMTP_EMAIL:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - MSG91_API_KEY=${MSG91_API_KEY:-}
+      - MSG91_SENDER_ID=${MSG91_SENDER_ID:-}
+      - MSG91_SENDER_EMAIL=${MSG91_SENDER_EMAIL:-}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
+      # Creative & search
+      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      # ClickHouse — use Docker service hostname, not localhost
+      - CLICKHOUSE_HOST=marketos_clickhouse
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-9000}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-marketos_analytics}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-marketos}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-marketos_dev}
     ports:
       - "8000:8000"
     # Run the FastAPI server (exposes /v1/query/stream and all existing endpoints)
     command: ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+
+  # ── ClickHouse Analytics DB ─────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: marketos_clickhouse
+    restart: unless-stopped
+    environment:
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-marketos_analytics}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-marketos}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-marketos_dev}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
 
 #   # ── Frontend (nginx static) ─────────────────────────────────────────────────
 #   frontend:
@@ -161,3 +210,4 @@ volumes:
   postgres_data:
   redis_data:
   redpanda_data:
+  clickhouse_data:

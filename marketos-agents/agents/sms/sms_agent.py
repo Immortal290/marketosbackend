@@ -327,6 +327,7 @@ Respond ONLY with valid JSON. No prose, no markdown fences.
     {
       "variant_id": "SMS-001",
       "message": "full message text ≤ 160 chars including STOP instruction",
+      "sms_nature": "Detailed explanation of SMS copy strategy, urgency hooks, psychological trigger, and target segment resonance",
       "char_count": 152,
       "segments": 1,
       "personalization_tokens": ["{{first_name}}"],
@@ -337,11 +338,12 @@ Respond ONLY with valid JSON. No prose, no markdown fences.
   ],
   "selected_variant_id": "SMS-001",
   "optimal_send_time": "Tuesday 10:30 AM IST",
+  "strategy_breakdown": "Comprehensive analysis of timing, compliance, and messaging strategy based strictly on the campaign content.",
   "drip_sequence": [
-    "Day 3 — reminder: shorter version of offer",
-    "Day 7 — final: last chance before expiry"
+    "Day 3 — Reminder: [Complete high-converting follow-up SMS message text with CTA & STOP]",
+    "Day 7 — Final Chance: [Complete urgency-driven final chance SMS message text with CTA & STOP]"
   ],
-  "selection_reasoning": "2 sentence explanation"
+  "selection_reasoning": "Detailed 2-3 sentence explanation of why variant 1 outperforms variant 2 for this audience"
 }
 </output_format>"""
 

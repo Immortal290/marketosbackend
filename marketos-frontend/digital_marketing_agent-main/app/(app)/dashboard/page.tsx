@@ -247,6 +247,7 @@ function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
 }
 
 import { AgentApprovalModal, PendingApprovalData } from "@/components/ui/AgentApprovalModal";
+import { TargetAudienceModal, AudienceData } from "@/components/ui/TargetAudienceModal";
 import { io as socketIOClient } from "socket.io-client";
 
 /* ══ MAIN PAGE ══════════════════════════════════════════════════════════════ */
@@ -258,6 +259,9 @@ export default function MissionControlPage() {
   const [agentOutputs, setAgentOutputs]   = useState<AgentOutput[]>([]);
   const [documentation, setDocumentation] = useState("");
   const [lastPrompt, setLastPrompt]       = useState("");
+
+  // Target Audience & Live Dispatch Modal State
+  const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
 
   // Workflow & Approval Modal States
   const [pendingApproval, setPendingApproval] = useState<PendingApprovalData | null>(null);
@@ -271,7 +275,8 @@ export default function MissionControlPage() {
 
   // Setup Socket.io real-time listener for workflows & agent events
   useEffect(() => {
-    const socket = socketIOClient(process.env.NEXT_PUBLIC_API_BASE_URL || "", {
+    const socketUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+    const socket = socketIOClient(socketUrl, {
       transports: ["websocket", "polling"],
     });
 
@@ -340,9 +345,16 @@ export default function MissionControlPage() {
   const approveAll = () => setAgentOutputs(prev => prev.map(o => ({ ...o, status: "approved" })));
   const rejectAll  = () => setAgentOutputs(prev => prev.map(o => ({ ...o, status: "rejected" })));
 
-  const handleExecute = async () => {
-    if (!commandInput.trim()) return;
-    const prompt = commandInput;
+  const handleExecute = async (audienceData?: AudienceData, forceExecute: boolean = false) => {
+    const prompt = audienceData?.query || commandInput;
+    if (!prompt.trim()) return;
+
+    // AI Recognition: Automatically land the Audience & Brand Parameter pop-up if launching a campaign without saved params
+    if (!audienceData && !forceExecute && (prompt.toLowerCase().includes("campaign") || prompt.toLowerCase().includes("launch") || prompt.toLowerCase().includes("promote") || prompt.toLowerCase().includes("offer"))) {
+      setIsAudienceModalOpen(true);
+      return;
+    }
+
     setIsExecuting(true);
     setShowSugg(false);
     setSseEvents([]);
@@ -355,7 +367,15 @@ export default function MissionControlPage() {
       fetch("/api/v1/workflows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: prompt }),
+        body: JSON.stringify({
+          command: prompt,
+          recipient_email: audienceData?.recipientEmail,
+          recipient_phone: audienceData?.recipientPhone,
+          target_audience: audienceData?.targetAudience,
+          sender_name: audienceData?.senderName,
+          company_name: audienceData?.companyName,
+          channels: audienceData?.channels,
+        }),
       }).catch((err) => console.warn("[WorkflowEngine] Start workflow fetch warning:", err));
 
       // ── Step 2: Stream GLM Query Events (SSE) ──
@@ -366,6 +386,12 @@ export default function MissionControlPage() {
           query: prompt,
           prompt: prompt,
           workspace_id: "00000000-0000-0000-0000-000000000000",
+          recipient_email: audienceData?.recipientEmail,
+          recipient_phone: audienceData?.recipientPhone,
+          target_audience: audienceData?.targetAudience,
+          sender_name: audienceData?.senderName,
+          company_name: audienceData?.companyName,
+          channels: audienceData?.channels,
         }),
       }).catch(() => null);
 
@@ -377,6 +403,12 @@ export default function MissionControlPage() {
             query: prompt,
             prompt: prompt,
             workspace_id: "00000000-0000-0000-0000-000000000000",
+            recipient_email: audienceData?.recipientEmail,
+            recipient_phone: audienceData?.recipientPhone,
+            target_audience: audienceData?.targetAudience,
+            sender_name: audienceData?.senderName,
+            company_name: audienceData?.companyName,
+            channels: audienceData?.channels,
           }),
         });
       }
@@ -512,7 +544,16 @@ export default function MissionControlPage() {
                   className="flex-1 border-neo border-neo-ink bg-neo-surface px-4 py-3 font-mono text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo disabled:opacity-60"
                 />
                 <button
-                  onClick={handleExecute}
+                  type="button"
+                  onClick={() => setIsAudienceModalOpen(true)}
+                  disabled={isExecuting}
+                  className="flex items-center gap-2 border-neo border-neo-ink bg-neo-yellow px-4 py-3 font-display font-black text-xs uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50"
+                  title="Configure target audience and brand parameters"
+                >
+                  <Users className="h-4 w-4" /> Target Audience
+                </button>
+                <button
+                  onClick={() => handleExecute()}
                   disabled={isExecuting}
                   className="flex items-center gap-2 border-neo border-neo-ink bg-neo-cyan px-6 py-3 font-display font-black uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -688,6 +729,17 @@ export default function MissionControlPage() {
         onClose={() => setIsApprovalModalOpen(false)}
         onDecision={(decision, runId) => {
           console.log(`[WorkflowDecision] Run ${runId} decision: ${decision}`);
+        }}
+      />
+
+      {/* Target Audience & Live Send Pop-up */}
+      <TargetAudienceModal
+        isOpen={isAudienceModalOpen}
+        onClose={() => setIsAudienceModalOpen(false)}
+        initialPrompt={commandInput}
+        onLaunch={(audienceData) => {
+          setCommandInput(audienceData.query);
+          handleExecute(audienceData);
         }}
       />
     </div>

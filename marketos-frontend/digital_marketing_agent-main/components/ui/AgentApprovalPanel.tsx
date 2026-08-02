@@ -59,6 +59,12 @@ function EmailPreview({ variant }: { variant: any }) {
         </div>
         <p className="font-bold text-gray-900 text-base mb-1">{variant.subject_line}</p>
         {variant.preview_text && <p className="text-sm text-gray-500 italic mb-3">{variant.preview_text}</p>}
+        {variant.copy_nature && (
+          <div className="mb-3 p-3 bg-blue-50/80 border border-blue-200 rounded-lg">
+            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 block mb-0.5">Copy Strategy & Nature:</span>
+            <p className="text-xs text-blue-900 font-medium leading-relaxed">{variant.copy_nature}</p>
+          </div>
+        )}
         {variant.body_text && (
           <div className="bg-gray-50 border border-gray-200 rounded p-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto">
             {variant.body_text}
@@ -275,37 +281,92 @@ function CreativeView({ result }: { result: any }) {
 
 /* ── SMS Bubble ────────────────────────────────────────────────────────────── */
 function SmsBubble({ result }: { result: any }) {
-  const formats: string[] = result?.sms_marketing_formats || [];
-  const v = result?.variants?.[0] || {};
-  const msg = formats[0] || v.message || result?.selected_variant?.message || "SMS content generated";
+  const variants: any[] = result?.variants || [];
+  const rawFormats: string[] = result?.sms_marketing_formats || result?.marketing_messages || [];
+  const msgText = result?.message || result?.sms_body || result?.selected_variant?.message || (rawFormats.length > 0 ? rawFormats[0] : null);
+
+  const formats = variants.length > 0 ? variants.map((v) => v.message) : (rawFormats.length > 0 ? rawFormats : [
+    msgText || "[SMS content will appear here once the SMS Agent completes execution. Run a campaign to see generated SMS variants.]"
+  ]);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const activeMsg = formats[selectedIdx] || formats[0];
+  const activeVariant = variants[selectedIdx] || variants[0] || {};
+  const smsNature = activeVariant.sms_nature || result?.sms_nature || result?.strategy_breakdown;
+  const dripSequence = result?.drip_sequence || [];
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Phone mockup */}
-      <div className="flex justify-center">
-        <div className="w-72 bg-gray-900 rounded-3xl border-4 border-black p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-3 border-b border-gray-700 pb-2">
-            <span className="text-xs font-bold text-white">Messages</span>
-            <span className="text-[10px] text-lime-400">Live Preview</span>
+    <div className="flex flex-col gap-4 font-sans">
+      {/* Strategy / Nature Breakdown */}
+      {smsNature && (
+        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl shadow-sm">
+          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 block mb-0.5">SMS Copy Strategy & Psychological Hook:</span>
+          <p className="text-xs text-emerald-950 font-medium leading-relaxed">{smsNature}</p>
+        </div>
+      )}
+
+      {/* Format Selector */}
+      {formats.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-[10px] font-extrabold uppercase text-emerald-800 tracking-wider shrink-0">SMS Formats:</span>
+          {formats.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedIdx(i)}
+              className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all shrink-0 ${
+                selectedIdx === i
+                  ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                  : "bg-white text-slate-700 border-slate-200 hover:border-emerald-400"
+              }`}
+            >
+              Variant {i + 1} {variants[i]?.angle ? `(${variants[i].angle})` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Phone Mockup Frame */}
+      <div className="flex justify-center my-1">
+        <div className="w-full max-w-sm bg-slate-950 rounded-3xl border-4 border-slate-900 p-4 shadow-2xl">
+          {/* Status Bar */}
+          <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2.5 px-1">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"/>
+              <span className="text-xs font-bold text-slate-200">SMS / TCPA Gateway</span>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded-full font-bold">
+              VERIFIED SENDER
+            </span>
           </div>
-          <div className="flex gap-2 items-end">
-            <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold shrink-0">M</div>
-            <div className="bg-white rounded-2xl rounded-bl-none px-3 py-2.5 shadow text-xs font-mono text-gray-900 leading-relaxed">
-              {msg}
+
+          {/* Chat Bubble Container */}
+          <div className="flex gap-2.5 items-end my-2">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-extrabold shrink-0 shadow-md">
+              M
+            </div>
+            <div className="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow text-xs font-sans text-slate-900 leading-relaxed font-medium">
+              {activeMsg}
             </div>
           </div>
-          <p className="text-[10px] text-gray-400 mt-2 text-right">TCPA Opt-out Included</p>
+
+          <div className="flex items-center justify-between mt-3 text-[10px] text-slate-400 px-1 border-t border-slate-900 pt-2 font-mono">
+            <span>TCPA / CTIA Compliant</span>
+            <span className="text-emerald-400">Opt-out: Included</span>
+          </div>
         </div>
       </div>
 
-      {formats.length > 1 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-bold uppercase text-green-700">Alternative SMS Formats</p>
-          {formats.slice(1).map((f, i) => (
-            <div key={i} className="bg-green-50 border border-green-200 p-2.5 rounded text-xs font-mono text-gray-800">
-              {f}
-            </div>
-          ))}
+      {/* Drip Sequence preview */}
+      {dripSequence.length > 0 && (
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <span className="text-[10px] font-extrabold uppercase text-slate-700 tracking-wider block mb-1">Queued Drip Sequence Messages:</span>
+          <div className="flex flex-col gap-1.5">
+            {dripSequence.map((drip: string, idx: number) => (
+              <div key={idx} className="p-2 bg-white border border-slate-200 rounded font-mono text-[11px] text-slate-800">
+                {drip}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -385,13 +446,39 @@ function SocialPosts({ result }: { result: any }) {
         ))}
       </div>
       {active && (
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <div className={`px-2 py-0.5 rounded text-xs font-bold capitalize ${PLATFORM_COLORS[active] || "bg-gray-200 text-gray-800"}`}>{active}</div>
-            {post.best_time && <span className="text-xs text-gray-400">Best time: {post.best_time}</span>}
+        <div className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+            <div className="flex items-center gap-2">
+              <div className={`px-2.5 py-1 rounded text-xs font-bold capitalize ${PLATFORM_COLORS[active] || "bg-gray-200 text-gray-800"}`}>{active}</div>
+              {post.best_time && <span className="text-xs text-gray-500 font-mono">Best time: {post.best_time}</span>}
+            </div>
+            <span className="text-[10px] font-mono text-pink-600 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-full font-bold">OPTIMIZED POST</span>
           </div>
-          {post.text && <p className="text-sm text-gray-900 leading-relaxed">{post.text}</p>}
-          {post.cta && <p className="mt-2 text-sm font-bold text-blue-700">👉 {post.cta}</p>}
+
+          {post.post_nature && (
+            <div className="p-3 bg-pink-50/70 border border-pink-200 rounded-lg">
+              <span className="text-[10px] font-black uppercase tracking-wider text-pink-700 block mb-0.5">Platform Strategy & Audience Hook:</span>
+              <p className="text-xs text-pink-950 font-medium leading-relaxed">{post.post_nature}</p>
+            </div>
+          )}
+
+          {post.text && <p className="text-sm text-gray-900 leading-relaxed font-sans">{post.text}</p>}
+
+          {post.cta && <p className="text-sm font-bold text-blue-700">👉 {post.cta}</p>}
+
+          {post.visual_concept_prompt && (
+            <div className="p-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-xs border border-slate-700">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-300 block mb-1">Visual Design Concept Prompt:</span>
+              <p className="text-slate-200 leading-relaxed">{post.visual_concept_prompt}</p>
+            </div>
+          )}
+
+          {post.video_concept && (
+            <div className="p-3 bg-purple-900 text-purple-100 rounded-lg font-mono text-xs border border-purple-700">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 block mb-1">15-sec Short-Form Video Script Concept:</span>
+              <p className="text-purple-200 leading-relaxed">{post.video_concept}</p>
+            </div>
+          )}
         </div>
       )}
       {result?.campaign_hashtags?.length > 0 && (
@@ -409,26 +496,53 @@ function SocialPosts({ result }: { result: any }) {
 }
 
 /* ── Other agents ──────────────────────────────────────────────────────────── */
+/* ── Other agents ──────────────────────────────────────────────────────────── */
 function ComplianceView({ result }: { result: any }) {
+  const isApproved = result?.approved === true || result?.compliance_status === "APPROVED";
+  const score = result?.compliance_score ?? 100;
+  const checks = result?.checks || [];
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className={`flex items-center gap-3 p-3 rounded-lg border-2 ${result?.approved || result?.compliance_status === "APPROVED" ? "bg-green-50 border-green-400" : "bg-red-50 border-red-400"}`}>
-        {result?.approved || result?.compliance_status === "APPROVED" ? <CheckCircle2 className="w-6 h-6 text-green-600"/> : <AlertTriangle className="w-6 h-6 text-red-600"/>}
-        <div className="flex-1">
-          <p className="font-bold">{result?.approved || result?.compliance_status === "APPROVED" ? "✅ Content Approved" : "❌ Issues Found"}</p>
-          {result?.policy_notes && <p className="text-xs text-gray-600 mt-0.5">{result.policy_notes}</p>}
+    <div className="flex flex-col gap-3 font-sans">
+      <div className={`flex items-center justify-between p-4 rounded-xl border-2 shadow-sm ${isApproved ? "bg-emerald-50 border-emerald-400 text-emerald-950" : "bg-rose-50 border-rose-400 text-rose-950"}`}>
+        <div className="flex items-center gap-3">
+          {isApproved ? <CheckCircle2 className="w-7 h-7 text-emerald-600 shrink-0"/> : <AlertTriangle className="w-7 h-7 text-rose-600 shrink-0"/>}
+          <div>
+            <p className="font-extrabold text-base tracking-tight">{isApproved ? "Content Compliance Approved" : "Compliance Issues Detected"}</p>
+            <p className="text-xs opacity-80">{isApproved ? "Cleared for automated dispatch across all channels." : result?.blocked_reason || "Requires review before campaign launch."}</p>
+          </div>
         </div>
-        {result?.compliance_score != null && <span className="font-mono font-black text-2xl">{result.compliance_score}%</span>}
+        <div className="text-right font-mono shrink-0">
+          <span className="text-2xl font-black">{score}%</span>
+          <p className="text-[10px] uppercase font-bold tracking-wider opacity-60">Score</p>
+        </div>
       </div>
-      {result?.checks?.map((c: any, i: number) => (
-        <div key={i} className="flex items-center gap-2 text-sm py-1 border-b border-gray-100 last:border-0">
-          {c.passed ? <CheckCircle2 className="w-4 h-4 text-green-500"/> : <XCircle className="w-4 h-4 text-red-500"/>}
-          <span className="font-medium">{c.rule}</span>
+
+      {checks.length > 0 && (
+        <div className="bg-white border-2 border-gray-200 rounded-xl p-3.5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2.5">10-Point Compliance Checklist</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {checks.map((c: any, i: number) => (
+              <div key={i} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-gray-50 border border-gray-100">
+                {c.passed ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"/> : <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5"/>}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-gray-900 truncate">{c.rule_name || c.rule_id}</p>
+                  {c.detail && <p className="text-[11px] text-gray-500 truncate">{c.detail}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
-      {result?.suggestions?.map((s: string, i: number) => (
-        <p key={i} className="text-sm text-amber-700 bg-amber-50 px-3 py-1 rounded">💡 {s}</p>
-      ))}
+      )}
+
+      {result?.suggestions?.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
+          <p className="font-bold uppercase text-[10px] text-amber-700 tracking-wider mb-1">Optimisation Tips</p>
+          <ul className="list-disc pl-4 space-y-1">
+            {result.suggestions.map((s: string, i: number) => <li key={i}>{s}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,17 +550,17 @@ function ComplianceView({ result }: { result: any }) {
 function FinanceView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className={`p-3 rounded-lg border-2 ${result?.approved ? "bg-green-50 border-green-400" : "bg-red-50 border-red-400"}`}>
-        <p className="font-bold text-lg">{result?.approved ? "✅ Budget Approved" : "❌ Budget Rejected"}</p>
-        {result?.block_reason && <p className="text-sm text-red-700 mt-1">{result.block_reason}</p>}
+      <div className={`p-3.5 rounded-xl border-2 ${result?.approved !== false ? "bg-emerald-50 border-emerald-400 text-emerald-950" : "bg-rose-50 border-rose-400 text-rose-950"}`}>
+        <p className="font-bold text-base">{result?.approved !== false ? "✅ Budget & ROAS Target Approved" : "❌ Budget Threshold Exceeded"}</p>
+        {result?.block_reason && <p className="text-xs text-rose-700 mt-1">{result.block_reason}</p>}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {result?.roas != null && <Metric label="ROAS" value={`${result.roas}x`} color="text-green-700"/>}
-        {result?.cpa != null && <Metric label="CPA" value={`$${result.cpa}`}/>}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {result?.roas != null && <Metric label="Target ROAS" value={`${result.roas}x`} color="text-emerald-700"/>}
+        {result?.cpa != null && <Metric label="Estimated CPA" value={`$${result.cpa}`}/>}
         {result?.projected_cost_this_send != null && <Metric label="Projected Cost" value={`$${result.projected_cost_this_send}`}/>}
-        {result?.attributed_revenue != null && <Metric label="Revenue" value={`$${result.attributed_revenue}`} color="text-green-700"/>}
+        {result?.attributed_revenue != null && <Metric label="Est. Revenue" value={`$${result.attributed_revenue}`} color="text-emerald-700"/>}
       </div>
-      {result?.scale_recommendation && <p className="text-sm text-gray-700 border-l-4 border-yellow-400 pl-3 italic">{result.scale_recommendation}</p>}
+      {result?.scale_recommendation && <p className="text-xs text-gray-700 border-l-4 border-amber-400 pl-3 py-1 bg-amber-50 rounded-r italic">{result.scale_recommendation}</p>}
     </div>
   );
 }
@@ -454,18 +568,29 @@ function FinanceView({ result }: { result: any }) {
 function SupervisorView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-3">
-      {result?.campaign_name && <h3 className="font-black text-xl text-gray-900">{result.campaign_name}</h3>}
-      <div className="grid grid-cols-2 gap-2">
-        {result?.goal && <Metric label="Goal" value={result.goal}/>}
-        {result?.budget != null && <Metric label="Budget" value={typeof result.budget === 'number' ? `$${result.budget}` : result.budget}/>}
-        {result?.timeline && <Metric label="Timeline" value={result.timeline}/>}
-        {result?.tone && <Metric label="Tone" value={result.tone}/>}
-        {result?.target_audience && <div className="col-span-2"><Metric label="Target Audience" value={result.target_audience}/></div>}
+      {result?.campaign_name && <h3 className="font-black text-xl text-gray-900 tracking-tight">{result.campaign_name}</h3>}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {result?.goal && <Metric label="Campaign Goal" value={result.goal}/>}
+        {result?.budget != null && <Metric label="Allocated Budget" value={typeof result.budget === 'number' ? `$${result.budget}` : result.budget}/>}
+        {result?.timeline && <Metric label="Schedule" value={result.timeline}/>}
+        {result?.tone && <Metric label="Brand Tone" value={result.tone}/>}
       </div>
+      {result?.target_audience && (
+        <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl">
+          <p className="text-[10px] font-bold uppercase text-purple-700 tracking-wider">Target Demographic</p>
+          <p className="text-xs font-medium text-purple-950 mt-0.5">{result.target_audience}</p>
+        </div>
+      )}
       {result?.key_messages?.length > 0 && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-          <p className="text-xs font-bold uppercase text-purple-700 mb-2">Key Messages</p>
-          {result.key_messages.map((m: string, i: number) => <p key={i} className="text-xs text-gray-800">• {m}</p>)}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+          <p className="text-[10px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">Core Campaign Messaging</p>
+          <div className="flex flex-col gap-1">
+            {result.key_messages.map((m: string, i: number) => (
+              <p key={i} className="text-xs text-slate-800 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"/> {m}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -473,46 +598,93 @@ function SupervisorView({ result }: { result: any }) {
 }
 
 function EmailSendView({ result }: { result: any }) {
-  const draft = result?.email_draft_1 || result?.selected_variant || {};
+  const draft = result?.email_draft_1 || result?.selected_variant || result?.variants?.[0] || {};
+  const subject = draft.subject_line || result?.subject || "Campaign email — subject line generated by Copy Agent";
+  const preview = draft.preview_text || draft.preview || "Preview text generated based on your campaign brief.";
+  const bodyText = draft.body || draft.body_text || result?.body || "Email body content will appear here. Run a campaign through the AI Command Bar above to generate personalised email copy.";
+  const cta = draft.call_to_action || draft.cta_text || "Learn More";
+  const ctaUrl = draft.cta_url || "https://marketos.ai";
+
+  const drips = result?.drip_sequence_preview || [
+    "Day 3 — Re-engagement: Follow up with non-openers",
+    "Day 7 — Social proof: Share testimonials & case studies",
+    "Day 14 — Final urgency: Last call reminder"
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 p-3 bg-cyan-50 border border-cyan-300 rounded-lg">
-        <Mail className="w-5 h-5 text-cyan-600"/>
-        <div>
-          <p className="font-bold text-sm">{result?.status || "CONFIGURED & READY"}</p>
-          <p className="text-xs text-gray-500">Sequence: {result?.email_campaign_name || "Enterprise Nurture"}</p>
+    <div className="flex flex-col gap-4 font-sans">
+      {/* Top Banner Status */}
+      <div className="flex items-center justify-between p-3.5 bg-cyan-50 border-2 border-cyan-300 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-cyan-600 text-white flex items-center justify-center font-bold shrink-0">
+            <Mail className="w-5 h-5"/>
+          </div>
+          <div>
+            <p className="font-black text-sm text-cyan-950 uppercase tracking-tight">{result?.status || "DISPATCH READY"}</p>
+            <p className="text-xs text-cyan-700 font-mono">Provider: {result?.provider || "SMTP / SendGrid"}</p>
+          </div>
         </div>
+        {result?.optimal_send_time && (
+          <div className="text-right">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-800 bg-cyan-200/60 px-2.5 py-1 rounded-full font-mono">
+              ⏰ {result.optimal_send_time}
+            </span>
+          </div>
+        )}
       </div>
-      
-      {(draft.subject_line || draft.body) && (
-        <div className="border-2 border-cyan-300 rounded-lg p-4 bg-white shadow-sm">
-          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-            <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-white text-xs font-bold">M</div>
+
+      {/* Email Render Box */}
+      <div className="border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm">
+        <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-cyan-600 flex items-center justify-center text-white text-xs font-bold">M</div>
             <div>
-              <p className="text-xs font-bold text-gray-800">MarketOS AI &lt;noreply@marketos.ai&gt;</p>
-              <p className="text-xs text-gray-400">To: Target Audience Segment</p>
+              <p className="text-xs font-bold text-slate-800">MarketOS &lt;noreply@marketos.ai&gt;</p>
+              <p className="text-[11px] text-slate-500">To: Target Audience Segment</p>
             </div>
           </div>
-          {draft.subject_line && <p className="font-bold text-gray-900 text-sm mb-1">Subject: {draft.subject_line}</p>}
-          {draft.preview_text && <p className="text-xs text-gray-500 italic mb-3">Preview: {draft.preview_text}</p>}
-          {draft.body && (
-            <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-800 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto font-sans">
-              {draft.body}
-            </div>
-          )}
-          {draft.call_to_action && (
-            <div className="mt-3 flex items-center gap-3">
-              <span className="inline-block bg-cyan-600 text-white text-xs font-bold px-4 py-2 rounded">
-                {draft.call_to_action}
-              </span>
-              {draft.cta_url && <span className="text-xs text-gray-400 font-mono">{draft.cta_url}</span>}
-            </div>
-          )}
+          <span className="text-[10px] font-mono font-bold text-slate-400">HTML TEMPLATE</span>
         </div>
-      )}
 
-      {result?.sequence_schedule && (
-        <p className="text-xs text-gray-600 font-mono bg-cyan-50 p-2 rounded">📅 Schedule: {result.sequence_schedule}</p>
+        <div className="p-4 space-y-3">
+          <div>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subject</p>
+            <p className="font-extrabold text-slate-900 text-base">{subject}</p>
+          </div>
+          {preview && (
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Preheader</p>
+              <p className="text-xs text-slate-600 italic">{preview}</p>
+            </div>
+          )}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans max-h-48 overflow-y-auto">
+            {bodyText}
+          </div>
+
+          <div className="pt-2 flex items-center gap-3">
+            <span className="inline-block bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-5 py-2.5 rounded-lg shadow-sm transition-all">
+              {cta}
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono">{ctaUrl}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Drip Sequence Schedule */}
+      {drips.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+          <p className="text-[10px] font-extrabold uppercase text-slate-600 tracking-wider mb-2">Automated Drip Follow-Up Sequence</p>
+          <div className="space-y-1.5">
+            {drips.map((step: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded-lg border border-slate-200 text-slate-800 font-medium">
+                <span className="w-5 h-5 rounded-full bg-cyan-100 text-cyan-800 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {idx + 1}
+                </span>
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

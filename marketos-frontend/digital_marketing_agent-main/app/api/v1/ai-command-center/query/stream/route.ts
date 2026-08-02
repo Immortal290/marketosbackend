@@ -61,6 +61,17 @@ function extractSubjectFromPrompt(prompt: string): string {
 }
 
 function getBrandImageGallery(subject: string, lowerPrompt: string) {
+  if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic") || lowerPrompt.includes("organic") || lowerPrompt.includes("serum")) {
+    return [
+      { id: "v1", title: "1. Botanical Radiance (1200x628)", url: "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=2400&q=95", overlay: `✨ GLOW NATURALLY WITH ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
+      { id: "v2", title: "2. Clean Beauty Serum (1080x1080)", url: "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=2400&q=95", overlay: `🌸 100% ORGANIC BOTANICAL INGREDIENTS`, format: "Instagram / Facebook Square (1080x1080)" },
+      { id: "v3", title: "3. Hydration Routine Story (1080x1920)", url: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2400&q=95", overlay: `🌿 TRANSFORM YOUR SKIN IN 7 DAYS`, format: "Instagram Stories & Reels (1080x1920)" },
+      { id: "v4", title: "4. Spa Glow Dark Theme (1200x628)", url: "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=2400&q=95", overlay: `💧 DEEP HYDRATION & YOUTH REGENERATION`, format: "High-Contrast Luxury Spa Theme" },
+      { id: "v5", title: "5. Rose Petal Essence (1080x1080)", url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2400&q=95", overlay: `🌺 CRUELTY-FREE & DERMATOLOGIST APPROVED`, format: "Vibrant Botanical Pink Theme" },
+      { id: "v6", title: "6. Luxury Packaging Banner (1200x628)", url: "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=2400&q=95", overlay: `🎁 FREE GIFT WITH YOUR FIRST ORDER`, format: "Luxury E-Commerce Banner" }
+    ];
+  }
+
   if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
     return [
       { id: "v1", title: "1. Athletic Performance (1200x628)", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=2400&q=95", overlay: `🔥 UNLEASH YOUR SPEED — ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
@@ -72,7 +83,7 @@ function getBrandImageGallery(subject: string, lowerPrompt: string) {
     ];
   }
 
-  if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive") || lowerPrompt.includes("bmw") || lowerPrompt.includes("audi")) {
+  if (lowerPrompt.includes("tesla") || /\b(car|cars|auto|ev|drive|bmw|audi|vehicle)\b/i.test(lowerPrompt)) {
     return [
       { id: "v1", title: "1. Electric Performance (1200x628)", url: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=2400&q=95", overlay: `⚡ EXPERIENCE ZERO EMISSIONS — ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
       { id: "v2", title: "2. Sleek Modern Vehicle (1080x1080)", url: "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=2400&q=95", overlay: `🚀 THE FUTURE OF DRIVING — BOOK A TEST DRIVE`, format: "Instagram / Facebook Square (1080x1080)" },
@@ -91,17 +102,6 @@ function getBrandImageGallery(subject: string, lowerPrompt: string) {
       { id: "v4", title: "4. Modern Coffee Bar (1200x628)", url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2400&q=95", overlay: `🏬 ORDER AHEAD & EARN EXCLUSIVE REWARDS`, format: "High-Contrast Storefront Mode" },
       { id: "v5", title: "5. Iced Frappuccino Delight (1080x1080)", url: "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=2400&q=95", overlay: `🍦 BUY 1 GET 1 FREE SEASONAL SPECIAL`, format: "Vibrant Summer Delight Theme" },
       { id: "v6", title: "6. Morning Roast Beans (1200x628)", url: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=2400&q=95", overlay: `🌱 100% ETHICALLY SOURCED ARABICA BEANS`, format: "Ethical Sourcing Banner" }
-    ];
-  }
-
-  if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic")) {
-    return [
-      { id: "v1", title: "1. Botanical Radiance (1200x628)", url: "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=2400&q=95", overlay: `✨ GLOW NATURALLY WITH ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Clean Beauty Serum (1080x1080)", url: "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=2400&q=95", overlay: `🌸 100% ORGANIC BOTANICAL INGREDIENTS`, format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Hydration Routine Story (1080x1920)", url: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2400&q=95", overlay: `🌿 TRANSFORM YOUR SKIN IN 7 DAYS`, format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Spa Glow Dark Theme (1200x628)", url: "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=2400&q=95", overlay: `💧 DEEP HYDRATION & YOUTH REGENERATION`, format: "High-Contrast Luxury Spa Theme" },
-      { id: "v5", title: "5. Rose Petal Essence (1080x1080)", url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2400&q=95", overlay: `🌺 CRUELTY-FREE & DERMATOLOGIST APPROVED`, format: "Vibrant Botanical Pink Theme" },
-      { id: "v6", title: "6. Luxury Packaging Banner (1200x628)", url: "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=2400&q=95", overlay: `🎁 FREE GIFT WITH YOUR FIRST ORDER`, format: "Luxury E-Commerce Banner" }
     ];
   }
 
@@ -138,19 +138,32 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
     };
   }
 
+  const isSkincare = lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic") || lowerPrompt.includes("organic") || lowerPrompt.includes("serum");
+  const isCoffee = lowerPrompt.includes("coffee") || lowerPrompt.includes("latte") || lowerPrompt.includes("beverage") || lowerPrompt.includes("starbucks") || lowerPrompt.includes("cafe");
+  const isCar = lowerPrompt.includes("tesla") || /\b(car|cars|auto|ev|drive|bmw|audi)\b/i.test(lowerPrompt);
+
   if (name.includes("creative") || name.includes("image")) {
     const banner_options = getBrandImageGallery(subject, lowerPrompt);
+    const creativeDir = isSkincare 
+      ? "Clean Botanical Minimalist with Soft Natural Lighting & Pastel Palettes"
+      : isCoffee 
+      ? "Warm Artisan Roastery Aesthetics with Rich Espresso Tones"
+      : isCar 
+      ? "Futuristic Automotive Aerodynamics with Dark Neon Accents"
+      : "Modern Cyberpunk Neo-Brutalist with High-Contrast Accents";
 
     return {
-      campaign_concept: `${subject}: Omnichannel High-Velocity Growth Blitz`,
-      creative_direction: "Modern Cyberpunk Neo-Brutalist with High-Contrast Neon Accents",
-      visual_theme: `High-Impact Professional Aesthetics Tailored for ${subject}`,
+      campaign_concept: `${subject}: Omnichannel Growth & Engagement Blitz`,
+      creative_direction: creativeDir,
+      visual_theme: `High-Impact Visual Assets Tailored for ${subject}`,
       ad_banner_specs: {
         dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
         headline_overlay: banner_options[0].overlay,
         primary_visual: `High-resolution showcase of ${subject} featuring active campaign overlays`
       },
-      color_palette: ["#FF0055 (Vibrant Crimson)", "#00F0FF (Cyan)", "#000000 (Obsidian Ink)", "#FFFFFF (Pure White)"],
+      color_palette: isSkincare 
+        ? ["#E8CAE3 (Soft Botanical Rose)", "#96C9A8 (Sage Botanical Green)", "#FFFFFF (Pure White)", "#3D3D4A (Slate Text)"]
+        : ["#FF0055 (Vibrant Crimson)", "#00F0FF (Cyan)", "#000000 (Obsidian Ink)", "#FFFFFF (Pure White)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
       total_variants_generated: 6
@@ -158,30 +171,48 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("copy")) {
+    const headlines = isSkincare
+      ? [
+          `✨ Reveal Your Natural Glow with ${subject}`,
+          `🌸 100% Organic Botanical ${subject} — 20% Off Launch Offer`,
+          `🌿 Dermatologist Tested & Cruelty-Free ${subject}`,
+          `💧 Pure Hydration: Experience ${subject} Today`,
+          `🎁 Claim Your Free Gift with ${subject} Order`
+        ]
+      : [
+          `🔥 Discover ${subject}: The Ultimate Game-Changer`,
+          `⚡ Experience ${subject} — Claim Exclusive Launch Offer`,
+          `🚀 Elevate Your Results with ${subject}: Limited Time Special`,
+          `🎯 High-Impact ${subject} — Engineered for Peak Performance`,
+          `🏆 Ranked #1 Solution: Order Your ${subject} Package Today`
+        ];
+
     return {
-      ad_headlines: [
-        `🔥 Discover ${subject}: The Ultimate Game-Changer`,
-        `⚡ Experience ${subject} — Claim Exclusive Launch Offer`,
-        `🚀 Elevate Your Results with ${subject}: Limited Time Special`,
-        `🎯 High-Impact ${subject} — Engineered for Peak Performance`,
-        `🏆 Ranked #1 Solution: Order Your ${subject} Package Today`
-      ],
+      ad_headlines: headlines,
       landing_page_variants: [
-        `Variant A: 'Experience Next-Level Quality & Performance with ${subject}.'`,
-        `Variant B: 'Unmatched Excellence. Upgrade Your Experience with ${subject} Today.'`
+        `Variant A: 'Experience Pure Botanical Radiance & Natural Hydration with ${subject}.'`,
+        `Variant B: 'Unmatched Clean Beauty. Elevate Your Routine with ${subject} Today.'`
       ],
       call_to_action: `Claim ${subject} Offer`
     };
   }
 
   if (name.includes("email")) {
+    const emailSubject = isSkincare
+      ? `🌿 Pure Botanical Glow: Discover ${subject} + 20% Off Launch Special`
+      : `🔥 Exclusive Access: Discover ${subject} Launch Offer Today`;
+
+    const emailBody = isSkincare
+      ? `Hi {{first_name}},\n\nNourish your skin with the pure power of nature. We are thrilled to introduce ${subject} — crafted with 100% organic botanicals, hyaluronic acid, and cold-pressed antioxidants.\n\nFormulated without harsh chemicals, parabens, or synthetic fragrances. Experience visible hydration, radiant skin tone, and youth restoration in just 7 days.\n\nFor a limited time, use code ORGANIC20 at checkout for an exclusive 20% discount on your first order.`
+      : `We are excited to share our latest release for ${subject}.\n\nDesigned from the ground up to deliver exceptional performance, reliability, and value for your goals.\n\nFor a limited time, enjoy exclusive early access and a 40% launch discount on all orders.`;
+
     return {
       email_campaign_name: `${subject} Nurture Sequence`,
       email_draft_1: {
-        subject_line: `🔥 Exclusive Access: Discover ${subject} Launch Offer Today`,
-        preview_text: `Official update and special release for ${subject}.`,
+        subject_line: emailSubject,
+        preview_text: `Clean beauty update and special release for ${subject}.`,
         salutation: "Hi {{first_name}},",
-        body: `We are excited to share our latest release for ${subject}.\n\nDesigned from the ground up to deliver exceptional performance, reliability, and value for your goals.\n\nFor a limited time, enjoy exclusive early access and a 40% launch discount on all orders.`,
+        body: emailBody,
         call_to_action: `Claim ${subject} Offer`,
         cta_url: "https://marketos.ai/promotions/special-offer",
         footer: "MarketOS Inc. | 100 Cybernetic Way, San Francisco, CA. Reply STOP to opt out."
@@ -192,12 +223,20 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("sms")) {
+    const smsOptions = isSkincare
+      ? [
+          `Option 1 (Botanical Flash Sale): ${subject} Special! Use code ORGANIC20 for 20% off pure skincare: https://mktos.ai/s/skincare Reply STOP to opt out.`,
+          `Option 2 (Clean Beauty VIP): Glow naturally with ${subject}! Claim your free travel serum sample: https://mktos.ai/s/sample Reply STOP to opt out.`,
+          `Option 3 (Limited Stock Alert): VIP Early Access: ${subject} is live! Order before stock runs out: https://mktos.ai/s/vip Reply STOP to opt out.`
+        ]
+      : [
+          `Option 1 (Urgency Flash Sale): ${subject} Special! Claim exclusive launch discount today: https://mktos.ai/s/offer Text STOP to opt out.`,
+          `Option 2 (Direct Value Pitch): Experience ${subject} live! Claim your demo spot: https://mktos.ai/s/demo Text STOP to cancel.`,
+          `Option 3 (VIP Invitation): VIP Alert: Early access to ${subject} is now open! Reserve here: https://mktos.ai/s/vip Text STOP to unsubscribe.`
+        ];
+
     return {
-      sms_marketing_formats: [
-        `Option 1 (Urgency Flash Sale): ${subject} Special! Claim exclusive launch discount today: https://mktos.ai/s/offer Text STOP to opt out.`,
-        `Option 2 (Direct Value Pitch): Experience ${subject} live! Claim your demo spot: https://mktos.ai/s/demo Text STOP to cancel.`,
-        `Option 3 (VIP Invitation): VIP Alert: Early access to ${subject} is now open! Reserve here: https://mktos.ai/s/vip Text STOP to unsubscribe.`
-      ],
+      sms_marketing_formats: smsOptions,
       segment_length: "154 characters (1 GSM 7-bit SMS segment)",
       tcpa_compliance: "Fully compliant — includes mandatory STOP / HELP keyword handlers & opt-out footer."
     };

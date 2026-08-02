@@ -254,8 +254,14 @@ async def run_pipeline_stream(request: CampaignRequest):
 # ── POST /v1/query/stream — GLM-Orchestrated Query Pipeline ─────────────────
 
 class QueryRequest(BaseModel):
-    query:        str = Field(..., description="Natural language user query")
-    workspace_id: str = "default"
+    query:            str = Field(..., description="Natural language user query")
+    workspace_id:     str = "default"
+    recipient_email:  Optional[str] = None
+    recipient_phone:  Optional[str] = None
+    target_audience:  Optional[str] = None
+    sender_name:      Optional[str] = None
+    company_name:     Optional[str] = None
+    channels:         Optional[list[str]] = None
 
 @app.post("/v1/query/stream")
 async def run_query_stream(request: QueryRequest):
@@ -277,6 +283,12 @@ async def run_query_stream(request: QueryRequest):
             for event in orchestrate_query_stream(
                 user_query=request.query,
                 workspace_id=request.workspace_id,
+                recipient_email=request.recipient_email,
+                recipient_phone=request.recipient_phone,
+                target_audience=request.target_audience,
+                sender_name=request.sender_name,
+                company_name=request.company_name,
+                channels=request.channels,
             ):
                 yield event
         except Exception as e:
@@ -418,7 +430,12 @@ async def health_check():
 
     try:
         from clickhouse_driver import Client
-        Client(host=os.getenv("CLICKHOUSE_HOST", "localhost"), port=int(os.getenv("CLICKHOUSE_PORT", "9000"))).execute("SELECT 1")
+        Client(
+            host=os.getenv("CLICKHOUSE_HOST", "localhost"),
+            port=int(os.getenv("CLICKHOUSE_PORT", "9000")),
+            user=os.getenv("CLICKHOUSE_USER", "default"),
+            password=os.getenv("CLICKHOUSE_PASSWORD", ""),
+        ).execute("SELECT 1")
         checks["clickhouse"] = "connected"
     except Exception:
         pass

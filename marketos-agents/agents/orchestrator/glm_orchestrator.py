@@ -187,7 +187,16 @@ def _run_agent_simulated(agent_key: str, state: dict, intent_data: dict) -> dict
 
 # ── Core orchestration stream ─────────────────────────────────────────────────
 
-def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> Generator[str, None, None]:
+def orchestrate_query_stream(
+    user_query: str,
+    workspace_id: str = "default",
+    recipient_email: Optional[str] = None,
+    recipient_phone: Optional[str] = None,
+    target_audience: Optional[str] = None,
+    sender_name: Optional[str] = None,
+    company_name: Optional[str] = None,
+    channels: Optional[list[str]] = None,
+) -> Generator[str, None, None]:
     """
     Main entry point. Yields SSE event strings in sequence.
 
@@ -198,7 +207,7 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
     glm = get_glm(temperature=0)
 
     # ── STAGE 0: Initialisation ───────────────────────────────────────────
-    yield _event("INIT", "MarketOS AI", "starting",
+    yield _event("INIT", "AI Campaign Engine", "starting",
                  f"Session {session_id} — receiving user query")
     time.sleep(0.1)
 
@@ -226,8 +235,24 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
     confidence  = intent_data.get("confidence", 0.85)
     summary     = intent_data.get("summary", user_query)
     key_params  = intent_data.get("key_parameters", {})
-    agents_plan = INTENT_AGENT_MAP.get(intent, INTENT_AGENT_MAP["GENERAL_QUERY"])
+    agents_plan = INTENT_AGENT_MAP.get(intent, INTENT_AGENT_MAP["GENERAL_QUERY"]).copy()
     route_to    = ROUTE_MAP.get(intent, "/dashboard")
+
+    # Dynamic Agent Filtering based on active channels
+    active_channels = channels or key_params.get("channels") or ["email", "sms"]
+    if active_channels and intent in ["CREATE_CAMPAIGN", "EMAIL_CAMPAIGN", "SMS_CAMPAIGN", "SOCIAL_CAMPAIGN"]:
+        channel_agents_map = {
+            "email": "email",
+            "sms": "sms",
+            "social": "social_media",
+            "social_media": "social_media",
+        }
+        excluded_agents = set()
+        for ch_key, agent_name in channel_agents_map.items():
+            if not any(c.lower() in [ch_key, agent_name] for c in active_channels):
+                excluded_agents.add(agent_name)
+        
+        agents_plan = [a for a in agents_plan if a not in excluded_agents]
 
     yield _event("GLM_REASONING", "AI Engine", "completed",
                  f"Intent: {intent} ({int(confidence * 100)}% confidence) — routing to {len(agents_plan)} agents",
@@ -240,35 +265,56 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
                  })
 
     # ── Build shared pipeline state ───────────────────────────────────────
-    # Seed a CampaignPlan-compatible dict from the GLM classification so
-    # downstream agents (copy, sms, email, etc.) don't fail on missing fields.
     campaign_name = key_params.get("campaign_name") or summary[:60]
-    channels      = key_params.get("channels") or ["email", "sms"]
+    selected_audience = target_audience or key_params.get("target_audience") or "Target Audience Persona"
+    active_company = company_name or key_params.get("company_name") or key_params.get("brand_name") or "Brand Entity"
+    active_sender = sender_name or key_params.get("sender_name") or f"{active_company} Team"
+
     pipeline_state: dict = {
         "user_intent":     user_query,
-        "user_channels":   channels,
+        "user_channels":   active_channels,
         "pipeline":        "campaign" if "CAMPAIGN" in intent or intent == "GENERATE_CONTENT" else "query",
         "workspace_id":    workspace_id,
-        "sender_name":     "MarketOS",
-        "company_name":    "MarketOS",
+        "recipient_email": recipient_email,
+        "recipient_phone": recipient_phone,
+        "target_audience": selected_audience,
+        "sender_name":     active_sender,
+        "company_name":    active_company,
         "company_address": "Bengaluru, Karnataka, India",
         "unsubscribe_url": "https://example.com/unsubscribe",
         "current_step":    "ab_test",
         "errors":          [],
         "trace":           [],
-        # CampaignPlan fields required by Copy/SMS/Email agents
+        # CampaignPlan fields — will be updated by Supervisor if it runs
         "campaign_plan": {
             "campaign_name":   campaign_name,
             "goal":            key_params.get("goal") or f"Drive engagement for {campaign_name}",
-            "target_audience": key_params.get("target_audience") or "general audience",
-            "channels":        channels,
+            "target_audience": selected_audience,
+            "channels":        active_channels,
             "budget":          key_params.get("budget") or 5000,
             "timeline":        key_params.get("timeline") or "2 weeks",
             "tone":            key_params.get("tone") or "professional",
-            "key_messages":    [f"Discover {campaign_name}", "Act now", "Limited offer"],
+            # Use GLM-extracted summary as seed; Supervisor will overwrite with rich brand messages
+            "key_messages":    [summary, f"Explore {campaign_name}", "Contact us today"],
             "tasks":           [],
-        },
+        }
     }
+
+    # ── Run Supervisor to build real brand-specific campaign plan ─────────
+    # This is critical: supervisor LLM generates accurate, brand-specific
+    # key_messages, tone, and task graph from the raw user_intent.
+    # Without this, downstream agents (copy/sms/email) use generic seeds.
+    if intent in ("CREATE_CAMPAIGN", "EMAIL_CAMPAIGN", "SMS_CAMPAIGN", "SOCIAL_CAMPAIGN", "GENERATE_CONTENT"):
+        try:
+            from agents.supervisor.supervisor_agent import supervisor_node
+            sup_output = supervisor_node(pipeline_state)
+            if "campaign_plan" in sup_output and sup_output["campaign_plan"]:
+                pipeline_state = {**pipeline_state, **sup_output}
+                agent_log("ORCHESTRATOR", f"Supervisor built brand-specific plan: {sup_output['campaign_plan'].get('campaign_name', '?')}")
+        except Exception as sup_err:
+            agent_log("ORCHESTRATOR", f"Supervisor pre-run failed: {sup_err} — using GLM seed plan")
+
+
 
     # ── STAGE 2: Mandatory A/B Test Gate ──────────────────────────────────
     yield _event("AB_TEST", "A/B Test Agent", "running",
@@ -310,6 +356,16 @@ def orchestrate_query_stream(user_query: str, workspace_id: str = "default") -> 
     agent_outputs: dict[str, dict] = {"ab_test": ab_result}
 
     for agent_key in agents_plan:
+        # Supervisor was pre-run above to seed the campaign plan — skip it here
+        if agent_key == "supervisor" and pipeline_state.get("campaign_plan", {}).get("key_messages"):
+            agent_display = AGENT_DISPLAY_NAMES.get("supervisor", "Supervisor Agent")
+            supervisor_plan = pipeline_state.get("campaign_plan", {})
+            agent_outputs["supervisor"] = supervisor_plan
+            yield _event("AGENT_EXEC", agent_display, "completed",
+                         f"Campaign plan: '{supervisor_plan.get('campaign_name', campaign_name)}'",
+                         {"result": supervisor_plan, "agent_key": "supervisor", "elapsed_ms": 0})
+            continue
+
         agent_display = AGENT_DISPLAY_NAMES.get(agent_key, agent_key.title())
 
         yield _event("AGENT_EXEC", agent_display, "running",

@@ -198,7 +198,49 @@ def _get_embedding(text: str) -> list[float]:
     return result
 
 
-# ── Episodic Memory (pgvector) ───────────────────────────────────────────────
+_tables_checked = False
+
+def _ensure_tables_exist(conn):
+    global _tables_checked
+    if _tables_checked:
+        return
+    try:
+        with conn.cursor() as cur:
+            try:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                conn.commit()
+                has_vector = True
+            except Exception:
+                conn.rollback()
+                has_vector = False
+
+            vec_type = "vector(768)" if has_vector else "text"
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS agent_episodic_memory (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    agent_name VARCHAR(64) NOT NULL,
+                    event_type VARCHAR(64),
+                    summary TEXT NOT NULL,
+                    embedding {vec_type},
+                    metadata JSONB,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS agent_semantic_memory (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    category VARCHAR(64),
+                    key VARCHAR(256),
+                    content TEXT NOT NULL,
+                    embedding {vec_type},
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            conn.commit()
+            _tables_checked = True
+    except Exception as e:
+        conn.rollback()
+        agent_log("MEMORY", f"Auto-table creation check failed: {e}")
 
 class EpisodicMemory:
     """
@@ -210,7 +252,9 @@ class EpisodicMemory:
         if not PG_AVAILABLE:
             return None
         try:
-            return psycopg2.connect(PG_DSN)
+            conn = psycopg2.connect(PG_DSN)
+            _ensure_tables_exist(conn)
+            return conn
         except Exception as e:
             agent_log("MEMORY", f"PostgreSQL connection failed: {e}")
             return None
@@ -301,7 +345,9 @@ class SemanticMemory:
         if not PG_AVAILABLE:
             return None
         try:
-            return psycopg2.connect(PG_DSN)
+            conn = psycopg2.connect(PG_DSN)
+            _ensure_tables_exist(conn)
+            return conn
         except Exception as e:
             agent_log("MEMORY", f"PostgreSQL connection failed: {e}")
             return None

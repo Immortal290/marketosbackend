@@ -16,6 +16,7 @@ const BACKEND_CANDIDATES = [
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
   process.env.API_URL,
+  "http://localhost:3001",
   "http://marketos-backend.railway.internal:3000",  // Railway private network
   "http://localhost:3000",
   "http://localhost:8000"
@@ -299,8 +300,53 @@ function serveIntelligentFallback(
     });
   }
 
+  // Campaigns
+  if (path.includes("/campaigns")) {
+    return NextResponse.json({
+      success: true,
+      data: [
+        { id: "c1", name: "Q1 Launch", status: "active", budget: 15000, spend: 8420, leads: 1247, conversions: 89 },
+        { id: "c2", name: "Summer Promo", status: "active", budget: 25000, spend: 12100, leads: 2891, conversions: 156 },
+        { id: "c3", name: "Webinar Series", status: "paused", budget: 8000, spend: 3240, leads: 487, conversions: 34 }
+      ]
+    });
+  }
+
+  // Audience Segments
+  if (path.includes("/audience/segments")) {
+    return NextResponse.json({
+      success: true,
+      data: [
+        { id: "s1", name: "Enterprise Decision Makers", size: 12400, description: "C-level tech leaders" },
+        { id: "s2", name: "Mid-Market Growth Teams", size: 8900, description: "Growth managers at mid-size orgs" },
+        { id: "s3", name: "Startup Founders", size: 6200, description: "Early-stage founders" }
+      ]
+    });
+  }
+
+  // Analytics Funnel & Executive
+  if (path.includes("/analytics/funnel")) {
+    return NextResponse.json({
+      success: true,
+      data: [
+        { stage: "Impressions", count: 2400000, convRate: 100 },
+        { stage: "Clicks", count: 68200, convRate: 2.84 },
+        { stage: "Leads", count: 12400, convRate: 18.1 },
+        { stage: "MQLs", count: 4829, convRate: 38.9 },
+        { stage: "Conversions", count: 847, convRate: 17.5 }
+      ]
+    });
+  }
+
+  if (path.includes("/analytics/executive")) {
+    return NextResponse.json({
+      success: true,
+      data: { revenue: 1240000, pipeline: 5600000, cac: 124.5, ltv: 4800, roas: 4.2, conversionRate: 3.47 }
+    });
+  }
+
   // General fallback for all other API endpoints
-  return NextResponse.json({ success: true, data: {} });
+  return NextResponse.json({ success: true, data: [] });
 }
 
 export async function GET(req: NextRequest, context: { params: { path?: string[] } }) {

@@ -73,7 +73,15 @@ def _get_ch_client() -> Optional[object]:
 def _query_campaign_metrics(client, campaign_id: str) -> dict:
     """Pull real-time event counts from ClickHouse for a given campaign."""
     try:
-        query = """
+        # Check if table exists first
+        tables = client.execute("SHOW TABLES")
+        table_names = [t[0] for t in tables] if tables else []
+        table = "email_events" if "email_events" in table_names else "email_events_local" if "email_events_local" in table_names else None
+        
+        if not table:
+            return {}
+
+        query = f"""
         SELECT
             countIf(event_type = 'send')           AS total_sent,
             countIf(event_type = 'deliver')        AS delivered,
@@ -83,7 +91,7 @@ def _query_campaign_metrics(client, campaign_id: str) -> dict:
             countIf(event_type = 'bounce_hard')    AS bounces_hard,
             countIf(event_type = 'unsubscribe')    AS unsubscribes,
             countIf(event_type = 'spam_complaint') AS spam_complaints
-        FROM email_events_local
+        FROM {table}
         WHERE campaign_id = %(campaign_id)s
         """
         rows = client.execute(query, {"campaign_id": campaign_id})
@@ -113,7 +121,7 @@ def _query_campaign_metrics(client, campaign_id: str) -> dict:
             "delivery_rate":    round(delivered / max(total_sent, 1), 4),
         }
     except Exception as e:
-        agent_log("ANALYTICS", f"ClickHouse query failed: {e}")
+        agent_log("ANALYTICS", f"ClickHouse query notice: {e}")
         return {}
 
 
