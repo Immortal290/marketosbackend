@@ -10,7 +10,7 @@ import { fetcher } from "@/lib/api";
 import {
   Sparkles, Zap, Bot, TrendingUp, ArrowRight, Send, Lightbulb,
   Loader2, CheckCircle2, Brain, GitBranch, FileText, Cpu,
-  Terminal, Download, ChevronDown, ChevronUp, CheckSquare, XSquare,
+  Terminal, Download, ChevronDown, ChevronUp, CheckSquare, XSquare, Users,
 } from "lucide-react";
 
 const kpis = [
