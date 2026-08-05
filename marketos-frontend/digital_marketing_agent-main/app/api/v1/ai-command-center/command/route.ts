@@ -61,63 +61,103 @@ function extractSubjectFromPrompt(prompt: string): string {
   return "Featured Product";
 }
 
-function getBrandImageGallery(subject: string, lowerPrompt: string) {
-  if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
-    return [
-      { id: "v1", title: "1. Athletic Performance (1200x628)", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=2400&q=95", overlay: `🔥 UNLEASH YOUR SPEED — ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. High-Speed Motion (1080x1080)", url: "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=2400&q=95", overlay: `⚡ EXCLUSIVE DROP — ${subject.toUpperCase()}`, format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Urban Streetwear Story (1080x1920)", url: "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=2400&q=95", overlay: `🚀 UP TO 40% OFF ${subject.toUpperCase()}`, format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Dark Mode Tech Runner (1200x628)", url: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=2400&q=95", overlay: `👟 REVOLUTIONARY ${subject.toUpperCase()} PERFORMANCE`, format: "High-Contrast Cyberpunk Dark Mode" },
-      { id: "v5", title: "5. Gold Edition Sneaker (1080x1080)", url: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=2400&q=95", overlay: `🏆 VIP EARLY ACCESS — ${subject.toUpperCase()}`, format: "Vibrant Gold Edition Theme" },
-      { id: "v6", title: "6. Stadium Lights Banner (1200x628)", url: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=2400&q=95", overlay: `🥇 ENGINEERED FOR CHAMPIONS — ORDER TODAY`, format: "Stadium Arena Banner" }
-    ];
+async function getBrandImageGallery(subject: string, lowerPrompt: string): Promise<any[]> {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY || "EPef0qSBsrOyKSDxz0soqh4uTXC7a8ertxhR9oHRVSs";
+  let unsplashUrls: string[] = [];
+  try {
+    const query = encodeURIComponent(subject || "marketing");
+    const res = await fetch(`https://api.unsplash.com/photos/random?query=${query}&count=6&orientation=landscape`, {
+      headers: {
+        "Authorization": `Client-ID ${accessKey}`,
+        "Accept-Version": "v1"
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        unsplashUrls = data.map((item: any) => item?.urls?.regular || item?.urls?.full).filter(Boolean);
+      }
+    }
+  } catch (err) {
+    console.error("Unsplash fetch error:", err);
   }
 
-  if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive") || lowerPrompt.includes("bmw") || lowerPrompt.includes("audi")) {
-    return [
-      { id: "v1", title: "1. Electric Performance (1200x628)", url: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=2400&q=95", overlay: `⚡ EXPERIENCE ZERO EMISSIONS — ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Sleek Modern Vehicle (1080x1080)", url: "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=2400&q=95", overlay: `🚀 THE FUTURE OF DRIVING — BOOK A TEST DRIVE`, format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Highway Navigation Story (1080x1920)", url: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=2400&q=95", overlay: `🛣️ INTELLIGENT AUTONOMOUS NAVIGATION`, format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Cyberpunk Supercharger (1200x628)", url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=2400&q=95", overlay: `🔋 FAST SUPERCHARGING — ${subject.toUpperCase()}`, format: "High-Contrast Cyberpunk Dark Mode" },
-      { id: "v5", title: "5. Minimalist Cockpit (1080x1080)", url: "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=2400&q=95", overlay: `🖥️ PREMIUM INTERIOR & AUDIO SYSTEM`, format: "Minimalist Interior Theme" },
-      { id: "v6", title: "6. Sunset Highway Banner (1200x628)", url: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=2400&q=95", overlay: `☀️ SUSTAINABLE ENERGY FOR THE PLANET`, format: "Clean Energy Sunset Banner" }
-    ];
+  const defaultImages = [
+    "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95",
+    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95",
+    "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95",
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95",
+    "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95",
+    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95"
+  ];
+
+  let customFallback = defaultImages;
+  if (unsplashUrls.length < 6) {
+    if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
+      customFallback = [
+        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=2400&q=95"
+      ];
+    } else if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive") || lowerPrompt.includes("bmw") || lowerPrompt.includes("audi")) {
+      customFallback = [
+        "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=2400&q=95"
+      ];
+    } else if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte") || lowerPrompt.includes("cafe")) {
+      customFallback = [
+        "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=2400&q=95"
+      ];
+    } else if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic")) {
+      customFallback = [
+        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=2400&q=95"
+      ];
+    } else if (lowerPrompt.includes("chocolate") || lowerPrompt.includes("sweets") || lowerPrompt.includes("candy") || lowerPrompt.includes("dessert") || lowerPrompt.includes("cocoa")) {
+      customFallback = [
+        "https://images.unsplash.com/photo-1504965270570-1170d48a1ae9?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1548907040-4d42b52125e0?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1481391319052-b883015f8e56?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1526082632713-19a78f713b11?auto=format&fit=crop&w=2400&q=95",
+        "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=2400&q=95"
+      ];
+    }
   }
 
-  if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte") || lowerPrompt.includes("cafe")) {
-    return [
-      { id: "v1", title: "1. Iced Cold Brew Splash (1200x628)", url: "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=2400&q=95", overlay: `☕ REFRESH YOUR DAY — ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Artisan Latte Art (1080x1080)", url: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=2400&q=95", overlay: `☀️ CRAFTED WITH PASSION — 50% OFF FIRST ORDER`, format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Summer Refresher Story (1080x1920)", url: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=2400&q=95", overlay: `🍓 FRESH HANDCRAFTED ${subject.toUpperCase()}`, format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Modern Coffee Bar (1200x628)", url: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2400&q=95", overlay: `🏬 ORDER AHEAD & EARN EXCLUSIVE REWARDS`, format: "High-Contrast Storefront Mode" },
-      { id: "v5", title: "5. Iced Frappuccino Delight (1080x1080)", url: "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=2400&q=95", overlay: `🍦 BUY 1 GET 1 FREE SEASONAL SPECIAL`, format: "Vibrant Summer Delight Theme" },
-      { id: "v6", title: "6. Morning Roast Beans (1200x628)", url: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=2400&q=95", overlay: `🌱 100% ETHICALLY SOURCED ARABICA BEANS`, format: "Ethical Sourcing Banner" }
-    ];
+  const finalUrls = [...unsplashUrls];
+  while (finalUrls.length < 6) {
+    const fallbackUrl = customFallback[finalUrls.length] || defaultImages[finalUrls.length];
+    finalUrls.push(fallbackUrl);
   }
 
-  if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic")) {
-    return [
-      { id: "v1", title: "1. Botanical Radiance (1200x628)", url: "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=2400&q=95", overlay: `✨ GLOW NATURALLY WITH ${subject.toUpperCase()}`, format: "LinkedIn / Meta Landscape (1200x628)" },
-      { id: "v2", title: "2. Clean Beauty Serum (1080x1080)", url: "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=2400&q=95", overlay: `🌸 100% ORGANIC BOTANICAL INGREDIENTS`, format: "Instagram / Facebook Square (1080x1080)" },
-      { id: "v3", title: "3. Hydration Routine Story (1080x1920)", url: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2400&q=95", overlay: `🌿 TRANSFORM YOUR SKIN IN 7 DAYS`, format: "Instagram Stories & Reels (1080x1920)" },
-      { id: "v4", title: "4. Spa Glow Dark Theme (1200x628)", url: "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=2400&q=95", overlay: `💧 DEEP HYDRATION & YOUTH REGENERATION`, format: "High-Contrast Luxury Spa Theme" },
-      { id: "v5", title: "5. Rose Petal Essence (1080x1080)", url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2400&q=95", overlay: `🌺 CRUELTY-FREE & DERMATOLOGIST APPROVED`, format: "Vibrant Botanical Pink Theme" },
-      { id: "v6", title: "6. Luxury Packaging Banner (1200x628)", url: "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=2400&q=95", overlay: `🎁 FREE GIFT WITH YOUR FIRST ORDER`, format: "Luxury E-Commerce Banner" }
-    ];
-  }
-
-  // Universal High-Impact Product Banner Gallery
   return [
-    { id: "v1", title: "1. Official Product Banner (1200x628)", url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95", overlay: `🔥 INTRODUCING ${subject.toUpperCase()} — CLAIM OFFER`, format: "LinkedIn / Meta Landscape (1200x628)" },
-    { id: "v2", title: "2. High-Velocity Square (1080x1080)", url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95", overlay: `⚡ ${subject.toUpperCase()} EXCLUSIVE LAUNCH SPECIAL`, format: "Instagram / Facebook Square (1080x1080)" },
-    { id: "v3", title: "3. Mobile Story Showcase (1080x1920)", url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95", overlay: `🚀 UP TO 40% OFF ${subject.toUpperCase()}`, format: "Instagram Stories & Reels (1080x1920)" },
-    { id: "v4", title: "4. Cyberpunk Neon Theme (1200x628)", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95", overlay: `⚡ REVOLUTIONARY ${subject.toUpperCase()} EXPERIENCE`, format: "High-Contrast Cyberpunk Dark Mode" },
-    { id: "v5", title: "5. Vibrant Feature Spotlight (1080x1080)", url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95", overlay: `💡 UNMATCHED QUALITY & PERFORMANCE`, format: "Vibrant Modern Spotlight Layout" },
-    { id: "v6", title: "6. Global Enterprise Banner (1200x628)", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95", overlay: `📈 ENGINEERED FOR RESULTS — TRY ${subject.toUpperCase()}`, format: "B2B Enterprise Data Banner" }
+    { id: "v1", title: "1. Official Product Banner (1200x628)", url: finalUrls[0], overlay: `🔥 INTRODUCING ${subject.toUpperCase()} — CLAIM OFFER`, format: "LinkedIn / Meta Landscape (1200x628)" },
+    { id: "v2", title: "2. High-Velocity Square (1080x1080)", url: finalUrls[1], overlay: `⚡ ${subject.toUpperCase()} EXCLUSIVE LAUNCH SPECIAL`, format: "Instagram / Facebook Square (1080x1080)" },
+    { id: "v3", title: "3. Mobile Story Showcase (1080x1920)", url: finalUrls[2], overlay: `🚀 UP TO 40% OFF ${subject.toUpperCase()}`, format: "Instagram Stories & Reels (1080x1920)" },
+    { id: "v4", title: "4. Cyberpunk Neon Theme (1200x628)", url: finalUrls[3], overlay: `⚡ REVOLUTIONARY ${subject.toUpperCase()} EXPERIENCE`, format: "High-Contrast Cyberpunk Dark Mode" },
+    { id: "v5", title: "5. Vibrant Feature Spotlight (1080x1080)", url: finalUrls[4], overlay: `💡 UNMATCHED QUALITY & PERFORMANCE`, format: "Vibrant Modern Spotlight Layout" },
+    { id: "v6", title: "6. Global Enterprise Banner (1200x628)", url: finalUrls[5], overlay: `📈 ENGINEERED FOR RESULTS — TRY ${subject.toUpperCase()}`, format: "B2B Enterprise Data Banner" }
   ];
 }
 
-function getAgentMockPayload(agentName: string, prompt: string): Record<string, any> {
+async function getAgentMockPayload(agentName: string, prompt: string): Promise<Record<string, any>> {
   const name = agentName.toLowerCase();
   const lowerPrompt = prompt.toLowerCase();
   
@@ -140,7 +180,7 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   }
 
   if (name.includes("creative") || name.includes("image")) {
-    const banner_options = getBrandImageGallery(subject, lowerPrompt);
+    const banner_options = await getBrandImageGallery(subject, lowerPrompt);
 
     return {
       campaign_concept: `${subject}: Omnichannel High-Velocity Growth Blitz`,
@@ -248,14 +288,14 @@ function getAgentMockPayload(agentName: string, prompt: string): Record<string, 
   };
 }
 
-function generateComprehensiveReport(
+async function generateComprehensiveReport(
   prompt: string,
   intent: string,
   confidence: number,
   agents: string[]
-): string {
-  const agentDetails = agents.map((agentName) => {
-    const mock = getAgentMockPayload(agentName, prompt);
+): Promise<string> {
+  const agentDetailsPromises = agents.map(async (agentName) => {
+    const mock = await getAgentMockPayload(agentName, prompt);
     let body = "";
     
     if (agentName.toLowerCase().includes("email") && mock.email_draft_1) {
@@ -304,7 +344,9 @@ function generateComprehensiveReport(
       }
     }
     return `### 🤖 ${agentName}\n${body}`;
-  }).join("\n\n---\n\n");
+  });
+  const agentDetailsArray = await Promise.all(agentDetailsPromises);
+  const agentDetails = agentDetailsArray.join("\n\n---\n\n");
 
   return `# MarketOS AI Marketing Campaign & Creative Execution Report
 
@@ -364,7 +406,7 @@ function classifyLocally(prompt: string) {
   return { intent: "GENERATE_CONTENT", confidence: 0.96, agents: fullAgentList, routeTo: "/creative-studio", summary: `Generating tailored creative concept, ad copy, email draft & SMS formats for '${subject}'` };
 }
 
-function buildLocalStream(prompt: string): ReadableStream {
+async function buildLocalStream(prompt: string): Promise<ReadableStream> {
   const { intent, confidence, agents, routeTo, summary } = classifyLocally(prompt);
   const taskId = `task-${Date.now()}`;
 
@@ -372,7 +414,7 @@ function buildLocalStream(prompt: string): ReadableStream {
   for (const a of agents) {
     agentExecLines.push(buildSSELine("AGENT_EXEC", a, "running", `Executing ${a}...`));
     const agentKey = a.toLowerCase().replace(/ agent$/i, "").replace(/\s+/g, "_");
-    const mockPayload = getAgentMockPayload(a, prompt);
+    const mockPayload = await getAgentMockPayload(a, prompt);
     agentExecLines.push(buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`, {
       result: mockPayload,
       result_preview: JSON.stringify(mockPayload).slice(0, 120),
@@ -381,7 +423,7 @@ function buildLocalStream(prompt: string): ReadableStream {
     }));
   }
 
-  const fullReport = generateComprehensiveReport(prompt, intent, confidence, agents);
+  const fullReport = await generateComprehensiveReport(prompt, intent, confidence, agents);
 
   const stages = [
     buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query: "${prompt}"`),
@@ -463,7 +505,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Intelligent local SSE fallback — runs entirely in Next.js edge
-  return new NextResponse(buildLocalStream(userQuery), {
+  const localStream = await buildLocalStream(userQuery);
+  return new NextResponse(localStream, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",
