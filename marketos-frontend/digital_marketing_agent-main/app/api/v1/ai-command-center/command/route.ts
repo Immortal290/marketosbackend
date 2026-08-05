@@ -80,9 +80,9 @@ async function getBrandImageGallery(subject: string, lowerPrompt: string): Promi
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        unsplashUrls = data.map((item: any) => {
+        unsplashUrls = data.map((item: any): string => {
           const rawUrl = item?.urls?.regular || item?.urls?.full || item?.urls?.raw;
-          if (!rawUrl) return null;
+          if (!rawUrl) return "";
           return rawUrl.includes("?") ? `${rawUrl}&w=1600&q=80` : `${rawUrl}?auto=format&fit=crop&w=1600&q=80`;
         }).filter(Boolean);
       }
