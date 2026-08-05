@@ -63,8 +63,13 @@ function extractSubjectFromPrompt(prompt: string): string {
 async function getBrandImageGallery(subject: string, lowerPrompt: string): Promise<any[]> {
   const accessKey = process.env.UNSPLASH_ACCESS_KEY || "EPef0qSBsrOyKSDxz0soqh4uTXC7a8ertxhR9oHRVSs";
   let unsplashUrls: string[] = [];
+
+  // Extract clean core product keyword (e.g. "Chocolate Brand Called Ddf" -> "Chocolate")
+  const searchTopic = subject.replace(/\b(brand|called|company|store|agency|inc|llc|official|launch|campaign)\b/gi, "").trim() || "product";
+  const coreKeyword = searchTopic.split(/\s+/)[0] || "product";
+
   try {
-    const query = encodeURIComponent(subject || "marketing");
+    const query = encodeURIComponent(coreKeyword);
     const res = await fetch(`https://api.unsplash.com/photos/random?query=${query}&count=6&orientation=landscape`, {
       headers: {
         "Authorization": `Client-ID ${accessKey}`,
@@ -74,7 +79,11 @@ async function getBrandImageGallery(subject: string, lowerPrompt: string): Promi
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        unsplashUrls = data.map((item: any) => item?.urls?.regular || item?.urls?.full).filter(Boolean);
+        unsplashUrls = data.map((item: any) => {
+          const rawUrl = item?.urls?.regular || item?.urls?.full || item?.urls?.raw;
+          if (!rawUrl) return null;
+          return rawUrl.includes("?") ? `${rawUrl}&w=1600&q=80` : `${rawUrl}?auto=format&fit=crop&w=1600&q=80`;
+        }).filter(Boolean);
       }
     }
   } catch (err) {
@@ -82,60 +91,60 @@ async function getBrandImageGallery(subject: string, lowerPrompt: string): Promi
   }
 
   const defaultImages = [
-    "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95",
-    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95",
-    "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95",
-    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95",
-    "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95",
-    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95"
+    "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1600&q=80",
+    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1600&q=80",
+    "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1600&q=80",
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80",
+    "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1600&q=80",
+    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1600&q=80"
   ];
 
   let customFallback = defaultImages;
   if (unsplashUrls.length < 6) {
     if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic") || lowerPrompt.includes("organic") || lowerPrompt.includes("serum")) {
       customFallback = [
-        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=2400&q=95"
+        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=1600&q=80"
       ];
     } else if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
       customFallback = [
-        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=2400&q=95"
+        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80"
       ];
     } else if (lowerPrompt.includes("tesla") || /\b(car|cars|auto|ev|drive|bmw|audi|vehicle)\b/i.test(lowerPrompt)) {
       customFallback = [
-        "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=2400&q=95"
+        "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=1600&q=80"
       ];
     } else if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte") || lowerPrompt.includes("cafe")) {
       customFallback = [
-        "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=2400&q=95"
+        "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1600&q=80"
       ];
-    } else if (lowerPrompt.includes("chocolate") || lowerPrompt.includes("sweets") || lowerPrompt.includes("candy") || lowerPrompt.includes("dessert") || lowerPrompt.includes("cocoa")) {
+    } else if (lowerPrompt.includes("chocolate") || lowerPrompt.includes("sweets") || lowerPrompt.includes("candy") || lowerPrompt.includes("dessert") || lowerPrompt.includes("cocoa") || lowerPrompt.includes("ddf")) {
       customFallback = [
-        "https://images.unsplash.com/photo-1504965270570-1170d48a1ae9?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1548907040-4d42b52125e0?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1481391319052-b883015f8e56?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1526082632713-19a78f713b11?auto=format&fit=crop&w=2400&q=95",
-        "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=2400&q=95"
+        "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1582176604856-e822b3749c95?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1575372145703-9ce41f678179?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1549007994-cb92caebd54b?auto=format&fit=crop&w=1600&q=80"
       ];
     }
   }
