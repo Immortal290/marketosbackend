@@ -61,108 +61,48 @@ function extractSubjectFromPrompt(prompt: string): string {
   return "Featured Product";
 }
 
-async function getBrandImageGallery(subject: string, lowerPrompt: string): Promise<any[]> {
-  const accessKey = process.env.UNSPLASH_ACCESS_KEY || "EPef0qSBsrOyKSDxz0soqh4uTXC7a8ertxhR9oHRVSs";
-  let unsplashUrls: string[] = [];
 
-  // Extract clean core product keyword (e.g. "Chocolate Brand Called Ddf" -> "Chocolate")
-  const searchTopic = subject.replace(/\b(brand|called|company|store|agency|inc|llc|official|launch|campaign)\b/gi, "").trim() || "product";
-  const coreKeyword = searchTopic.split(/\s+/)[0] || "product";
+/**
+ * Build a Pollinations.ai URL that generates an on-brand image from a text prompt.
+ * Free, no API key, uses Flux model. Width/height control the banner format.
+ */
+function pollinationsUrl(prompt: string, width: number, height: number): string {
+  const encoded = encodeURIComponent(
+    `${prompt}. Professional advertising photography, studio lighting, vibrant brand-consistent colors. NO text, words, or typography in the image.`
+      .slice(0, 500) // keep URL length browser-safe
+  );
+  return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&safe=true&seed=${Math.floor(Math.random() * 99999)}`;
+}
 
-  try {
-    const query = encodeURIComponent(coreKeyword);
-    const res = await fetch(`https://api.unsplash.com/photos/random?query=${query}&count=6&orientation=landscape`, {
-      headers: {
-        "Authorization": `Client-ID ${accessKey}`,
-        "Accept-Version": "v1"
-      }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        unsplashUrls = data.map((item: any): string => {
-          const rawUrl = item?.urls?.regular || item?.urls?.full || item?.urls?.raw;
-          if (!rawUrl) return "";
-          return rawUrl.includes("?") ? `${rawUrl}&w=1600&q=80` : `${rawUrl}?auto=format&fit=crop&w=1600&q=80`;
-        }).filter(Boolean);
-      }
-    }
-  } catch (err) {
-    console.error("Unsplash fetch error:", err);
-  }
+/**
+ * Generate 6 campaign-specific banner options using Pollinations.ai (AI-generated,
+ * no API key, free). Each variant uses a different visual angle + format size.
+ * Replaces the old Unsplash stock-photo lookup which returned off-brand generic images.
+ */
+function getBrandImageGallery(subject: string, lowerPrompt: string): any[] {
+  // Build a tight, product-specific base prompt from the campaign subject
+  const cleanSubject = subject
+    .replace(/\b(brand|called|company|store|agency|inc|llc|official|launch|campaign)\b/gi, "")
+    .trim() || "product";
 
-  const defaultImages = [
-    "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1600&q=80",
-    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1600&q=80",
-    "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1600&q=80",
-    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80",
-    "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1600&q=80",
-    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1600&q=80"
+  const base = cleanSubject;
+
+  const angles = [
+    { prompt: `${base} product hero shot, luxury packaging, dark dramatic background`, w: 1200, h: 628 },
+    { prompt: `${base} lifestyle advertisement, natural daylight, aspirational mood`,   w: 1080, h: 1080 },
+    { prompt: `${base} close-up detail, premium textures, shallow depth of field`,      w: 1080, h: 1920 },
+    { prompt: `${base} minimalist flat lay, clean white surface, bold brand colors`,    w: 1200, h: 628 },
+    { prompt: `${base} editorial campaign photo, vibrant colors, high contrast`,        w: 1080, h: 1080 },
+    { prompt: `${base} cinematic wide shot, golden hour lighting, atmospheric`,         w: 1200, h: 628 },
   ];
 
-  let customFallback = defaultImages;
-  if (unsplashUrls.length < 6) {
-    if (lowerPrompt.includes("nike") || lowerPrompt.includes("shoe") || lowerPrompt.includes("sneaker") || lowerPrompt.includes("apparel") || lowerPrompt.includes("sport")) {
-      customFallback = [
-        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80"
-      ];
-    } else if (lowerPrompt.includes("tesla") || lowerPrompt.includes("car") || lowerPrompt.includes("auto") || lowerPrompt.includes("ev") || lowerPrompt.includes("drive") || lowerPrompt.includes("bmw") || lowerPrompt.includes("audi")) {
-      customFallback = [
-        "https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1541348263662-e082662d8298?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=1600&q=80"
-      ];
-    } else if (lowerPrompt.includes("starbucks") || lowerPrompt.includes("coffee") || lowerPrompt.includes("beverage") || lowerPrompt.includes("drink") || lowerPrompt.includes("latte") || lowerPrompt.includes("cafe")) {
-      customFallback = [
-        "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1600&q=80"
-      ];
-    } else if (lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic")) {
-      customFallback = [
-        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1608248597461-00049c717585?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1512290900676-26c2a48f572d?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=1600&q=80"
-      ];
-    } else if (lowerPrompt.includes("chocolate") || lowerPrompt.includes("sweets") || lowerPrompt.includes("candy") || lowerPrompt.includes("dessert") || lowerPrompt.includes("cocoa") || lowerPrompt.includes("ddf")) {
-      customFallback = [
-        "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1582176604856-e822b3749c95?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1575372145703-9ce41f678179?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1549007994-cb92caebd54b?auto=format&fit=crop&w=1600&q=80"
-      ];
-    }
-  }
-
-  const finalUrls = [...unsplashUrls];
-  while (finalUrls.length < 6) {
-    const fallbackUrl = customFallback[finalUrls.length] || defaultImages[finalUrls.length];
-    finalUrls.push(fallbackUrl);
-  }
-
   return [
-    { id: "v1", title: "1. Official Product Banner (1200x628)", url: finalUrls[0], overlay: `🔥 INTRODUCING ${subject.toUpperCase()} — CLAIM OFFER`, format: "LinkedIn / Meta Landscape (1200x628)" },
-    { id: "v2", title: "2. High-Velocity Square (1080x1080)", url: finalUrls[1], overlay: `⚡ ${subject.toUpperCase()} EXCLUSIVE LAUNCH SPECIAL`, format: "Instagram / Facebook Square (1080x1080)" },
-    { id: "v3", title: "3. Mobile Story Showcase (1080x1920)", url: finalUrls[2], overlay: `🚀 UP TO 40% OFF ${subject.toUpperCase()}`, format: "Instagram Stories & Reels (1080x1920)" },
-    { id: "v4", title: "4. Cyberpunk Neon Theme (1200x628)", url: finalUrls[3], overlay: `⚡ REVOLUTIONARY ${subject.toUpperCase()} EXPERIENCE`, format: "High-Contrast Cyberpunk Dark Mode" },
-    { id: "v5", title: "5. Vibrant Feature Spotlight (1080x1080)", url: finalUrls[4], overlay: `💡 UNMATCHED QUALITY & PERFORMANCE`, format: "Vibrant Modern Spotlight Layout" },
-    { id: "v6", title: "6. Global Enterprise Banner (1200x628)", url: finalUrls[5], overlay: `📈 ENGINEERED FOR RESULTS — TRY ${subject.toUpperCase()}`, format: "B2B Enterprise Data Banner" }
+    { id: "v1", title: "1. Official Product Banner (1200x628)", url: pollinationsUrl(angles[0].prompt, angles[0].w, angles[0].h), overlay: `🔥 INTRODUCING ${subject.toUpperCase()} — CLAIM OFFER`,      format: "LinkedIn / Meta Landscape (1200x628)" },
+    { id: "v2", title: "2. Lifestyle Square (1080x1080)",        url: pollinationsUrl(angles[1].prompt, angles[1].w, angles[1].h), overlay: `✨ THE ${subject.toUpperCase()} EXPERIENCE`,               format: "Instagram / Facebook Square (1080x1080)" },
+    { id: "v3", title: "3. Mobile Story (1080x1920)",            url: pollinationsUrl(angles[2].prompt, angles[2].w, angles[2].h), overlay: `🚀 UP TO 40% OFF — ${subject.toUpperCase()}`,              format: "Instagram Stories & Reels (1080x1920)" },
+    { id: "v4", title: "4. Minimalist Flat Lay (1200x628)",      url: pollinationsUrl(angles[3].prompt, angles[3].w, angles[3].h), overlay: `⚡ PURE QUALITY — ${subject.toUpperCase()}`,              format: "Clean Minimalist Layout" },
+    { id: "v5", title: "5. Editorial Square (1080x1080)",        url: pollinationsUrl(angles[4].prompt, angles[4].w, angles[4].h), overlay: `💡 DISCOVER THE REAL ${subject.toUpperCase()}`,           format: "Vibrant Editorial Spotlight" },
+    { id: "v6", title: "6. Cinematic Banner (1200x628)",         url: pollinationsUrl(angles[5].prompt, angles[5].w, angles[5].h), overlay: `📈 ${subject.toUpperCase()} — BUILT TO PERFORM`,          format: "Cinematic Wide Format" },
   ];
 }
 

@@ -112,50 +112,61 @@ function EmailPreview({ variant }: { variant: any }) {
 
 /* ── Creative / Image View ─────────────────────────────────────────────────── */
 function CreativeView({ result }: { result: any }) {
+  // Build on-brand Pollinations.ai fallback URLs from the campaign's own creative concept.
+  // These are AI-generated images — never stock photos, never off-brand.
+  const baseConcept = encodeURIComponent(
+    ((result?.creative_concept || result?.campaign_name || "product campaign") + " professional advertising photography, studio lighting, no text")
+      .slice(0, 400)
+  );
+  const pollinationsFallback = (angle: string, w: number, h: number) =>
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(angle + (result?.creative_concept || result?.campaign_name || ""))}?width=${w}&height=${h}&model=flux&nologo=true&safe=true`;
+
   const options = result?.banner_options || [
     {
       id: "v1",
-      title: "1. Landscape (1200x628)",
-      url: result?.asset_preview || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=2400&q=95",
-      overlay: result?.ad_banner_specs?.headline_overlay || "🔥 HOT SUMMER SAVINGS — CLAIM UP TO 40% OFF",
+      title: "1. Product Hero Banner (1200x628)",
+      url: pollinationsFallback("product hero shot luxury packaging dark dramatic background ", 1200, 628),
+      overlay: result?.ad_banner_specs?.headline_overlay || "🔥 CLAIM YOUR EXCLUSIVE OFFER",
       format: "LinkedIn / Meta Landscape (1200x628)"
     },
     {
       id: "v2",
-      title: "2. Instagram Square (1080x1080)",
-      url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2400&q=95",
-      overlay: "☀️ BEAT THE HEAT WITH 10X MARKETING VELOCITY",
+      title: "2. Lifestyle Square (1080x1080)",
+      url: pollinationsFallback("lifestyle advertisement natural daylight aspirational mood ", 1080, 1080),
+      overlay: "✨ EXPERIENCE THE DIFFERENCE",
       format: "Instagram / Facebook Square (1080x1080)"
     },
     {
       id: "v3",
       title: "3. Mobile Story (1080x1920)",
-      url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=2400&q=95",
-      overlay: "🚀 EXCLUSIVE SUMMER FLASH SALE — CLAIM YOUR GIFT",
+      url: pollinationsFallback("close-up detail premium textures shallow depth of field ", 1080, 1920),
+      overlay: "🚀 LIMITED TIME — SHOP NOW",
       format: "Instagram Stories & Reels (1080x1920)"
     },
     {
       id: "v4",
-      title: "4. Dark Cyberpunk (1200x628)",
-      url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=2400&q=95",
-      overlay: "⚡ 18 AUTONOMOUS SPECIALIST AGENTS AT YOUR COMMAND",
-      format: "High-Contrast Cyberpunk Dark Mode"
+      title: "4. Minimalist Flat Lay (1200x628)",
+      url: pollinationsFallback("minimalist flat lay clean white surface bold brand colors ", 1200, 628),
+      overlay: "⚡ PURE QUALITY",
+      format: "Clean Minimalist Layout"
     },
     {
       id: "v5",
-      title: "5. Neon Sunburst (1080x1080)",
-      url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=2400&q=95",
-      overlay: "🌴 SIZZLE INTO SUMMER WITH 3 MONTHS FREE ACCESS",
-      format: "Vibrant Neon Tropical Theme"
+      title: "5. Editorial Square (1080x1080)",
+      url: pollinationsFallback("editorial campaign photo vibrant colors high contrast ", 1080, 1080),
+      overlay: "💡 SEE WHAT'S POSSIBLE",
+      format: "Vibrant Editorial Spotlight"
     },
     {
       id: "v6",
-      title: "6. Minimalist Enterprise (1200x628)",
-      url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2400&q=95",
-      overlay: "📈 UNIFIED AI COMPLIANCE & REAL-TIME ROAS TRACKING",
-      format: "Minimalist B2B Enterprise Layout"
+      title: "6. Cinematic Wide (1200x628)",
+      url: pollinationsFallback("cinematic wide shot golden hour lighting atmospheric ", 1200, 628),
+      overlay: "📈 BUILT TO PERFORM",
+      format: "Cinematic Wide Format"
     }
   ];
+
+
 
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
