@@ -33,6 +33,7 @@
     "kafkajs": "^2.2.4",
     "morgan": "^1.11.0",
     "pg": "^8.21.0",
+    "prisma": "^7.8.0",
     "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",

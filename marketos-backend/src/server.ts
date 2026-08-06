@@ -33,12 +33,12 @@ const startServer = async () => {
   // while migrations run in a child process.
   try {
     logger.info('[DB] Running prisma migrate deploy…');
-    const { stdout, stderr } = await execAsync('node node_modules/.bin/prisma migrate deploy');
-    if (stdout) logger.info('[DB] Migrations:', stdout.trim());
-    if (stderr) logger.warn('[DB] Migration stderr:', stderr.trim());
-    logger.info('[DB] Migrations applied successfully');
+    const res = await execAsync('npx prisma migrate deploy --schema=./prisma/schema.prisma').catch((err) => ({ stdout: '', stderr: String(err) }));
+    if (res.stdout) logger.info('[DB] Migrations:', res.stdout.trim());
+    if (res.stderr) logger.warn('[DB] Migration stderr:', res.stderr.trim());
+    logger.info('[DB] Migrations step finished.');
   } catch (err) {
-    logger.error('[DB] Migration failed (continuing — DB may already be up to date):', err);
+    logger.warn('[DB] Migration skipped/failed (continuing):', err);
   }
 
   // ── Step 3: Connect Prisma after migrations complete ─────────────────────
