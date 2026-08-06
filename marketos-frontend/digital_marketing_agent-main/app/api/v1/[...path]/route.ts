@@ -46,16 +46,11 @@ async function handleRequest(req: NextRequest, { params }: { params: { path?: st
       headers.delete("host");
       headers.delete("connection");
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500); // 3.5s timeout for backend check
-
       const res = await fetch(targetUrl, {
         method,
         headers,
         body: bodyText,
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
 
       if (res.status !== 502 && res.status !== 504 && res.status !== 404) {
         const responseData = await res.text();

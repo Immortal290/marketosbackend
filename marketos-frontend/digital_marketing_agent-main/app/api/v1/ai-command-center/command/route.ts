@@ -397,6 +397,18 @@ async function buildLocalStream(prompt: string): Promise<ReadableStream> {
   });
 }
 
+function buildErrorStream(message: string): ReadableStream {
+  const encoder = new TextEncoder();
+  const errLine = buildSSELine("ERROR", "MarketOS AI", "failed", message, { error: message });
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${errLine}\n\n`));
+      controller.enqueue(encoder.encode(`event: end\ndata: {"status":"error","message":"${message}"}\n\n`));
+      controller.close();
+    }
+  });
+}
+
 export async function POST(req: NextRequest) {
   let bodyText: string | null = null;
   try { bodyText = await req.text(); } catch (_e) {}
@@ -409,7 +421,7 @@ export async function POST(req: NextRequest) {
   const userQuery = bodyPayload.prompt || bodyPayload.query || "";
   const workspaceId = bodyPayload.workspaceId || "default";
 
-  // Try the GLM-orchestrated streaming endpoint on candidate backend servers
+  // Try the GLM-orchestrated streaming endpoint on candidate backend servers (INFINITE WAIT — NO TIMEOUT)
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
@@ -418,16 +430,12 @@ export async function POST(req: NextRequest) {
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30 seconds generous timeout for LLM
-
+      // Fetch without early timeout — wait for real agent execution
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: userQuery, workspace_id: workspaceId }),
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
 
       if (res.ok && res.body) {
         return new NextResponse(res.body, {
@@ -442,9 +450,9 @@ export async function POST(req: NextRequest) {
     } catch (_err) {}
   }
 
-  // Intelligent local SSE fallback — runs entirely in Next.js edge
-  const localStream = await buildLocalStream(userQuery);
-  return new NextResponse(localStream, {
+  // If no live agent server responds, return error stream — NO MOCK CONTENT
+  const errorStream = buildErrorStream("Unable to connect to Railway Agent Service. Please ensure the Python Agent Service (renewed-dedication) is running.");
+  return new NextResponse(errorStream, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",
