@@ -99,52 +99,37 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
 
 async function getAgentMockPayload(agentName: string, prompt: string): Promise<Record<string, any>> {
   const name = agentName.toLowerCase();
-  const lowerPrompt = prompt.toLowerCase();
-  
   const subject = extractSubjectFromPrompt(prompt);
 
   if (name.includes("supervisor")) {
     return {
-      campaign_name: `${subject} — National Growth Campaign`,
-      goal: `Drive 35% growth, 800+ conversions, and $150k+ revenue for ${subject}`,
-      target_audience: `High-intent consumers & target demographic interested in ${subject}`,
-      budget: "$15,000",
-      timeline: "3-week national sprint",
-      tone: "Authoritative, innovative, engaging, and conversion-focused",
+      campaign_name: `${subject} Launch Campaign`,
+      goal: `Drive verified engagement, acquisition, and revenue growth for ${subject}`,
+      target_audience: `Core target audience seeking ${subject} solutions`,
+      budget: "Aligned to campaign objective",
+      timeline: "Execution Sprint",
+      tone: "Direct, brand-aligned, conversion-focused",
       key_messages: [
-        `Official campaign launch for ${subject}`,
-        `Exclusive limited-time promotional incentive for ${subject}`,
-        "Proven ROI lift with multi-channel automated AI execution"
+        `Introducing ${subject} to market`,
+        `Key benefits and value proposition for ${subject}`,
+        `Clear call to action for ${subject}`
       ]
     };
   }
 
-  const isSkincare = lowerPrompt.includes("skincare") || lowerPrompt.includes("beauty") || lowerPrompt.includes("cosmetic") || lowerPrompt.includes("organic") || lowerPrompt.includes("serum");
-  const isCoffee = lowerPrompt.includes("coffee") || lowerPrompt.includes("latte") || lowerPrompt.includes("beverage") || lowerPrompt.includes("starbucks") || lowerPrompt.includes("cafe");
-  const isCar = lowerPrompt.includes("tesla") || /\b(car|cars|auto|ev|drive|bmw|audi)\b/i.test(lowerPrompt);
-
   if (name.includes("creative") || name.includes("image")) {
-    const banner_options = await getBrandImageGallery(subject, lowerPrompt);
-    const creativeDir = isSkincare 
-      ? "Clean Botanical Minimalist with Soft Natural Lighting & Pastel Palettes"
-      : isCoffee 
-      ? "Warm Artisan Roastery Aesthetics with Rich Espresso Tones"
-      : isCar 
-      ? "Futuristic Automotive Aerodynamics with Dark Neon Accents"
-      : "Modern Cyberpunk Neo-Brutalist with High-Contrast Accents";
+    const banner_options = await getBrandImageGallery(subject, prompt);
 
     return {
-      campaign_concept: `${subject}: Omnichannel Growth & Engagement Blitz`,
-      creative_direction: creativeDir,
-      visual_theme: `High-Impact Visual Assets Tailored for ${subject}`,
+      campaign_concept: `${subject}: Strategic Omnichannel Execution`,
+      creative_direction: `Brand-Consistent Visual Aesthetics for ${subject}`,
+      visual_theme: `High-Impact Commercial Photography for ${subject}`,
       ad_banner_specs: {
-        dimensions: "1200x628 (LinkedIn/Meta Ads), 1080x1080 (Instagram Feed), 1080x1920 (Stories/Reels)",
+        dimensions: "1200x628 (Landscape), 1080x1080 (Square), 1080x1920 (Vertical)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: `High-resolution showcase of ${subject} featuring active campaign overlays`
+        primary_visual: `Bespoke visual representation of ${subject}`
       },
-      color_palette: isSkincare 
-        ? ["#E8CAE3 (Soft Botanical Rose)", "#96C9A8 (Sage Botanical Green)", "#FFFFFF (Pure White)", "#3D3D4A (Slate Text)"]
-        : ["#FF0055 (Vibrant Crimson)", "#00F0FF (Cyan)", "#000000 (Obsidian Ink)", "#FFFFFF (Pure White)"],
+      color_palette: ["#111827 (Obsidian)", "#3B82F6 (Vibrant Blue)", "#F59E0B (Amber Gold)", "#FFFFFF (Pure White)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
       total_variants_generated: 6
@@ -152,74 +137,46 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
   }
 
   if (name.includes("copy")) {
-    const headlines = isSkincare
-      ? [
-          `✨ Reveal Your Natural Glow with ${subject}`,
-          `🌸 100% Organic Botanical ${subject} — 20% Off Launch Offer`,
-          `🌿 Dermatologist Tested & Cruelty-Free ${subject}`,
-          `💧 Pure Hydration: Experience ${subject} Today`,
-          `🎁 Claim Your Free Gift with ${subject} Order`
-        ]
-      : [
-          `🔥 Discover ${subject}: The Ultimate Game-Changer`,
-          `⚡ Experience ${subject} — Claim Exclusive Launch Offer`,
-          `🚀 Elevate Your Results with ${subject}: Limited Time Special`,
-          `🎯 High-Impact ${subject} — Engineered for Peak Performance`,
-          `🏆 Ranked #1 Solution: Order Your ${subject} Package Today`
-        ];
-
     return {
-      ad_headlines: headlines,
-      landing_page_variants: [
-        `Variant A: 'Experience Pure Botanical Radiance & Natural Hydration with ${subject}.'`,
-        `Variant B: 'Unmatched Clean Beauty. Elevate Your Routine with ${subject} Today.'`
+      ad_headlines: [
+        `Discover ${subject} — Official Release`,
+        `Special Offer: Upgrade Your Experience with ${subject}`,
+        `Claim Your ${subject} Incentive Today`,
+        `Proven Results for ${subject}`
       ],
-      call_to_action: `Claim ${subject} Offer`
+      landing_page_variants: [
+        `Variant A: 'Targeted value proposition and features for ${subject}.'`,
+        `Variant B: 'Direct benefit-focused presentation for ${subject}.'`
+      ],
+      call_to_action: `Get ${subject}`
     };
   }
 
   if (name.includes("email")) {
-    const emailSubject = isSkincare
-      ? `🌿 Pure Botanical Glow: Discover ${subject} + 20% Off Launch Special`
-      : `🔥 Exclusive Access: Discover ${subject} Launch Offer Today`;
-
-    const emailBody = isSkincare
-      ? `Hi {{first_name}},\n\nNourish your skin with the pure power of nature. We are thrilled to introduce ${subject} — crafted with 100% organic botanicals, hyaluronic acid, and cold-pressed antioxidants.\n\nFormulated without harsh chemicals, parabens, or synthetic fragrances. Experience visible hydration, radiant skin tone, and youth restoration in just 7 days.\n\nFor a limited time, use code ORGANIC20 at checkout for an exclusive 20% discount on your first order.`
-      : `We are excited to share our latest release for ${subject}.\n\nDesigned from the ground up to deliver exceptional performance, reliability, and value for your goals.\n\nFor a limited time, enjoy exclusive early access and a 40% launch discount on all orders.`;
-
     return {
-      email_campaign_name: `${subject} Nurture Sequence`,
+      email_campaign_name: `${subject} Campaign Sequence`,
       email_draft_1: {
-        subject_line: emailSubject,
-        preview_text: `Clean beauty update and special release for ${subject}.`,
-        salutation: "Hi {{first_name}},",
-        body: emailBody,
-        call_to_action: `Claim ${subject} Offer`,
-        cta_url: "https://marketos.ai/promotions/special-offer",
-        footer: "MarketOS Inc. | 100 Cybernetic Way, San Francisco, CA. Reply STOP to opt out."
+        subject_line: `Official Release: ${subject} Announcement`,
+        preview_text: `Key details and introductory offer for ${subject}.`,
+        salutation: "Hello,",
+        body: `We are pleased to introduce our latest offering for ${subject}.\n\nBuilt to meet your expectations with quality, efficiency, and reliable performance.\n\nTake advantage of this special release today.`,
+        call_to_action: `Learn More About ${subject}`,
+        cta_url: "https://marketos.ai/promotions/offer",
+        footer: "MarketOS AI Marketing System | Reply STOP to unsubscribe."
       },
-      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Case Studies & Social Proof), Email 3 (Day 7: Offer Expiration)",
-      metrics_estimate: { open_rate: "46.2%", click_through_rate: "11.4%", projected_leads: 320 }
+      sequence_schedule: "Email 1 (Initial Launch), Email 2 (Value Deep Dive), Email 3 (Offer Expiration)",
+      metrics_estimate: { open_rate: "38.5%", click_through_rate: "8.2%", projected_leads: 250 }
     };
   }
 
   if (name.includes("sms")) {
-    const smsOptions = isSkincare
-      ? [
-          `Option 1 (Botanical Flash Sale): ${subject} Special! Use code ORGANIC20 for 20% off pure skincare: https://mktos.ai/s/skincare Reply STOP to opt out.`,
-          `Option 2 (Clean Beauty VIP): Glow naturally with ${subject}! Claim your free travel serum sample: https://mktos.ai/s/sample Reply STOP to opt out.`,
-          `Option 3 (Limited Stock Alert): VIP Early Access: ${subject} is live! Order before stock runs out: https://mktos.ai/s/vip Reply STOP to opt out.`
-        ]
-      : [
-          `Option 1 (Urgency Flash Sale): ${subject} Special! Claim exclusive launch discount today: https://mktos.ai/s/offer Text STOP to opt out.`,
-          `Option 2 (Direct Value Pitch): Experience ${subject} live! Claim your demo spot: https://mktos.ai/s/demo Text STOP to cancel.`,
-          `Option 3 (VIP Invitation): VIP Alert: Early access to ${subject} is now open! Reserve here: https://mktos.ai/s/vip Text STOP to unsubscribe.`
-        ];
-
     return {
-      sms_marketing_formats: smsOptions,
-      segment_length: "154 characters (1 GSM 7-bit SMS segment)",
-      tcpa_compliance: "Fully compliant — includes mandatory STOP / HELP keyword handlers & opt-out footer."
+      sms_marketing_formats: [
+        `Option 1: ${subject} update: Claim your exclusive release offer today: https://mktos.ai/s/offer Reply STOP to unsubscribe.`,
+        `Option 2: Explore ${subject} now! Access details here: https://mktos.ai/s/info Reply STOP to unsubscribe.`
+      ],
+      segment_length: "140 characters (1 GSM segment)",
+      tcpa_compliance: "Includes standard opt-out keywords (STOP / HELP)."
     };
   }
 
@@ -229,41 +186,41 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
       gdpr_compliant: true,
       can_spam_compliant: true,
       ad_policy_verified: true,
-      risk_score: "LOW (0.02)",
-      policy_notes: `All promotional claims, FTC disclaimers, and opt-out links for ${subject} validated.`
+      risk_score: "LOW",
+      policy_notes: `Promotional statements and disclosure requirements for ${subject} verified.`
     };
   }
 
   if (name.includes("analytics")) {
     return {
-      predicted_roas: "5.4x",
-      projected_conversions: 580,
-      cost_per_acquisition: "$12.80",
-      recommended_channels: ["Meta Paid Social (40%)", "Search Ads (35%)", "Direct Email (25%)"]
+      predicted_roas: "4.2x",
+      projected_conversions: 350,
+      cost_per_acquisition: "Optimized",
+      recommended_channels: ["Social Media", "Search", "Email"]
     };
   }
 
   if (name.includes("seo")) {
     return {
-      target_keywords: [subject.toLowerCase(), `buy ${subject.toLowerCase()}`, `${subject.toLowerCase()} review`, "best deals"],
-      seo_score: "96/100",
-      meta_description: `Discover top ${subject} offers and scale your conversions with MarketOS AI.`
+      target_keywords: [subject.toLowerCase(), `${subject.toLowerCase()} official`, `best ${subject.toLowerCase()}`],
+      seo_score: "92/100",
+      meta_description: `Official ${subject} details, benefits, and launch updates.`
     };
   }
 
   if (name.includes("reporting")) {
     return {
-      campaign_grade: "A+",
-      executive_summary: `Campaign architecture for '${subject}' fully generated and verified across all specialist agents.`,
-      top_insight: "Urgency-led headlines show 24.3% higher click intent than generic copy.",
-      status: "Finalised & Ready for Deployment"
+      campaign_grade: "A",
+      executive_summary: `Campaign strategy for '${subject}' generated across specialist agents.`,
+      top_insight: "Targeted subject lines demonstrate strong audience alignment.",
+      status: "Ready for Review"
     };
   }
 
   return {
     status: "completed",
-    summary: `${agentName} successfully executed task for '${subject}'.`,
-    confidence: 0.96
+    summary: `${agentName} executed task for '${subject}'.`,
+    confidence: 0.95
   };
 }
 
@@ -339,7 +296,7 @@ async function generateComprehensiveReport(
 
 ## 2. A/B Testing Gate Analysis
 - **Decision:** \`WINNER_DECLARED\`
-- **Winning Variant:** V-001 (Urgency & Seasonal Incentive Messaging)
+- **Winning Variant:** V-001 (Targeted Value Proposition Messaging)
 - **Bayesian Confidence:** 96.4%
 - **Performance Lift:** +18.4% predicted CTR improvement over baseline control.
 
@@ -354,7 +311,7 @@ ${agentDetails}
 ## 4. Strategic Recommendations
 1. **Multi-Touch Deployment:** Deploy Creative Concept ad banners alongside Email Draft 1 and SMS Option 1 for maximum omnichannel synergy.
 2. **Ad Copy Testing:** Scale top-performing promotional ad headlines across search and social ad sets.
-3. **Channel Budget Allocation:** Allocate 45% of spend to LinkedIn/Meta Paid Social, 35% to Search Ads, and 20% to Retargeting Email Sequences.
+3. **Channel Budget Allocation:** Allocate spend across social paid media, search ads, and direct nurture sequences.
 
 ---
 
@@ -366,13 +323,6 @@ ${agentDetails}
 }
 
 function classifyLocally(prompt: string) {
-  const lower = prompt.toLowerCase();
-  
-  const isContent = true; // Always execute full specialist agent pipeline for rich outputs
-  const isCampaign = ["campaign", "drip", "launch", "cmo", "b2b", "email", "outreach", "channel", "sms"].some(k => lower.includes(k));
-  const isAnalytics = ["analy", "report", "performance", "metric", "roi", "finance", "budget", "spend", "kpi"].some(k => lower.includes(k));
-  const isAudience = ["lead", "score", "audience", "segment", "contact", "persona"].some(k => lower.includes(k));
-
   const fullAgentList = [
     "Supervisor Agent",
     "Creative Agent",
@@ -459,13 +409,13 @@ export async function POST(req: NextRequest) {
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
-      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication");
+      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("digital_marketing_agent");
       const targetUrl = isPythonService
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30 seconds generous timeout for LLM
 
       const res = await fetch(targetUrl, {
         method: "POST",
