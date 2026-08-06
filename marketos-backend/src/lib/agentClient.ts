@@ -245,13 +245,14 @@ export async function streamCampaign(
 export async function streamQuery(
   opts: QueryRunOptions,
 ): Promise<ReadableStream<Uint8Array>> {
-  return agentFetchStream('/v1/query/stream', opts, 180_000);
+  return agentFetchStream('/v1/query/stream', opts);
 }
 
 // ── Named export for convenient one-import usage ─────────────────────────────
 
 export const agentClient = {
-  baseUrl: AGENT_SERVICE_URL,
+  baseUrl: AGENT_SERVICE_CANDIDATES[0] || 'http://localhost:8000',
+  candidates: AGENT_SERVICE_CANDIDATES,
   getHealth: getAgentServiceHealth,
   listAgents,
   runAgent,
