@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { Users, Mail, Phone, Sparkles, Send, X, ShieldCheck, CheckCircle2, Sliders, Globe } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Users, Mail, Phone, Send, X, ShieldCheck,
+  Sliders, Globe, Sparkles, Tag, Eye,
+} from "lucide-react";
 import { toast } from "sonner";
-import { getApiBaseUrl } from "@/lib/api";
 
 interface TargetAudienceModalProps {
   isOpen: boolean;
@@ -22,15 +24,111 @@ export interface AudienceData {
   channels: string[];
 }
 
-export function TargetAudienceModal({ isOpen, onClose, onLaunch, initialPrompt }: TargetAudienceModalProps) {
-  const [query, setQuery] = useState(initialPrompt || "");
+// ── Highlighted prompt — marks emails & phones visually ─────────────────────
+// Precise patterns: email must have valid TLD (2-6 chars), phone must have 10+ consecutive digits
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/;
+const PHONE_PATTERN = /(?:\+?\d[\d\s\-().]{8,}\d)/;
+
+function HighlightedPrompt({ text }: { text: string }) {
+  if (!text) return null;
+
+  type Token = { kind: "email" | "phone" | "text"; value: string };
+  const tokens: Token[] = [];
+
+  const allMatches: { index: number; value: string; kind: "email" | "phone" }[] = [];
+  const eRe = new RegExp(EMAIL_PATTERN.source, "g");
+  const pRe = new RegExp(PHONE_PATTERN.source, "g");
+  let m: RegExpExecArray | null;
+
+  while ((m = eRe.exec(text)) !== null) {
+    allMatches.push({ index: m.index, value: m[0], kind: "email" });
+  }
+  while ((m = pRe.exec(text)) !== null) {
+    allMatches.push({ index: m.index, value: m[0], kind: "phone" });
+  }
+  allMatches.sort((a, b) => a.index - b.index);
+
+  let cursor = 0;
+  for (const match of allMatches) {
+    if (match.index > cursor) {
+      tokens.push({ kind: "text", value: text.slice(cursor, match.index) });
+    }
+    tokens.push({ kind: match.kind, value: match.value });
+    cursor = match.index + match.value.length;
+  }
+  if (cursor < text.length) {
+    tokens.push({ kind: "text", value: text.slice(cursor) });
+  }
+
+  return (
+    <span>
+      {tokens.map((tok, i) => {
+        if (tok.kind === "email") {
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center gap-0.5 bg-cyan-200 border border-cyan-500 text-cyan-900 px-1 rounded font-bold font-mono text-[11px]"
+            >
+              <Mail className="w-2.5 h-2.5" />
+              {tok.value}
+            </span>
+          );
+        }
+        if (tok.kind === "phone") {
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center gap-0.5 bg-emerald-200 border border-emerald-500 text-emerald-900 px-1 rounded font-bold font-mono text-[11px]"
+            >
+              <Phone className="w-2.5 h-2.5" />
+              {tok.value}
+            </span>
+          );
+        }
+        return <span key={i}>{tok.value}</span>;
+      })}
+    </span>
+  );
+}
+
+// ── Channel options ──────────────────────────────────────────────────────────
+const CHANNEL_OPTIONS = [
+  { id: "email",    label: "Email",    icon: "✉️" },
+  { id: "sms",      label: "SMS",      icon: "💬" },
+  { id: "social",   label: "Social",   icon: "📲" },
+  { id: "whatsapp", label: "WhatsApp", icon: "📱" },
+  { id: "voice",    label: "Voice",    icon: "📞" },
+];
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+export function TargetAudienceModal({
+  isOpen,
+  onClose,
+  onLaunch,
+  initialPrompt,
+}: TargetAudienceModalProps) {
   const [targetAudience, setTargetAudience] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
-  const [senderName, setSenderName] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [channels, setChannels] = useState<string[]>(["email", "sms", "social"]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [senderName, setSenderName]         = useState("");
+  const [companyName, setCompanyName]       = useState("");
+  const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);
+  const [isSubmitting, setIsSubmitting]     = useState(false);
+
+  // Auto-extract email / phone whenever the prompt changes — always overwrite
+  useEffect(() => {
+    if (!initialPrompt) return;
+    const eRe = new RegExp(EMAIL_PATTERN.source, "g");
+    const pRe = new RegExp(PHONE_PATTERN.source, "g");
+    const emailMatch = eRe.exec(initialPrompt);
+    const phoneMatch = pRe.exec(initialPrompt);
+    // Strip digits-only that aren't phone-length (avoid matching zip codes)
+    const rawPhone = phoneMatch ? phoneMatch[0].replace(/[\s()\-]/g, "") : "";
+    const isValidPhone = rawPhone.replace(/\D/g, "").length >= 10;
+    setRecipientEmail(emailMatch ? emailMatch[0] : "");
+    setRecipientPhone(isValidPhone ? rawPhone : "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrompt]);
 
   if (!isOpen) return null;
 
@@ -42,13 +140,12 @@ export function TargetAudienceModal({ isOpen, onClose, onLaunch, initialPrompt }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const query = initialPrompt || "";
     if (!query.trim()) {
-      toast.error("Please enter a campaign prompt or goal.");
+      toast.error("Enter a prompt in the command bar first.");
       return;
     }
-
     setIsSubmitting(true);
-
     const payload: AudienceData = {
       query,
       targetAudience,
@@ -58,145 +155,150 @@ export function TargetAudienceModal({ isOpen, onClose, onLaunch, initialPrompt }
       companyName,
       channels,
     };
-
     try {
-      if (onLaunch) {
-        onLaunch(payload);
-      }
-      toast.success("Target Audience & Real-time Live Dispatch Params Set!", {
-        description: `Targeting: ${targetAudience} ${recipientEmail ? `| Email: ${recipientEmail}` : ""} ${recipientPhone ? `| SMS: ${recipientPhone}` : ""}`,
+      if (onLaunch) onLaunch(payload);
+      toast.success("Campaign parameters set!", {
+        description: `${channels.join(", ")} channels${recipientEmail ? ` → ${recipientEmail}` : ""}${recipientPhone ? ` / ${recipientPhone}` : ""}`,
       });
       onClose();
     } catch (err: any) {
-      toast.error("Failed to launch campaign: " + err.message);
+      toast.error("Failed: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const hasEmail = initialPrompt ? EMAIL_PATTERN.test(initialPrompt) : false;
+  const hasPhone = initialPrompt ? PHONE_PATTERN.test(initialPrompt) : false;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200 font-sans">
-      <div className="w-full max-w-2xl border-[4px] border-black bg-neo-surface shadow-[10px_10px_0_0_#000] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans">
+      <div className="w-full max-w-xl border-[4px] border-black bg-neo-surface shadow-[10px_10px_0_0_#000] overflow-hidden">
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b-[4px] border-black bg-neo-yellow px-6 py-4">
+        <div className="flex items-center justify-between border-b-[4px] border-black bg-neo-yellow px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center border-2 border-black bg-black text-white shadow-[2px_2px_0_0_#fff]">
-              <Users className="h-6 w-6 text-neo-yellow" />
+            <div className="flex h-9 w-9 items-center justify-center border-2 border-black bg-black">
+              <Users className="h-5 w-5 text-neo-yellow" />
             </div>
             <div>
-              <h3 className="font-display text-lg font-black uppercase tracking-tight text-black">
-                Target Audience & Campaign Parameters
+              <h3 className="font-display text-base font-black uppercase tracking-tight text-black">
+                Audience &amp; Delivery Parameters
               </h3>
-              <p className="font-mono text-xs font-bold text-black/70">
-                Configure real-time recipient parameters (Gemini, Groq, Twilio, SendGrid/Gmail)
+              <p className="font-mono text-[10px] font-bold text-black/60">
+                Who receives this campaign and on which channels.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white hover:bg-neo-red hover:text-white transition-colors shadow-[2px_2px_0_0_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
-            aria-label="Close Modal"
+            className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white hover:bg-red-100 transition-colors shadow-[2px_2px_0_0_#000] active:shadow-none"
+            aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4 max-h-[75vh] overflow-y-auto">
-          {/* Main Campaign Intent */}
-          <div>
-            <label className="font-display font-black text-xs uppercase tracking-wider text-black mb-1.5 flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4 text-purple-600" />
-              Campaign Goal & Prompt (Dynamic AI Input):
-            </label>
-            <textarea
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              rows={2}
-              className="w-full border-2 border-black p-3 font-mono text-xs text-black bg-white shadow-[3px_3px_0_0_#000] focus:outline-none focus:ring-2 focus:ring-neo-yellow"
-              placeholder="e.g. Launch a campaign for DDF Choco dark chocolate with 20% off for chocolate lovers"
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4 max-h-[78vh] overflow-y-auto">
 
-          {/* Target Audience Definition */}
+          {/* Prompt preview — read-only with highlights */}
+          {initialPrompt && (
+            <div className="border-2 border-black bg-gray-50 p-3 shadow-[3px_3px_0_0_#000]">
+              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                <Eye className="h-3.5 w-3.5 text-purple-600 flex-shrink-0" />
+                <span className="font-mono text-[10px] font-black uppercase text-black/60">
+                  Your Prompt (from command bar)
+                </span>
+                {hasEmail && (
+                  <span className="ml-auto flex items-center gap-0.5 bg-cyan-100 text-cyan-800 border border-cyan-400 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                    <Tag className="w-2.5 h-2.5" /> EMAIL DETECTED
+                  </span>
+                )}
+                {hasPhone && (
+                  <span className="ml-1 flex items-center gap-0.5 bg-emerald-100 text-emerald-800 border border-emerald-400 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                    <Tag className="w-2.5 h-2.5" /> PHONE DETECTED
+                  </span>
+                )}
+              </div>
+              <p className="font-mono text-[11px] text-black leading-relaxed">
+                <HighlightedPrompt text={initialPrompt} />
+              </p>
+            </div>
+          )}
+
+          {/* Target Audience */}
           <div>
-            <label className="font-display font-black text-xs uppercase tracking-wider text-black mb-1.5 flex items-center gap-1.5">
-              <Globe className="h-4 w-4 text-blue-600" />
-              Target Audience & Persona Specs:
+            <label className="font-display font-black text-[11px] uppercase tracking-wider text-black mb-1.5 flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5 text-blue-600" />
+              Target Audience:
             </label>
             <input
               type="text"
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value)}
               className="w-full border-2 border-black p-2.5 font-mono text-xs text-black bg-white shadow-[3px_3px_0_0_#000] focus:outline-none focus:ring-2 focus:ring-neo-yellow"
-              placeholder="e.g. Young Professionals in Tier 1 cities interested in artisanal snacks"
+              placeholder="e.g. Young professionals 22–35, metro cities, interested in tech"
             />
           </div>
 
-          {/* Real-time Delivery Credentials Box */}
+          {/* Recipient credentials */}
           <div className="border-2 border-black bg-white p-4 shadow-[4px_4px_0_0_#000] flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
-              <span className="font-display font-black text-xs uppercase tracking-wider text-black flex items-center gap-1.5">
-                <Send className="h-4 w-4 text-emerald-600" />
-                Real-Time Live Test Recipients (Non-Hardcoded):
+            <div className="flex items-center justify-between pb-1.5 border-b-2 border-black/10">
+              <span className="font-display font-black text-[11px] uppercase text-black flex items-center gap-1.5">
+                <Send className="h-3.5 w-3.5 text-emerald-600" /> Live Delivery Recipients
               </span>
-              <span className="font-mono text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
-                LIVE API READY
+              <span className="font-mono text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                LIVE API
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-mono text-[11px] font-bold text-black mb-1 flex items-center gap-1">
-                  <Mail className="h-3.5 w-3.5 text-cyan-600" /> Live Recipient Email:
+                <label className="font-mono text-[10px] font-black text-black mb-1 flex items-center gap-1">
+                  <Mail className="h-3 w-3 text-cyan-600" />
+                  <span className="bg-cyan-100 text-cyan-800 px-1 rounded border border-cyan-300">Recipient Email</span>
                 </label>
                 <input
                   type="email"
                   value={recipientEmail}
                   onChange={(e) => setRecipientEmail(e.target.value)}
-                  placeholder="your-email@example.com"
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-cyan-50/50 text-black shadow-[2px_2px_0_0_#000] focus:outline-none focus:bg-white"
+                  placeholder="name@example.com"
+                  className="w-full border-2 border-cyan-400 p-2 font-mono text-xs bg-cyan-50 text-black shadow-[2px_2px_0_0_#0891b2] focus:outline-none focus:border-cyan-600"
                 />
-                <span className="text-[9px] font-mono text-gray-500 mt-0.5 block">
-                  Triggers real SendGrid / Gmail App Password delivery.
-                </span>
               </div>
-
               <div>
-                <label className="font-mono text-[11px] font-bold text-black mb-1 flex items-center gap-1">
-                  <Phone className="h-3.5 w-3.5 text-emerald-600" /> Live Recipient Phone:
+                <label className="font-mono text-[10px] font-black text-black mb-1 flex items-center gap-1">
+                  <Phone className="h-3 w-3 text-emerald-600" />
+                  <span className="bg-emerald-100 text-emerald-800 px-1 rounded border border-emerald-300">Recipient Phone</span>
                 </label>
                 <input
                   type="tel"
                   value={recipientPhone}
                   onChange={(e) => setRecipientPhone(e.target.value)}
                   placeholder="+919876543210"
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-emerald-50/50 text-black shadow-[2px_2px_0_0_#000] focus:outline-none focus:bg-white"
+                  className="w-full border-2 border-emerald-400 p-2 font-mono text-xs bg-emerald-50 text-black shadow-[2px_2px_0_0_#059669] focus:outline-none focus:border-emerald-600"
                 />
-                <span className="text-[9px] font-mono text-gray-500 mt-0.5 block">
-                  Triggers real Twilio / MSG91 SMS delivery.
-                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-mono text-[11px] font-bold text-black mb-1 block">Brand / Company Name:</label>
+                <label className="font-mono text-[10px] font-bold text-black mb-1 block">Brand / Company:</label>
                 <input
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. Acme Corp / Your Brand"
+                  placeholder="e.g. Acme Corp"
                   className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-[2px_2px_0_0_#000]"
                 />
               </div>
               <div>
-                <label className="font-mono text-[11px] font-bold text-black mb-1 block">Sender Name:</label>
+                <label className="font-mono text-[10px] font-bold text-black mb-1 block">Sender Name:</label>
                 <input
                   type="text"
                   value={senderName}
                   onChange={(e) => setSenderName(e.target.value)}
-                  placeholder="e.g. Growth Team / Sarah"
+                  placeholder="e.g. Growth Team"
                   className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-[2px_2px_0_0_#000]"
                 />
               </div>
@@ -205,52 +307,53 @@ export function TargetAudienceModal({ isOpen, onClose, onLaunch, initialPrompt }
 
           {/* Active Channels */}
           <div>
-            <label className="font-display font-black text-xs uppercase tracking-wider text-black mb-1.5 flex items-center gap-1.5">
-              <Sliders className="h-4 w-4 text-pink-600" />
-              Active Channels:
+            <label className="font-display font-black text-[11px] uppercase tracking-wider text-black mb-2 flex items-center gap-1.5">
+              <Sliders className="h-3.5 w-3.5 text-pink-600" /> Active Channels:
             </label>
             <div className="flex flex-wrap gap-2">
-              {["email", "sms", "social", "whatsapp", "voice"].map((ch) => (
+              {CHANNEL_OPTIONS.map(({ id, label, icon }) => (
                 <button
                   type="button"
-                  key={ch}
-                  onClick={() => toggleChannel(ch)}
-                  className={`px-3 py-1.5 border-2 border-black font-mono text-xs font-bold uppercase transition-all shadow-[2px_2px_0_0_#000] ${
-                    channels.includes(ch)
-                      ? "bg-neo-pink text-black"
+                  key={id}
+                  onClick={() => toggleChannel(id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border-2 border-black font-mono text-xs font-bold uppercase transition-all shadow-[2px_2px_0_0_#000] hover:-translate-x-px hover:-translate-y-px active:shadow-none ${
+                    channels.includes(id)
+                      ? "bg-neo-pink text-black shadow-[3px_3px_0_0_#000]"
                       : "bg-white text-gray-400 hover:text-black"
                   }`}
                 >
-                  {channels.includes(ch) ? "✓ " : "+ "}{ch}
+                  <span>{icon}</span>
+                  {channels.includes(id) ? "✓ " : ""}{label}
                 </button>
               ))}
             </div>
+            <p className="font-mono text-[9px] text-black/50 mt-1.5">
+              Only agents for selected channels will activate in the pipeline.
+            </p>
           </div>
 
-          {/* Verification Callout */}
-          <div className="border-2 border-black bg-neo-lime/30 p-3 flex items-center gap-3 text-xs font-mono font-bold text-black shadow-[2px_2px_0_0_#000]">
-            <ShieldCheck className="h-5 w-5 text-emerald-700 flex-shrink-0" />
-            <span>
-              All API keys (Gemini 2.5 Flash, Groq, Twilio, SendGrid, MSG91) are active & verified in real-time. No mock data.
-            </span>
+          {/* Verification notice */}
+          <div className="border-2 border-black bg-neo-lime/30 p-3 flex items-center gap-2 text-[10px] font-mono font-bold text-black shadow-[2px_2px_0_0_#000]">
+            <ShieldCheck className="h-4 w-4 text-emerald-700 flex-shrink-0" />
+            <span>Keys verified: Gemini 2.5 Flash · Groq · Twilio · SendGrid · MSG91 — All live.</span>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="border-2 border-black bg-white px-4 py-2.5 font-display text-xs font-black uppercase text-black shadow-[3px_3px_0_0_#000] hover:bg-gray-100 active:translate-x-0 active:translate-y-0 active:shadow-none"
+              className="border-2 border-black bg-white px-4 py-2.5 font-display text-xs font-black uppercase text-black shadow-[3px_3px_0_0_#000] hover:bg-gray-100 active:shadow-none"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 border-2 border-black bg-neo-yellow px-6 py-2.5 font-display text-xs font-black uppercase text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_0_#000] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all"
+              className="flex items-center gap-2 border-2 border-black bg-neo-yellow px-6 py-2.5 font-display text-xs font-black uppercase text-black shadow-[4px_4px_0_0_#000] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_0_#000] active:shadow-none transition-all disabled:opacity-50"
             >
-              <Send className="h-4 w-4" />
-              {isSubmitting ? "Dispatching..." : "Launch Real-Time AI Campaign"}
+              <Sparkles className="h-4 w-4" />
+              {isSubmitting ? "Launching..." : "Launch Campaign"}
             </button>
           </div>
         </form>

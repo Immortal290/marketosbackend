@@ -349,12 +349,6 @@ export default function MissionControlPage() {
     const prompt = audienceData?.query || commandInput;
     if (!prompt.trim()) return;
 
-    // AI Recognition: Automatically land the Audience & Brand Parameter pop-up if launching a campaign without saved params
-    if (!audienceData && !forceExecute && (prompt.toLowerCase().includes("campaign") || prompt.toLowerCase().includes("launch") || prompt.toLowerCase().includes("promote") || prompt.toLowerCase().includes("offer"))) {
-      setIsAudienceModalOpen(true);
-      return;
-    }
-
     setIsExecuting(true);
     setShowSugg(false);
     setSseEvents([]);
@@ -391,7 +385,7 @@ export default function MissionControlPage() {
           target_audience: audienceData?.targetAudience,
           sender_name: audienceData?.senderName,
           company_name: audienceData?.companyName,
-          channels: audienceData?.channels,
+          channels: audienceData?.channels || [],
         }),
       }).catch(() => null);
 

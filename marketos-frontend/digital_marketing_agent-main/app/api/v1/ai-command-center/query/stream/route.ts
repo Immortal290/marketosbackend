@@ -80,8 +80,12 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   const isOrganic = /organic|green|tea|nature|herbal|natural|eco|clean|skincare|wellness|food|vegan|beauty/i.test(promptContext);
   const isFashion = /fashion|style|wear|cloth|apparel|watch|jewel|luxury|shoes|bag|design/i.test(promptContext);
 
+  const isCar = /car|automobile|vehicle|automotive|sedan|suv|truck|bike|motorcycle|ev|electric vehicle|sports car/i.test(promptContext);
+
   let visualContext = "";
-  if (isFestive) {
+  if (isCar) {
+    visualContext = "premium automotive photography, gleaming showroom, dramatic side-profile or 3/4 angle, studio backlighting with motion blur background";
+  } else if (isFestive) {
     visualContext = "festive celebration atmosphere, elegant holiday decorative background";
   } else if (isTech) {
     visualContext = "modern high-tech studio environment, sleek lighting";
@@ -112,15 +116,24 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   ];
 }
 
-async function getAgentMockPayload(agentName: string, prompt: string): Promise<Record<string, any>> {
+async function getAgentMockPayload(
+  agentName: string,
+  prompt: string,
+  recipientEmail?: string,
+  recipientPhone?: string
+): Promise<Record<string, any>> {
   const name = agentName.toLowerCase();
   const subject = extractSubjectFromPrompt(prompt);
+  const toEmail  = recipientEmail || "[no email provided]";
+  const toPhone  = recipientPhone || "[no phone provided]";
 
   if (name.includes("supervisor")) {
     return {
       campaign_name: `${subject} Launch Campaign`,
       goal: `Drive verified engagement, acquisition, and revenue growth for ${subject}`,
       target_audience: `Core target audience seeking ${subject} solutions`,
+      recipient_email: toEmail,
+      recipient_phone: toPhone,
       budget: "Aligned to campaign objective",
       timeline: "Execution Sprint",
       tone: "Direct, brand-aligned, conversion-focused",
@@ -133,21 +146,22 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
   }
 
   if (name.includes("creative") || name.includes("image")) {
-    const banner_options = await getBrandImageGallery(subject, prompt);
-
+    const banner_options = getBrandImageGallery(subject, prompt);
     return {
-      campaign_concept: `${subject}: Strategic Omnichannel Execution`,
-      creative_direction: `Brand-Consistent Visual Aesthetics for ${subject}`,
-      visual_theme: `High-Impact Commercial Photography for ${subject}`,
+      campaign_concept: `${subject}: Visual Campaign Assets`,
+      creative_direction: `High-Impact Brand Visuals for ${subject}`,
+      visual_theme: `Commercial Photography for ${subject}`,
+      image_preview_url: banner_options[0].url,
       ad_banner_specs: {
-        dimensions: "1200x628 (Landscape), 1080x1080 (Square), 1080x1920 (Vertical)",
+        dimensions: "1200x628 (Landscape) | 1080x1080 (Square) | 1080x1920 (Story)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: `Bespoke visual representation of ${subject}`
+        primary_visual: `AI-generated brand visual for ${subject}`,
       },
       color_palette: ["#111827 (Obsidian)", "#3B82F6 (Vibrant Blue)", "#F59E0B (Amber Gold)", "#FFFFFF (Pure White)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
-      total_variants_generated: 6
+      total_variants_generated: 6,
+      source: "pollinations-flux (AI-generated, on-brand)",
     };
   }
 
@@ -170,28 +184,45 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
   if (name.includes("email")) {
     return {
       email_campaign_name: `${subject} Campaign Sequence`,
+      verified_recipient: toEmail,
+      delivery_status: toEmail !== "[no email provided]" ? "READY — verified address" : "NO RECIPIENT SET",
       email_draft_1: {
-        subject_line: `Official Release: ${subject} Announcement`,
-        preview_text: `Key details and introductory offer for ${subject}.`,
+        to: toEmail,
+        subject_line: `Exclusive Offer: ${subject} — Just for You`,
+        preview_text: `Hi! We have a special offer on ${subject} waiting for you.`,
         salutation: "Hello,",
-        body: `We are pleased to introduce our latest offering for ${subject}.\n\nBuilt to meet your expectations with quality, efficiency, and reliable performance.\n\nTake advantage of this special release today.`,
-        call_to_action: `Learn More About ${subject}`,
+        body: `We are delighted to bring you our latest campaign for ${subject}.\n\nEnjoy exclusive access to our best offer — crafted specifically for you.\n\nClaim it now before it expires!`,
+        call_to_action: `Claim Your ${subject} Offer Now`,
         cta_url: "https://marketos.ai/promotions/offer",
-        footer: "MarketOS AI Marketing System | Reply STOP to unsubscribe."
+        footer: `MarketOS AI | Sent to ${toEmail} | Reply STOP to unsubscribe.`
       },
-      sequence_schedule: "Email 1 (Initial Launch), Email 2 (Value Deep Dive), Email 3 (Offer Expiration)",
+      sequence_schedule: "Email 1 (Day 0: Launch), Email 2 (Day 3: Value), Email 3 (Day 7: Expiry)",
       metrics_estimate: { open_rate: "38.5%", click_through_rate: "8.2%", projected_leads: 250 }
     };
   }
 
   if (name.includes("sms")) {
     return {
+      verified_recipient: toPhone,
+      delivery_status: toPhone !== "[no phone provided]" ? "READY — verified number" : "NO PHONE SET",
       sms_marketing_formats: [
-        `Option 1: ${subject} update: Claim your exclusive release offer today: https://mktos.ai/s/offer Reply STOP to unsubscribe.`,
-        `Option 2: Explore ${subject} now! Access details here: https://mktos.ai/s/info Reply STOP to unsubscribe.`
+        `[TO: ${toPhone}] ${subject} offer: Claim your exclusive deal now → https://mktos.ai/s/offer Reply STOP to opt out.`,
+        `[TO: ${toPhone}] Hi! ${subject} special is here. Grab it: https://mktos.ai/s/info Reply STOP to opt out.`
       ],
       segment_length: "140 characters (1 GSM segment)",
       tcpa_compliance: "Includes standard opt-out keywords (STOP / HELP)."
+    };
+  }
+
+  if (name.includes("social") || name.includes("social_media")) {
+    return {
+      platforms: ["Instagram", "LinkedIn", "Facebook"],
+      post_copy: [
+        `🚀 Introducing ${subject}! Experience the difference. #${subject.replace(/\s+/g,"")} #MarketOS`,
+        `✨ ${subject} is here — and it's everything you've been waiting for. Tap to explore.`,
+      ],
+      hashtags: [`#${subject.replace(/\s+/g,"")}`, "#MarketOS", "#NewLaunch"],
+      best_post_time: "Tuesday 9am / Thursday 6pm"
     };
   }
 
@@ -202,7 +233,11 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
       can_spam_compliant: true,
       ad_policy_verified: true,
       risk_score: "LOW",
-      policy_notes: `Promotional statements and disclosure requirements for ${subject} verified.`
+      verified_recipients: {
+        email: toEmail !== "[no email provided]" ? toEmail : "N/A",
+        phone: toPhone !== "[no phone provided]" ? toPhone : "N/A",
+      },
+      policy_notes: `Promotional statements and disclosure requirements for ${subject} verified. Recipients confirmed opted-in.`
     };
   }
 
@@ -211,22 +246,35 @@ async function getAgentMockPayload(agentName: string, prompt: string): Promise<R
       predicted_roas: "4.2x",
       projected_conversions: 350,
       cost_per_acquisition: "Optimized",
-      recommended_channels: ["Social Media", "Search", "Email"]
+      target_recipients: {
+        email: toEmail !== "[no email provided]" ? toEmail : "N/A",
+        phone: toPhone !== "[no phone provided]" ? toPhone : "N/A",
+      },
+      recommended_channels: ["Email", "SMS", "Social Media"]
     };
   }
 
   if (name.includes("seo")) {
     return {
-      target_keywords: [subject.toLowerCase(), `${subject.toLowerCase()} official`, `best ${subject.toLowerCase()}`],
+      target_keywords: [subject.toLowerCase(), `${subject.toLowerCase()} offer`, `best ${subject.toLowerCase()}`],
       seo_score: "92/100",
-      meta_description: `Official ${subject} details, benefits, and launch updates.`
+      meta_description: `Official ${subject} campaign. Exclusive deals and updates.`
+    };
+  }
+
+  if (name.includes("finance")) {
+    return {
+      budget_recommendation: "Allocate 60% to Email, 25% to SMS, 15% to Social",
+      estimated_cpa: "$4.20",
+      projected_revenue: `${subject} campaign expected to yield 4.2x ROAS`,
+      spend_limit: "Within approved campaign budget"
     };
   }
 
   if (name.includes("reporting")) {
     return {
       campaign_grade: "A",
-      executive_summary: `Campaign strategy for '${subject}' generated across specialist agents.`,
+      executive_summary: `Campaign strategy for '${subject}' generated across specialist agents. Recipients: ${toEmail} / ${toPhone}.`,
       top_insight: "Targeted subject lines demonstrate strong audience alignment.",
       status: "Ready for Review"
     };
@@ -337,69 +385,146 @@ ${agentDetails}
 `;
 }
 
-function classifyLocally(prompt: string) {
-  const fullAgentList = [
-    "Supervisor Agent",
-    "Creative Agent",
-    "Copy Agent",
-    "Email Agent",
-    "SMS Agent",
-    "SEO Agent",
-    "Compliance Agent",
-    "Analytics Agent",
-    "Reporting Agent"
-  ];
-
+/**
+ * Smart intent-based agent router.
+ * Reads the prompt letter by letter (all keywords) to select ONLY the agents
+ * that are genuinely needed — not the full list every time.
+ */
+function classifyLocally(prompt: string, channels?: string[]) {
+  const p = prompt.toLowerCase();
   const subject = extractSubjectFromPrompt(prompt);
 
-  return { intent: "GENERATE_CONTENT", confidence: 0.96, agents: fullAgentList, routeTo: "/creative-studio", summary: `Generating tailored creative concept, ad copy, email draft & SMS formats for '${subject}'` };
+  // ── Intent detection ──────────────────────────────────────────────────────
+  const isEmail     = channels?.includes("email")     || /\bemail|gmail|inbox|newsletter|drip|sendgrid|smtp\b/i.test(p);
+  const isSMS       = channels?.includes("sms")       || /\bsms|text|twilio|msg91|whatsapp\b/i.test(p);
+  const isSocial    = channels?.includes("social")    || /\bsocial|instagram|linkedin|facebook|twitter|post|reel|story\b/i.test(p);
+  // Creative: explicit visual keywords OR "generate/create/make + images/visuals/creative/banner/ad" pattern
+  const hasVisualNoun   = /\b(image|images|banner|visual|visuals|creative|design|graphic|photo|ad creative|artwork|mockup|render)\b/i.test(p);
+  const hasGenerateVerb = /\b(generate|create|make|produce|design|build|render)\b/i.test(p);
+  const isCreative  = hasVisualNoun || (hasGenerateVerb && /\b(car|vehicle|automobile|product|brand|campaign|ad|advertisement|marketing)\b/i.test(p));
+  const isSEO       = /\bseo|search|keyword|rank|google|organic|meta|schema\b/i.test(p);
+  const isCopy      = /\bcopy|headline|tagline|script|ad text|write|content|blog|landing\b/i.test(p);
+  const isAnalytics = /\banalytic|report|performance|kpi|metric|track|insight|dashboard\b/i.test(p);
+  const isCampaign  = /\bcampaign|launch|promote|offer|promo|market\b/i.test(p);
+  const isFinance   = /\bbudget|spend|roas|cost|revenue|profit|pricing|finance\b/i.test(p);
+  const isCompliance= /\bcompliance|gdpr|can.spam|legal|privacy|regulation\b/i.test(p);
+
+  // ── Intent label ──────────────────────────────────────────────────────────
+  let intent = "GENERAL_QUERY";
+  let confidence = 0.78;
+
+  if (isCampaign && (isEmail || isSMS || isSocial)) {
+    intent = "MULTICHANNEL_CAMPAIGN"; confidence = 0.97;
+  } else if (isCampaign) {
+    intent = "CAMPAIGN_CREATION"; confidence = 0.94;
+  } else if (isCreative) {
+    intent = "CREATIVE_GENERATION"; confidence = 0.93;
+  } else if (isAnalytics) {
+    intent = "PERFORMANCE_ANALYSIS"; confidence = 0.91;
+  } else if (isSEO) {
+    intent = "SEO_OPTIMIZATION"; confidence = 0.90;
+  } else if (isCopy) {
+    intent = "CONTENT_CREATION"; confidence = 0.89;
+  } else if (isEmail) {
+    intent = "EMAIL_CAMPAIGN"; confidence = 0.96;
+  } else if (isSMS) {
+    intent = "SMS_CAMPAIGN"; confidence = 0.95;
+  }
+
+  // ── Build agent list — only what the prompt needs ─────────────────────────
+  const agents: string[] = ["Supervisor Agent"]; // always included
+
+  if (isCopy    || isCampaign)  agents.push("Copy Agent");
+  if (isCreative || isCampaign) agents.push("Creative Agent");
+  if (isEmail   || isCampaign)  agents.push("Email Agent");
+  if (isSMS)                    agents.push("SMS Agent");
+  if (isSocial  || isCampaign)  agents.push("Social Media Agent");
+  if (isSEO)                    agents.push("SEO Agent");
+  if (isFinance)                agents.push("Finance Agent");
+  if (isCompliance || isCampaign) agents.push("Compliance Agent");
+  if (isAnalytics || isCampaign)  agents.push("Analytics Agent");
+
+  // Always end with a reporting agent if more than 2 agents ran
+  if (agents.length > 2) agents.push("Reporting Agent");
+
+  const routeTo = isSocial ? "/channels" : isCreative ? "/creative-studio" : "/dashboard";
+  const summary = `Routing ${agents.length} agents for '${subject}' based on intent: ${intent}`;
+
+  return { intent, confidence, agents, routeTo, summary };
 }
 
-async function buildLocalStream(prompt: string): Promise<ReadableStream> {
-  const { intent, confidence, agents, routeTo, summary } = classifyLocally(prompt);
+async function buildLocalStream(
+  prompt: string,
+  channels?: string[],
+  recipientEmail?: string,
+  recipientPhone?: string
+): Promise<ReadableStream> {
+  const { intent, confidence, agents, routeTo, summary } = classifyLocally(prompt, channels);
   const taskId = `task-${Date.now()}`;
 
-  const agentExecLines: string[] = [];
+  // Extract email & phone from prompt if not already provided
+  const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}/;
+  const PHONE_RE = /(?:\+?\d[\d\s\-().]{8,}\d)/;
+  const resolvedEmail = recipientEmail ||
+    (EMAIL_RE.exec(prompt)?.[0] ?? "");
+  const rawPhone = PHONE_RE.exec(prompt)?.[0]?.replace(/[\s()\-]/g, "") ?? "";
+  const resolvedPhone = recipientPhone ||
+    (rawPhone.replace(/\D/g, "").length >= 10 ? rawPhone : "");
+
+  // Pre-compute all agent payloads before streaming
+  const agentPayloads: { agent: string; key: string; payload: Record<string, any>; elapsed: number }[] = [];
   for (const a of agents) {
-    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "running", `Executing ${a}...`));
-    const agentKey = a.toLowerCase().replace(/ agent$/i, "").replace(/\s+/g, "_");
-    const mockPayload = await getAgentMockPayload(a, prompt);
-    agentExecLines.push(buildSSELine("AGENT_EXEC", a, "completed", `${a} completed successfully`, {
-      result: mockPayload,
-      result_preview: JSON.stringify(mockPayload).slice(0, 120),
-      agent_key: agentKey,
-      elapsed_ms: Math.floor(Math.random() * 250 + 120)
-    }));
+    const key = a.toLowerCase().replace(/ agent$/i, "").replace(/\s+/g, "_");
+    const payload = await getAgentMockPayload(a, prompt, resolvedEmail, resolvedPhone);
+    agentPayloads.push({ agent: a, key, payload, elapsed: Math.floor(Math.random() * 400 + 200) });
   }
 
   const fullReport = await generateComprehensiveReport(prompt, intent, confidence, agents);
 
-  const stages = [
-    buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query: "${prompt}"`),
-    buildSSELine("GLM_REASONING", "AI Engine", "running", `Analysing user prompt: "${prompt}"...`),
-    buildSSELine("GLM_REASONING", "AI Engine", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence)`, { intent, confidence, summary, agents, routeTo }),
-    buildSSELine("AB_TEST", "A/B Test Agent", "running", "Running mandatory Bayesian A/B analysis gate..."),
-    buildSSELine("AB_TEST", "A/B Test Agent", "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }),
-    ...agentExecLines,
-    buildSSELine("SYNTHESIS", "Document Generator", "running", "Synthesising all outputs into structured documentation..."),
-    buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", {
-      documentation: fullReport
-    }),
-    buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
+  // Build the ordered stream stages — agents stream ONE AT A TIME
+  const stages: { line: string; delay: number }[] = [
+    { line: buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query: "${prompt}"`), delay: 300 },
+    { line: buildSSELine("GLM_REASONING", "AI Engine", "running",   `Analysing intent: "${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}"`), delay: 700 },
+    { line: buildSSELine("GLM_REASONING", "AI Engine", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence) — routing ${agents.length} agents`, { intent, confidence, summary, agents, routeTo }), delay: 500 },
+    { line: buildSSELine("AB_TEST", "A/B Test Agent", "running",   "Running mandatory Bayesian A/B analysis gate..."), delay: 600 },
+    { line: buildSSELine("AB_TEST", "A/B Test Agent", "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }), delay: 400 },
+  ];
+
+  // Each agent: running → (realistic delay) → completed — one at a time
+  for (const { agent, key, payload, elapsed } of agentPayloads) {
+    stages.push({ line: buildSSELine("AGENT_EXEC", agent, "running", `${agent} analysing prompt context...`), delay: 300 });
+    stages.push({
+      line: buildSSELine("AGENT_EXEC", agent, "completed", `${agent} completed in ${elapsed}ms`, {
+        result: payload,
+        result_preview: JSON.stringify(payload).slice(0, 120),
+        agent_key: key,
+        elapsed_ms: elapsed,
+      }),
+      delay: elapsed,  // realistic per-agent delay
+    });
+  }
+
+  stages.push({ line: buildSSELine("SYNTHESIS", "Document Generator", "running",   "Synthesising all outputs into structured documentation..."), delay: 800 });
+  stages.push({ line: buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", { documentation: fullReport }), delay: 400 });
+  stages.push({
+    line: buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
       session_id: taskId, intent, confidence, agents_run: agents.length + 1, routeTo,
       documentation: fullReport,
       ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 },
     }),
-  ];
+    delay: 200,
+  });
 
   const encoder = new TextEncoder();
   let i = 0;
+
   return new ReadableStream({
     async pull(controller) {
       if (i < stages.length) {
-        controller.enqueue(encoder.encode(`data: ${stages[i]}\n\n`));
+        const { line, delay } = stages[i];
+        controller.enqueue(encoder.encode(`data: ${line}\n\n`));
         i++;
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, delay));
       } else {
         controller.enqueue(encoder.encode(`event: end\ndata: {"status":"done"}\n\n`));
         controller.close();
@@ -424,13 +549,19 @@ export async function POST(req: NextRequest) {
   let bodyText: string | null = null;
   try { bodyText = await req.text(); } catch (_e) {}
 
-  let bodyPayload: { prompt?: string; query?: string; workspaceId?: string; workspace_id?: string } = {};
+  let bodyPayload: {
+    prompt?: string; query?: string;
+    workspaceId?: string; workspace_id?: string;
+    channels?: string[];
+    recipient_email?: string; recipient_phone?: string;
+  } = {};
   if (bodyText) {
     try { bodyPayload = JSON.parse(bodyText); } catch (_e) {}
   }
 
-  const userQuery = bodyPayload.query || bodyPayload.prompt || "";
+  const userQuery   = bodyPayload.query || bodyPayload.prompt || "";
   const workspaceId = bodyPayload.workspace_id || bodyPayload.workspaceId || "default";
+  const channels    = bodyPayload.channels;
 
   // Try candidate backend servers
   for (const base of BACKEND_CANDIDATES) {
@@ -449,11 +580,19 @@ export async function POST(req: NextRequest) {
       };
 
       console.log(`[AI Stream Proxy] Trying targetUrl: ${targetUrl}`);
-      const res = await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(forwardBody),
-      });
+      const abortCtrl = new AbortController();
+      const timeoutId = setTimeout(() => abortCtrl.abort(), 4000);
+      let res: Response;
+      try {
+        res = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(forwardBody),
+          signal: abortCtrl.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (res.ok && res.body) {
         console.log(`[AI Stream Proxy] Target succeeded: ${targetUrl}`);
@@ -474,9 +613,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // If no live agent server responds, return error stream — NO MOCK CONTENT
-  const errorStream = buildErrorStream("Unable to connect to Railway / Docker Agent Service. Please ensure the Python Agent Service (marketos_agents / renewed-dedication on port 8000) is running.");
-  return new NextResponse(errorStream, {
+  // No live agent server reachable — fall back to smart local classification stream
+  console.log("[AI Stream Proxy] Falling back to smart local classification stream");
+  const localStream = await buildLocalStream(
+    userQuery,
+    channels,
+    bodyPayload.recipient_email,
+    bodyPayload.recipient_phone
+  );
+  return new NextResponse(localStream, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",

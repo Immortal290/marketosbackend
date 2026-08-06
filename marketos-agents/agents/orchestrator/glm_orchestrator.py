@@ -31,13 +31,14 @@ from utils.kafka_bus import publish_event, Topics
 # ── Intent → Agent mapping ────────────────────────────────────────────────────
 
 INTENT_AGENT_MAP: dict[str, list[str]] = {
-    "CREATE_CAMPAIGN":      ["supervisor", "copy", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
+    "CREATE_CAMPAIGN":      ["supervisor", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
     "GENERATE_CONTENT":     ["copy", "image", "compliance", "seo"],
+    "VISUAL_CAMPAIGN":      ["supervisor", "copy", "image", "compliance", "social_media", "analytics", "reporting"],
     "ANALYZE_PERFORMANCE":  ["analytics", "monitor", "reporting"],
     "AB_TEST_ANALYSIS":     ["analytics", "reporting"],
     "SEO_AUDIT":            ["seo", "competitor"],
     "LEAD_SCORING":         ["lead_scoring", "analytics"],
-    "EMAIL_CAMPAIGN":       ["copy", "compliance", "email", "analytics"],
+    "EMAIL_CAMPAIGN":       ["copy", "image", "compliance", "email", "analytics"],
     "SMS_CAMPAIGN":         ["copy", "sms", "analytics"],
     "SOCIAL_CAMPAIGN":      ["copy", "image", "social_media", "analytics"],
     "COMPETITOR_ANALYSIS":  ["competitor", "seo", "reporting"],
@@ -68,6 +69,7 @@ AGENT_DISPLAY_NAMES: dict[str, str] = {
 ROUTE_MAP: dict[str, str] = {
     "CREATE_CAMPAIGN":      "/campaigns",
     "GENERATE_CONTENT":     "/creative-studio",
+    "VISUAL_CAMPAIGN":      "/creative-studio",
     "ANALYZE_PERFORMANCE":  "/reports",
     "AB_TEST_ANALYSIS":     "/reports",
     "SEO_AUDIT":            "/reports",
@@ -87,9 +89,25 @@ INTENT_CLASSIFIER_PROMPT = """You are the Master Orchestrator of MarketOS, an AI
 Your role is to precisely understand user intent and build a strategic routing plan for specialist agents.
 
 CLASSIFY the user's request into exactly ONE of these intents:
-  CREATE_CAMPAIGN | GENERATE_CONTENT | ANALYZE_PERFORMANCE | AB_TEST_ANALYSIS |
-  SEO_AUDIT | LEAD_SCORING | EMAIL_CAMPAIGN | SMS_CAMPAIGN | SOCIAL_CAMPAIGN |
-  COMPETITOR_ANALYSIS | FINANCE_REVIEW | ONBOARDING | GENERAL_QUERY
+  CREATE_CAMPAIGN   — launch a full multi-channel marketing campaign
+  VISUAL_CAMPAIGN   — generate images, visuals, creative assets, banners, or product photos for marketing
+  GENERATE_CONTENT  — write copy, content, scripts, or creative text (no full campaign)
+  ANALYZE_PERFORMANCE — report on existing campaign results, KPIs, metrics
+  AB_TEST_ANALYSIS  — A/B test analysis
+  SEO_AUDIT         — SEO analysis, keyword research
+  LEAD_SCORING      — lead or audience scoring
+  EMAIL_CAMPAIGN    — email-only campaign or newsletter
+  SMS_CAMPAIGN      — SMS / text message campaign only
+  SOCIAL_CAMPAIGN   — social media posts, reels, stories
+  COMPETITOR_ANALYSIS — competitor/market research
+  FINANCE_REVIEW    — budget, spend, ROAS, revenue
+  ONBOARDING        — workspace setup, channel connection
+  GENERAL_QUERY     — anything else
+
+KEY RULES:
+- If the user asks to GENERATE IMAGES, VISUALS, BANNERS, or CREATIVE ASSETS for a product/brand → use VISUAL_CAMPAIGN
+- If the user asks to CREATE / LAUNCH a full CAMPAIGN → use CREATE_CAMPAIGN
+- If channels mentioned include images/visuals/creative in a campaign → use CREATE_CAMPAIGN and include image agent
 
 RESPOND with ONLY a valid JSON object:
 {

@@ -6,7 +6,10 @@ COPY package*.json    ./
 COPY prisma           ./prisma/
 COPY prisma.config.ts ./
 
-RUN npm ci
+RUN npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5 && \
+    npm ci
 
 # ── Stage 2: Build TypeScript ─────────────────────────────────────────────────
 FROM node:22-slim AS builder
@@ -34,7 +37,10 @@ ENV NODE_ENV=production
 
 # Production-only Node deps
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5 && \
+    npm ci --omit=dev
 
 # Compiled API + Prisma artifacts
 COPY --from=builder /app/prisma            ./prisma/

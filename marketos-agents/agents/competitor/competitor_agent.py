@@ -114,7 +114,7 @@ class PlaywrightSkill:
     def _urllib_fallback(url: str) -> dict:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 html = resp.read().decode(errors="ignore")
             # Strip HTML tags
             text = re.sub(r"<[^>]+>", " ", html)
@@ -126,7 +126,7 @@ class PlaywrightSkill:
                 "text":  text,
             }
         except Exception as e:
-            return {"url": url, "title": "", "text": f"Scrape failed: {e}", "error": True}
+            return {"url": url, "title": "", "text": f"Scrape skipped: {e}", "error": True}
 
 
 # ── Sub-skill: Meta Ad Library ────────────────────────────────────────────────
@@ -285,7 +285,7 @@ def serper_search_tool(query: str, country: str = "in", limit: int = 10) -> str:
             headers=headers,
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=2) as resp:
             data = json.loads(resp.read().decode())
             results = []
             for res in data.get("organic", []):

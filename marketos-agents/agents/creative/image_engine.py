@@ -34,40 +34,41 @@ from utils.kafka_bus import publish_event, Topics
 def image_agent_node(state: dict) -> dict:
     step_banner("IMAGE AGENT  ─  AI Visual Generation Engine")
 
-    plan_data = state.get("campaign_plan", {})
-    channels  = plan_data.get("channels", [])
+    plan_data    = state.get("campaign_plan", {})
+    user_intent  = state.get("user_intent") or plan_data.get("original_user_prompt", "") or ""
+    copy_data    = state.get("copy_output")
 
-    if "email" not in channels and "social" not in channels:
-        agent_log("IMAGE", "Skipping Image Agent — no applicable channels selected.")
-        return {**state, "current_step": "compliance_agent"}
+    # ── Determine creative prompt ─────────────────────────────────────────────
+    # Priority: (1) winning copy variant's hero_image_prompt, (2) user_intent directly
+    winner   = None
+    variants = []
+    prompt   = None
+    query    = None
 
-    copy_data = state.get("copy_output")
-    if not isinstance(copy_data, dict):
-        agent_log("IMAGE", "No copy_output found — skipping Image Agent.")
-        return {**state, "current_step": "compliance_agent"}
+    if isinstance(copy_data, dict):
+        selected_id = copy_data.get("selected_variant_id")
+        variants    = copy_data.get("variants") or []
+        winner      = next(
+            (v for v in variants if isinstance(v, dict) and v.get("variant_id") == selected_id),
+            variants[0] if variants else None,
+        )
+        if isinstance(winner, dict):
+            query  = winner.get("hero_image_query")
+            prompt = winner.get("hero_image_prompt") or query
 
-    # ── Find winning variant ─────────────────────────────────────────────────
-    selected_id = copy_data.get("selected_variant_id")
-    variants    = copy_data.get("variants") or []
-    winner      = next(
-        (v for v in variants if isinstance(v, dict) and v.get("variant_id") == selected_id),
-        variants[0] if variants else None,
-    )
-
-    if not isinstance(winner, dict):
-        err = f"Winning variant '{selected_id}' not found in copy_output"
-        agent_log("IMAGE", f"ERROR — {err}")
-        return {**state, "errors": state.get("errors", []) + [err], "current_step": "failed"}
-
-    # hero_image_query is read for logging only — no longer hits a stock photo API.
-    # hero_image_prompt drives generation (AI-generated, always on-brand).
-    query  = winner.get("hero_image_query")
-    prompt = winner.get("hero_image_prompt") or query
+    # Fallback: derive creative prompt directly from user intent / campaign context
+    if not prompt and user_intent:
+        subject = plan_data.get("campaign_name") or user_intent[:80]
+        prompt  = (
+            f"Professional marketing campaign visual for: {user_intent[:200]}. "
+            f"Product/subject: {subject}. "
+            "High-quality advertising photography, studio lighting, vibrant brand colors."
+        )
+        agent_log("IMAGE", f"No copy_output — building prompt from user intent: {prompt[:80]}...")
 
     if not prompt:
-        agent_log("IMAGE", "⚠ No hero_image_prompt provided — sending text-only email")
-        return _finalize(state, copy_data, winner, variants,
-                         img_b64=None, img_type=None, source=None)
+        agent_log("IMAGE", "⚠ No prompt available — skipping Image Agent")
+        return {**state, "current_step": "compliance_agent"}
 
     agent_log("IMAGE", f"Creative prompt: {prompt[:120]}...")
     if query:
@@ -107,23 +108,26 @@ def image_agent_node(state: dict) -> dict:
             agent_log("IMAGE", "⚠ Pollinations generation failed — no image secured")
 
     return _finalize(state, copy_data, winner, variants,
-                     img_b64, img_type, source, total_token_usage)
+                     img_b64, img_type, source, total_token_usage,
+                     full_prompt=full_prompt)
 
 
 # ── Finalization: HTML injection + state update + Kafka ───────────────────────
 
 def _finalize(
     state:      dict,
-    copy_data:  dict,
-    winner:     dict,
+    copy_data:  dict | None,
+    winner:     dict | None,
     variants:   list,
     img_b64:    str | None,
     img_type:   str | None,
     source:     str | None,
     total_token_usage: int = 0,
+    full_prompt: str = "",
 ) -> dict:
+    plan_data = state.get("campaign_plan", {})
 
-    if img_b64:
+    if img_b64 and isinstance(winner, dict):
         img_tag = (
             '<img src="cid:hero_image" width="600" '
             'style="display:block;width:100%;max-width:600px;height:auto;" '
@@ -131,21 +135,32 @@ def _finalize(
         )
         winner = _inject_image(winner, img_tag, "<!-- HERO IMAGE -->")
         kv("Image Source", f"AI-generated ({source})")
-    else:
-        agent_log("IMAGE", "⚠ No image secured — sending text-only email")
+    elif not img_b64:
+        agent_log("IMAGE", "⚠ No image secured")
 
-    # Patch winner back into variants list
-    updated_variants = [
-        winner if (isinstance(v, dict) and v.get("variant_id") == winner.get("variant_id"))
-        else v
-        for v in variants
-    ]
+    # Build a public Pollinations URL for direct display in the frontend
+    # (base64 is for email CID; the URL is for browser preview)
+    img_preview_url = None
+    if full_prompt:
+        import urllib.parse as _up
+        q = _up.quote(full_prompt[:500])
+        img_preview_url = f"https://image.pollinations.ai/prompt/{q}?width=1200&height=628&model=flux&nologo=true&safe=true"
 
-    copy_data["variants"]          = updated_variants
-    copy_data["hero_image_url"]    = None   # no external URLs — always inline CID
-    copy_data["hero_image_base64"] = img_b64
-    copy_data["hero_image_type"]   = img_type
-    copy_data["hero_image_source"] = source
+    # Patch winner back into variants list (if we have one)
+    updated_variants = variants
+    if isinstance(winner, dict) and variants:
+        updated_variants = [
+            winner if (isinstance(v, dict) and v.get("variant_id") == winner.get("variant_id"))
+            else v
+            for v in variants
+        ]
+
+    if isinstance(copy_data, dict):
+        copy_data["variants"]          = updated_variants
+        copy_data["hero_image_url"]    = img_preview_url
+        copy_data["hero_image_base64"] = img_b64
+        copy_data["hero_image_type"]   = img_type
+        copy_data["hero_image_source"] = source
 
     divider()
 
@@ -175,14 +190,16 @@ def _finalize(
 
     return {
         **state,
-        "copy_output":  copy_data,
+        "copy_output":  copy_data if isinstance(copy_data, dict) else state.get("copy_output"),
         "image_result": {
-            "has_image":    img_b64 is not None,
-            "image_url":    None,
-            "image_base64": img_b64,
-            "image_type":   img_type,
-            "source":       source,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "has_image":      img_b64 is not None,
+            "image_url":      img_preview_url,
+            "image_preview_url": img_preview_url,
+            "image_base64":   img_b64,
+            "image_type":     img_type,
+            "source":         source,
+            "prompt_used":    full_prompt[:200] if full_prompt else None,
+            "generated_at":   datetime.now(timezone.utc).isoformat(),
         },
         "current_step": "compliance_agent",
         "trace": state.get("trace", []) + [{

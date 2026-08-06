@@ -27,15 +27,15 @@ class AgentTask(BaseModel):
 
 class CampaignPlan(BaseModel):
     campaign_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8].upper())
-    campaign_name: str
-    goal: str
-    target_audience: str
-    channels: List[str]
-    budget: Optional[float] = None
-    timeline: str
-    tone: str
-    key_messages: List[str]
-    tasks: List[AgentTask]
+    campaign_name: str = "Marketing Campaign"
+    goal: str = "Drive growth and customer engagement"
+    target_audience: str = "Target Audience Persona"
+    channels: List[str] = Field(default_factory=lambda: ["email"])
+    budget: Optional[float] = 5000.0
+    timeline: str = "2 weeks"
+    tone: str = "professional"
+    key_messages: List[str] = Field(default_factory=lambda: ["Discover our latest offer", "High quality and reliability"])
+    tasks: List[AgentTask] = Field(default_factory=list)
     original_user_prompt: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

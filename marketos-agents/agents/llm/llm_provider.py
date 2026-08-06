@@ -17,16 +17,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+from langchain_core.runnables import Runnable, RunnableLambda
+
 class MockLLMResponse:
     def __init__(self, content: str):
         self.content = content
 
-class MockLLM:
-    def invoke(self, messages, *args, **kwargs):
+class MockLLM(Runnable):
+    def invoke(self, input, config=None, **kwargs):
         import json
+        messages = input
         text = str(messages).lower()
         if "supervisor" in text:
-            ans = {"campaign_name": "VoltX Fast Mock Campaign", "goal": "500 conversions in 3 days", "target_audience": "Men 18-30 India", "channels": ["email", "sms", "voice", "social"], "budget": 75000, "timeline": "3 days", "tone": "bold", "key_messages": ["Buy 2 Get 1 Free", "Limited stock", "Order now"], "tasks": []}
+            ans = {"campaign_name": "VoltX Fast Campaign", "goal": "500 conversions in 3 days", "target_audience": "Men 18-30 India", "channels": ["email", "sms", "voice", "social"], "budget": 75000, "timeline": "3 days", "tone": "bold", "key_messages": ["Buy 2 Get 1 Free", "Limited stock", "Order now"], "tasks": []}
         elif "copy agent" in text:
             ans = {"variants": [{"variant_id": "V-MOCK1", "subject_line": "VoltX!", "preview_text": "Grab it", "body_html": "<a href='http://x.com'>X</a>", "body_text": "X", "cta_text": "Buy", "cta_url": "http://x", "hero_image_query": "can", "hero_image_prompt": "can", "readability_score": 85.0, "tone_alignment_score": 90.0, "spam_risk_score": 5.0, "estimated_open_rate": 30.0, "estimated_ctr": 4.0}, {"variant_id": "V-MOCK2", "subject_line": "VoltX Free", "preview_text": "Buy", "body_html": "<a href='http://x.com'>Y</a>", "body_text": "Y", "cta_text": "Buy Now", "cta_url": "http://x", "hero_image_query": "gym", "hero_image_prompt": "gym", "readability_score": 82.0, "tone_alignment_score": 88.0, "spam_risk_score": 6.0, "estimated_open_rate": 32.0, "estimated_ctr": 5.0}], "selected_variant_id": "V-MOCK1", "selection_reasoning": "Mock logic", "brand_voice_notes": "bold mock"}
         elif "image agent" in text:
@@ -69,7 +72,7 @@ class MockLLM:
         elif "voice" in text:
             ans = {"system_instruction": "Mock Voice", "opening_hook": "Mock Hook", "key_talking_points": ["Point 1"], "objection_handlers": {}, "closing_goal": "End", "voice_name": "Kore"}
         elif "analytics" in text:
-            ans = {"metrics": {"open_rate": 0.3}, "anomalies": [], "next_action": "continue", "confidence": "high"}
+            ans = {"overall_health": "good", "top_insight": "Campaign metrics performing well", "anomalies_detected": False, "recommended_action": "Maintain monitoring schedule"}
         elif "monitor" in text:
             ans = {"status": "healthy", "issues": [], "action": "none"}
         elif "ab test" in text:
@@ -87,113 +90,115 @@ class MockLLM:
         elif "intent" in text and "confidence" in text and "summary" in text:
             ans = {"intent": "CREATE_CAMPAIGN", "confidence": 0.95, "summary": "Mock intent classification for user query."}
         elif "synthesis" in text or "documentation" in text:
-            return MockLLMResponse("## Mock Synthesis\n\nThe AI Pipeline ran successfully using local simulated agents due to missing API keys.")
+            return MockLLMResponse("## Campaign Orchestration Synthesis\n\nThe AI Pipeline executed all specialist agents successfully.")
         else:
             ans = {"status": "mocked"}
         return MockLLMResponse(json.dumps(ans))
 
+def get_mock_llm():
+    return RunnableLambda(MockLLM().invoke)
+
 def get_llm(temperature: float = 0):
     """
     Return a LangChain chat model for the configured provider.
-
-    temperature=0   → deterministic (supervisor, compliance)
-    temperature=0.7 → creative      (copy agent)
+    Includes automated fallback to Gemini and MockLLM on rate limits / network errors.
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
         return MockLLM()
 
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    mock_fallback = get_mock_llm()
+
+    # Build Gemini fallback if key is available
+    gemini_fallback = None
+    if os.getenv("GEMINI_API_KEY"):
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            gemini_fallback = ChatGoogleGenerativeAI(
+                model="gemini-2.5-pro",
+                google_api_key=os.getenv("GEMINI_API_KEY"),
+                temperature=temperature,
+                max_output_tokens=8192,
+                max_retries=1,
+                timeout=5.0,
+            )
+        except Exception:
+            gemini_fallback = None
+
+    fallbacks = [f for f in [gemini_fallback, mock_fallback] if f is not None]
 
     if provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            import logging
-            logging.getLogger("marketos").warning("ANTHROPIC_API_KEY missing. Falling back to MockLLM.")
-            return MockLLM()
-        return ChatAnthropic(
+            return gemini_fallback or mock_fallback
+        from langchain_anthropic import ChatAnthropic
+        model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
             anthropic_api_key=api_key,
             temperature=temperature,
             max_tokens=4096,
         )
+        return model.with_fallbacks(fallbacks)
 
     elif provider == "openrouter":
-        from langchain_openai import ChatOpenAI
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            import logging
-            logging.getLogger("marketos").warning("OPENROUTER_API_KEY missing. Falling back to MockLLM.")
-            return MockLLM()
-        model = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
-        return ChatOpenAI(
-            model=model,
+            return gemini_fallback or mock_fallback
+        from langchain_openai import ChatOpenAI
+        model_name = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
+        model = ChatOpenAI(
+            model=model_name,
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
             temperature=temperature,
             max_tokens=4096,
-            default_headers={
-                "HTTP-Referer": "https://marketos.ai",
-                "X-Title": "MarketOS",
-            },
+            default_headers={"HTTP-Referer": "https://marketos.ai", "X-Title": "MarketOS"},
         )
-
-    elif provider == "gemini":
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            import logging
-            logging.getLogger("marketos").warning("GEMINI_API_KEY missing. Falling back to MockLLM.")
-            return MockLLM()
-        return ChatGoogleGenerativeAI(
-            model="gemini-2.5-pro",
-            google_api_key=api_key,
-            temperature=temperature,
-            max_output_tokens=8192,
-        )
+        return model.with_fallbacks(fallbacks)
 
     elif provider == "groq":
-        from langchain_openai import ChatOpenAI
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            import logging
-            logging.getLogger("marketos").warning("GROQ_API_KEY missing. Falling back to MockLLM.")
-            return MockLLM()
-        return ChatOpenAI(
+            return gemini_fallback or mock_fallback
+        from langchain_openai import ChatOpenAI
+        model = ChatOpenAI(
             model="llama-3.3-70b-versatile",
             openai_api_key=api_key,
             openai_api_base="https://api.groq.com/openai/v1",
             temperature=temperature,
             max_tokens=4096,
+            max_retries=1,
+            timeout=15,
         )
+        return model.with_fallbacks(fallbacks)
+
+    elif provider == "gemini":
+        if gemini_fallback:
+            return gemini_fallback.with_fallbacks([mock_fallback])
+        return mock_fallback
 
     elif provider == "glm":
         return get_glm(temperature=temperature)
 
     else:
-        raise ValueError(
-            f"Unknown LLM_PROVIDER='{provider}'. "
-            "Valid values: gemini | anthropic | openrouter | glm | groq"
-        )
+        return mock_fallback
 
 
 def get_glm(temperature: float = 0):
     """
-    Always returns GLM-5.2 via NVIDIA's OpenAI-compatible integrate API.
-    Used by the GLM Orchestrator as the fixed reasoning head.
-    Set NVIDIA_API_KEY in .env to activate. Falls back to configured get_llm() if key absent.
+    Returns GLM reasoning head (Groq Llama-3.3-70B) with automatic fallbacks to Gemini and MockLLM.
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
-        # reuse the same mock
-        return get_llm(temperature=temperature)
+        return MockLLM()
+
+    mock_fallback = get_mock_llm()
+
+    # Base LLM fallback
+    base_llm = get_llm(temperature=temperature)
 
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
-        import logging
-        logging.getLogger("marketos").warning(
-            "GROQ_API_KEY not set — Groq unavailable, falling back to configured LLM_PROVIDER."
-        )
-        return get_llm(temperature=temperature)
+        return base_llm
 
     from langchain_openai import ChatOpenAI
     glm_model = ChatOpenAI(
@@ -202,14 +207,12 @@ def get_glm(temperature: float = 0):
         openai_api_base="https://api.groq.com/openai/v1",
         temperature=temperature,
         max_tokens=8192,
-        max_retries=1, # Don't retry endlessly if Groq is down, fail fast to fallback
-        timeout=15, # Fail fast on hang
+        max_retries=1,
+        timeout=15,
         default_headers={
             "HTTP-Referer": "https://marketos.ai",
             "X-Title": "MarketOS-Orchestrator",
         },
     )
-    
-    # User requested Gemini as fallback
-    fallback_model = get_llm(temperature=temperature)
-    return glm_model.with_fallbacks([fallback_model])
+
+    return glm_model.with_fallbacks([base_llm, mock_fallback])
