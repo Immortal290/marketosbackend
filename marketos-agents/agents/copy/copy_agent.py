@@ -170,6 +170,7 @@ def _fallback_copy_output(plan: CampaignPlan) -> CopyOutput:
     """Return a safe deterministic fallback when LLM structured output fails."""
     message = plan.key_messages[0] if plan.key_messages else "Limited-time offer"
     audience = plan.target_audience or "our community"
+    brand_name = plan.campaign_name or "our brand"
 
     v1 = CopyVariant(
         variant_id="V-001",
@@ -179,10 +180,10 @@ def _fallback_copy_output(plan: CampaignPlan) -> CopyOutput:
             "<html><body><h1>" + plan.campaign_name + "</h1>"
             f"<p>{message}</p>"
             "<p><a href=\"https://example.com/offer\">Claim Offer</a></p>"
-            "<p><small>This is a promotional email from VoltX Energy Pvt. Ltd.</small></p>"
+            f"<p><small>This is a promotional email from {brand_name}.</small></p>"
             "</body></html>"
         ),
-        body_text=f"{plan.campaign_name}\n\n{message}\n\nClaim Offer: https://example.com/offer\n\nThis is a promotional email from VoltX Energy Pvt. Ltd.",
+        body_text=f"{plan.campaign_name}\n\n{message}\n\nClaim Offer: https://example.com/offer\n\nThis is a promotional email from {brand_name}.",
         cta_text="Claim Offer",
         cta_url="https://example.com/offer",
         hero_image_query="product launch",
@@ -202,10 +203,10 @@ def _fallback_copy_output(plan: CampaignPlan) -> CopyOutput:
             "<html><body><h1>Choose Better Value</h1>"
             f"<p>{message}</p>"
             "<p><a href=\"https://example.com/offer\">See the Deal</a></p>"
-            "<p><small>This is a promotional email from VoltX Energy Pvt. Ltd.</small></p>"
+            f"<p><small>This is a promotional email from {brand_name}.</small></p>"
             "</body></html>"
         ),
-        body_text=f"Choose Better Value\n\n{message}\n\nSee the Deal: https://example.com/offer\n\nThis is a promotional email from VoltX Energy Pvt. Ltd.",
+        body_text=f"Choose Better Value\n\n{message}\n\nSee the Deal: https://example.com/offer\n\nThis is a promotional email from {brand_name}.",
         cta_text="See the Deal",
         cta_url="https://example.com/offer",
         hero_image_query="competitive product",

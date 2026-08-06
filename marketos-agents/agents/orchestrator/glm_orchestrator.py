@@ -298,7 +298,7 @@ def orchestrate_query_stream(
         "target_audience": selected_audience,
         "sender_name":     active_sender,
         "company_name":    active_company,
-        "company_address": "Bengaluru, Karnataka, India",
+        "company_address": os.getenv("COMPANY_ADDRESS", ""),
         "unsubscribe_url": "https://example.com/unsubscribe",
         "current_step":    "ab_test",
         "errors":          [],

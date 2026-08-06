@@ -147,7 +147,7 @@ class CampaignRequest(BaseModel):
     recipient_phone: Optional[str] = None
     sender_name:     str = "MarketOS"
     company_name:    str = "MarketOS"
-    company_address: str = "Bengaluru, Karnataka, India"
+    company_address: str = os.getenv("COMPANY_ADDRESS", "")
     unsubscribe_url: str = "https://example.com/unsubscribe"
     workspace_id:    str = "default"
 

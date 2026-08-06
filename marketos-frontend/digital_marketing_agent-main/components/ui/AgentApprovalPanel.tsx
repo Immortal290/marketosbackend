@@ -112,8 +112,8 @@ function EmailPreview({ variant }: { variant: any }) {
 
 /* ── Creative / Image View ─────────────────────────────────────────────────── */
 function CreativeView({ result }: { result: any }) {
-  const concept = result?.creative_concept || result?.campaign_concept || result?.user_intent || "Product Advertising Campaign";
-  const productSubject = result?.product_name || result?.user_intent || concept;
+  const creativeConcept = result?.creative_concept || result?.campaign_concept || result?.user_intent || "Product Advertising Campaign";
+  const productSubject = result?.product_name || result?.user_intent || creativeConcept;
 
   const buildBannerUrl = (promptText: string, w: number, h: number) => {
     const cleanPrompt = `${promptText}, photorealistic advertising photography, studio lighting, product visual focus, 8k resolution, no text`;
@@ -169,25 +169,22 @@ function CreativeView({ result }: { result: any }) {
     }
   ];
 
-
-
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const activeBanner = options[activeIdx] || options[0];
 
-  const concept = result?.campaign_concept || result?.creative_concept;
   const style = result?.creative_direction || result?.style;
   const palette = result?.color_palette || [];
 
   return (
     <div className="flex flex-col gap-4">
-      {concept && (
+      {creativeConcept && (
         <div className="bg-gradient-to-r from-pink-50 to-purple-50 border-2 border-pink-300 p-3.5 rounded-xl shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-black uppercase tracking-wider text-pink-700">Creative Concept</p>
             <span className="bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">4K ULTRA-HD</span>
           </div>
-          <p className="text-base font-black text-gray-900 mt-1">{concept}</p>
+          <p className="text-base font-black text-gray-900 mt-1">{creativeConcept}</p>
           {style && <p className="text-xs text-gray-600 mt-1 font-medium italic">Style: {style}</p>}
         </div>
       )}
@@ -214,7 +211,7 @@ function CreativeView({ result }: { result: any }) {
                 alt={opt.title} 
                 className="w-full h-14 object-cover rounded-lg shadow-sm"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = pollinationsFallback("professional product advertising background", 1200, 628);
+                  (e.target as HTMLImageElement).src = buildBannerUrl(`professional product advertising ${productSubject}`, 1200, 628);
                 }}
               />
               <span className="text-[10px] font-bold truncate w-full text-center">{opt.title.split('.')[1] || opt.title}</span>
@@ -230,7 +227,7 @@ function CreativeView({ result }: { result: any }) {
           alt={activeBanner.title}
           className="w-full h-72 sm:h-80 object-cover transition-all duration-300 group-hover:scale-105"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = pollinationsFallback("professional product advertising background", 1200, 628);
+            (e.target as HTMLImageElement).src = buildBannerUrl(`professional product advertising ${productSubject}`, 1200, 628);
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-between p-6">

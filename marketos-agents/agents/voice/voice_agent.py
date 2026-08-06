@@ -67,12 +67,12 @@ VOICE PERSONA RULES:
 OUTPUT REQUIRED:
 Respond ONLY with valid JSON — no prose, no markdown fences.
 {
-  "system_instruction": "You are Alex, an enthusiastic brand rep for VoltX...",
-  "opening_hook": "Hi there, this is Alex from VoltX. Got 30 seconds?",
-  "key_talking_points": ["Highlight BOGO deal", "Energy without the crash"],
+  "system_instruction": "You are a brand representative for the requested company...",
+  "opening_hook": "Hi there, this is a quick call regarding your request. Got 30 seconds?",
+  "key_talking_points": ["Highlight key offer", "Address primary customer benefit"],
   "objection_handlers": {
     "busy": "No worries at all! I'll text you the details so you can check when free.",
-    "not_interested": "Totally understand. Just so you know, this deal expires Monday. Have a great day!"
+    "not_interested": "Totally understand. Have a great day!"
   },
   "closing_goal": "Get them to acknowledge the deal and promise to check their email/SMS.",
   "voice_name": "Kore"
