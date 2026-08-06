@@ -19,11 +19,20 @@ import { logger } from './logger';
 // ── Base URL resolution ──────────────────────────────────────────────────────
 // Falls back to localhost:8000 so local dev works with zero extra config.
 
-const AGENT_SERVICE_URL = (
-  process.env.AGENT_SERVICE_URL || 'http://localhost:8000'
-).replace(/\/$/, '');
+const AGENT_SERVICE_CANDIDATES = [
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
+  process.env.AGENTS_URL,
+  process.env.RAILWAY_AGENTS_URL,
+  'http://renewed-dedication.railway.internal:8000',
+  'http://renewed-dedication.railway.internal',
+  'http://reneweddedication.railway.internal:8000',
+  'http://reneweddedication.railway.internal',
+  'http://marketos_agents:8000',
+  'http://localhost:8000',
+].filter((url): url is string => Boolean(url) && typeof url === 'string');
 
-logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+logger.info(`[AgentClient] Candidates configured: ${AGENT_SERVICE_CANDIDATES.join(', ')}`);
 
 // ── Types mirrored from the Python API ──────────────────────────────────────
 
@@ -76,7 +85,7 @@ export interface QueryRunOptions {
   workspace_id?: string;
 }
 
-// ── Internal fetch helper ────────────────────────────────────────────────────
+// ── Internal fetch helper with multi-candidate fallback ─────────────────────
 
 interface FetchOptions {
   method?: 'GET' | 'POST';
@@ -86,75 +95,65 @@ interface FetchOptions {
 
 async function agentFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
   const { method = 'GET', body, timeoutMs = 30_000 } = opts;
-  const url = `${AGENT_SERVICE_URL}${path}`;
+  let lastErr: unknown = null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, '')}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
 
-    clearTimeout(timer);
+      clearTimeout(timer);
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+      }
+
+      return await (response.json() as Promise<T>);
+    } catch (err: unknown) {
+      clearTimeout(timer);
+      lastErr = err;
     }
-
-    return response.json() as Promise<T>;
-  } catch (err: unknown) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw err;
   }
+
+  throw lastErr || new Error(`Failed to reach agent service at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(', ')}`);
 }
 
-// ── SSE streaming proxy helper ───────────────────────────────────────────────
-// Returns the raw ReadableStream so the caller can pipe it directly to the
-// Express response as text/event-stream.
+// ── SSE streaming proxy helper with multi-candidate fallback ───────────────
 
 export async function agentFetchStream(
   path: string,
   body: unknown,
-  timeoutMs = 120_000,
 ): Promise<ReadableStream<Uint8Array>> {
-  const url = `${AGENT_SERVICE_URL}${path}`;
+  let lastErr: unknown = null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, '')}${path}`;
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
 
-    clearTimeout(timer);
-
-    if (!response.ok || !response.body) {
-      const text = await response.text().catch(() => '');
-      throw new Error(
-        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`,
-      );
+      if (response.ok && response.body) {
+        return response.body;
+      }
+    } catch (err: unknown) {
+      lastErr = err;
     }
-
-    return response.body;
-  } catch (err: unknown) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
-    }
-    throw err;
   }
+
+  throw lastErr || new Error(`Agent stream failed to connect at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(', ')}`);
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────

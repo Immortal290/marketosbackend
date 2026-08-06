@@ -74,60 +74,64 @@ var logger = import_winston.default.createLogger({
 });
 
 // src/lib/agentClient.ts
-var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+var AGENT_SERVICE_CANDIDATES = [
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
+  process.env.AGENTS_URL,
+  process.env.RAILWAY_AGENTS_URL,
+  "http://renewed-dedication.railway.internal:8000",
+  "http://renewed-dedication.railway.internal",
+  "http://reneweddedication.railway.internal:8000",
+  "http://reneweddedication.railway.internal",
+  "http://marketos_agents:8000",
+  "http://localhost:8000"
+].filter((url) => Boolean(url) && typeof url === "string");
+logger.info(`[AgentClient] Candidates configured: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 async function agentFetch(path, opts = {}) {
   const { method = "GET", body, timeoutMs = 3e4 } = opts;
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body !== void 0 ? JSON.stringify(body) : void 0,
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body !== void 0 ? JSON.stringify(body) : void 0,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+      }
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
     }
-    return response.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Failed to reach agent service at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
-async function agentFetchStream(path, body, timeoutMs = 12e4) {
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok || !response.body) {
-      const text = await response.text().catch(() => "");
-      throw new Error(
-        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
-      );
+async function agentFetchStream(path, body) {
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok && response.body) {
+        return response.body;
+      }
+    } catch (err) {
+      lastErr = err;
     }
-    return response.body;
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Agent stream failed to connect at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
 async function getAgentServiceHealth() {
   return agentFetch("/v1/health");
@@ -177,6 +181,20 @@ var agentClient = {
   streamQuery
 };
 var agentClient_default = agentClient;
+
+// src/lib/redis.ts
+var import_ioredis = __toESM(require("ioredis"));
+var redisClient = new import_ioredis.default({
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  maxRetriesPerRequest: null
+});
+redisClient.on("connect", () => {
+  logger.info("Connected to Redis");
+});
+redisClient.on("error", (err) => {
+  logger.error("Redis connection error:", err);
+});
 
 // src/modules/ai_command_center/routes.ts
 var router = (0, import_express.Router)();
@@ -266,13 +284,53 @@ router.post("/pipeline/campaign/async", async (req, res) => {
   }
 });
 router.get("/pipeline/:campaignId/status", async (req, res) => {
+  const { campaignId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${campaignId}`);
   try {
-    const result = await agentClient_default.getCampaignStatus(req.params.campaignId);
-    res.status(200).json({ success: true, data: result });
+    const cached = await redisClient.get(`job:${campaignId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: "redis", data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${campaignId}: ${redisErr}`);
+  }
+  try {
+    const result = await agentClient_default.getCampaignStatus(campaignId);
+    logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=agent-service`);
+    res.status(200).json({ success: true, source: "agent-service", data: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error("[AI CC] Campaign status error:", message);
     res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router.get("/status/:jobId", async (req, res) => {
+  const { jobId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${jobId}`);
+  try {
+    const cached = await redisClient.get(`job:${jobId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: "redis", data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${jobId}: ${redisErr}`);
+  }
+  try {
+    const result = await agentClient_default.getCampaignStatus(jobId);
+    if (result?.data) {
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=agent-service`);
+      return res.status(200).json({ success: true, source: "agent-service", data: result.data });
+    }
+    logger.info(`[AI CC][STATUS MISS] job_id=${jobId} not found`);
+    return res.status(404).json({ success: false, error: `Job ${jobId} not found` });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[AI CC] Status lookup failed for ${jobId}: ${message}`);
+    res.status(502).json({ success: false, error: "Status lookup failed", detail: message });
   }
 });
 router.post("/pipeline/campaign/stream", async (req, res) => {

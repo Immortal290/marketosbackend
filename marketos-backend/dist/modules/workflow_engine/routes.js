@@ -100,60 +100,64 @@ var logger = import_winston.default.createLogger({
 var io;
 
 // src/lib/agentClient.ts
-var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+var AGENT_SERVICE_CANDIDATES = [
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
+  process.env.AGENTS_URL,
+  process.env.RAILWAY_AGENTS_URL,
+  "http://renewed-dedication.railway.internal:8000",
+  "http://renewed-dedication.railway.internal",
+  "http://reneweddedication.railway.internal:8000",
+  "http://reneweddedication.railway.internal",
+  "http://marketos_agents:8000",
+  "http://localhost:8000"
+].filter((url) => Boolean(url) && typeof url === "string");
+logger.info(`[AgentClient] Candidates configured: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 async function agentFetch(path, opts = {}) {
   const { method = "GET", body, timeoutMs = 3e4 } = opts;
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body !== void 0 ? JSON.stringify(body) : void 0,
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body !== void 0 ? JSON.stringify(body) : void 0,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+      }
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
     }
-    return response.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Failed to reach agent service at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
-async function agentFetchStream(path, body, timeoutMs = 12e4) {
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok || !response.body) {
-      const text = await response.text().catch(() => "");
-      throw new Error(
-        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
-      );
+async function agentFetchStream(path, body) {
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok && response.body) {
+        return response.body;
+      }
+    } catch (err) {
+      lastErr = err;
     }
-    return response.body;
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Agent stream failed to connect at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
 async function getAgentServiceHealth() {
   return agentFetch("/v1/health");

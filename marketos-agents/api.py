@@ -156,12 +156,19 @@ class CampaignRequest(BaseModel):
 
 @app.get("/")
 async def serve_dashboard():
-    """Serve the single-page MarketOS agency dashboard."""
+    """Serve dashboard or service status envelope."""
     try:
         with open("index.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
-        return HTMLResponse(content="<h1>Dashboard index.html not found</h1>", status_code=404)
+        return {
+            "ok": True,
+            "status": "online",
+            "service": "MarketOS Python Agent Service",
+            "version": "1.0.0",
+            "health": "/v1/health",
+            "docs": "/docs"
+        }
 
 # ── GET /v1/agents — List all agents ─────────────────────────────────────────
 

@@ -1117,11 +1117,12 @@ function buildDashboardSnapshot() {
   };
 }
 var initSocket = (server2) => {
-  const corsOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()) : "*";
   io = new import_socket.Server(server2, {
     cors: {
-      origin: corsOrigins,
-      methods: ["GET", "POST"],
+      origin: (origin, callback) => {
+        callback(null, true);
+      },
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true
     }
   });
@@ -1142,21 +1143,44 @@ var initSocket = (server2) => {
   return io;
 };
 
+// src/lib/redis.ts
+var import_ioredis = __toESM(require("ioredis"));
+var redisClient = new import_ioredis.default({
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  maxRetriesPerRequest: null
+});
+redisClient.on("connect", () => {
+  logger.info("Connected to Redis");
+});
+redisClient.on("error", (err) => {
+  logger.error("Redis connection error:", err);
+});
+
 // src/lib/kafka.ts
 var kafkaBroker = process.env.KAFKA_BROKER || "localhost:9092";
 var clientId = process.env.KAFKA_CLIENT_ID || "marketos-backend";
 var kafka = new import_kafkajs.Kafka({
   clientId,
   brokers: [kafkaBroker],
-  // Reduce retry aggressiveness so startup isn't blocked for minutes
   retry: {
-    retries: 3,
-    initialRetryTime: 300,
-    maxRetryTime: 3e3
+    retries: 5,
+    initialRetryTime: 1e3,
+    maxRetryTime: 1e4
   }
 });
 var producer = kafka.producer();
-var consumer = kafka.consumer({ groupId: "marketos-group" });
+var resultConsumer = kafka.consumer({
+  groupId: "marketos-backend-results"
+});
+var RESULT_TOPICS = [
+  "campaign.events",
+  // Worker publishes campaign_completed / campaign_failed here
+  "agent.supervisor.results",
+  // Supervisor agent result events
+  "agent.dlq"
+  // Dead-letter queue (failed tasks)
+];
 var connectKafka = async () => {
   if (!process.env.KAFKA_BROKER) {
     logger.warn("[Kafka] KAFKA_BROKER env not set \u2014 skipping Kafka connection. Real-time agent events disabled.");
@@ -1164,86 +1188,118 @@ var connectKafka = async () => {
   }
   try {
     await producer.connect();
-    logger.info("[Kafka] Producer connected");
-    await consumer.connect();
-    logger.info("[Kafka] Consumer connected");
-    const topics = Object.values(AgentType).map((type) => [
-      `agent.${type.toLowerCase()}.responses`,
-      `agent.${type.toLowerCase()}.events`
-    ]).flat();
-    await consumer.subscribe({ topics, fromBeginning: false });
-    logger.info(`[Kafka] Subscribed to ${topics.length} agent topics`);
-    await consumer.run({
+    logger.info(`[Kafka] Producer connected to ${kafkaBroker}`);
+    await resultConsumer.connect();
+    logger.info("[Kafka] Result consumer connected");
+    await resultConsumer.subscribe({
+      topics: RESULT_TOPICS,
+      fromBeginning: false
+    });
+    logger.info(`[Kafka] Result consumer subscribed to: ${RESULT_TOPICS.join(", ")}`);
+    await resultConsumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        if (message.value) {
-          const payload = message.value.toString();
-          logger.info(`[Kafka] Message from ${topic}: ${payload}`);
-          if (io) {
-            io.emit("agentEvent", { topic, payload: JSON.parse(payload) });
+        if (!message.value) return;
+        const raw = message.value.toString();
+        let envelope;
+        try {
+          envelope = JSON.parse(raw);
+        } catch (parseErr) {
+          logger.error(`[Kafka] JSON parse error on ${topic}: ${parseErr}`);
+          return;
+        }
+        const payload = envelope?.payload || envelope;
+        const campaignId = payload?.campaign_id || payload?.campaignId || "unknown";
+        const event = payload?.event || "unknown";
+        const status = event === "campaign_completed" ? "completed" : event === "campaign_failed" ? "failed" : "processing";
+        logger.info(`[Kafka][RESULT CONSUMED] job_id=${campaignId} event=${event} topic=${topic} partition=${partition}`);
+        try {
+          const cachePayload = JSON.stringify({
+            campaign_id: campaignId,
+            status,
+            event,
+            payload,
+            received_at: (/* @__PURE__ */ new Date()).toISOString()
+          });
+          await redisClient.set(`job:${campaignId}:result`, cachePayload, "EX", 3600);
+          logger.info(`[Kafka][REDIS WRITTEN] job_id=${campaignId} status=${status}`);
+        } catch (redisErr) {
+          logger.error(`[Kafka][REDIS WRITE FAILED] job_id=${campaignId}: ${redisErr}`);
+        }
+        if (io) {
+          try {
+            io.emit("agentEvent", { topic, campaignId, event, payload });
+            logger.info(`[Kafka][SOCKET EMITTED] job_id=${campaignId} event=${event}`);
+          } catch (socketErr) {
+            logger.warn(`[Kafka][SOCKET EMIT FAILED] ${socketErr}`);
           }
         }
       }
     });
+    logger.info("[Kafka] Result consumer running persistently \u2014 listening for campaign events...");
   } catch (error) {
-    logger.error("[Kafka] Connection failed (non-fatal). Kafka-dependent features (agent event streaming) will be unavailable:", error);
+    logger.error("[Kafka] Connection failed (non-fatal). Kafka-dependent features will be unavailable:", error);
   }
 };
 
 // src/lib/agentClient.ts
-var AGENT_SERVICE_URL = (process.env.AGENT_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-logger.info(`[AgentClient] Agent service URL: ${AGENT_SERVICE_URL}`);
+var AGENT_SERVICE_CANDIDATES = [
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
+  process.env.AGENTS_URL,
+  process.env.RAILWAY_AGENTS_URL,
+  "http://renewed-dedication.railway.internal:8000",
+  "http://renewed-dedication.railway.internal",
+  "http://reneweddedication.railway.internal:8000",
+  "http://reneweddedication.railway.internal",
+  "http://marketos_agents:8000",
+  "http://localhost:8000"
+].filter((url) => Boolean(url) && typeof url === "string");
+logger.info(`[AgentClient] Candidates configured: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 async function agentFetch(path, opts = {}) {
   const { method = "GET", body, timeoutMs = 3e4 } = opts;
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller5 = new AbortController();
-  const timer = setTimeout(() => controller5.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body !== void 0 ? JSON.stringify(body) : void 0,
-      signal: controller5.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    const controller5 = new AbortController();
+    const timer = setTimeout(() => controller5.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body !== void 0 ? JSON.stringify(body) : void 0,
+        signal: controller5.signal
+      });
+      clearTimeout(timer);
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Agent service returned ${response.status}: ${text.slice(0, 200)}`);
+      }
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
     }
-    return response.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service request timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Failed to reach agent service at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
-async function agentFetchStream(path, body, timeoutMs = 12e4) {
-  const url = `${AGENT_SERVICE_URL}${path}`;
-  const controller5 = new AbortController();
-  const timer = setTimeout(() => controller5.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller5.signal
-    });
-    clearTimeout(timer);
-    if (!response.ok || !response.body) {
-      const text = await response.text().catch(() => "");
-      throw new Error(
-        `Agent service streaming returned ${response.status}: ${text.slice(0, 200)}`
-      );
+async function agentFetchStream(path, body) {
+  let lastErr = null;
+  for (const base of AGENT_SERVICE_CANDIDATES) {
+    const url = `${base.replace(/\/$/, "")}${path}`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok && response.body) {
+        return response.body;
+      }
+    } catch (err) {
+      lastErr = err;
     }
-    return response.body;
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Agent service stream timed out after ${timeoutMs}ms`);
-    }
-    throw err;
   }
+  throw lastErr || new Error(`Agent stream failed to connect at any candidate URL: ${AGENT_SERVICE_CANDIDATES.join(", ")}`);
 }
 async function getAgentServiceHealth() {
   return agentFetch("/v1/health");
@@ -1831,13 +1887,53 @@ router8.post("/pipeline/campaign/async", async (req, res) => {
   }
 });
 router8.get("/pipeline/:campaignId/status", async (req, res) => {
+  const { campaignId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${campaignId}`);
   try {
-    const result = await agentClient_default.getCampaignStatus(req.params.campaignId);
-    res.status(200).json({ success: true, data: result });
+    const cached = await redisClient.get(`job:${campaignId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: "redis", data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${campaignId}: ${redisErr}`);
+  }
+  try {
+    const result = await agentClient_default.getCampaignStatus(campaignId);
+    logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=agent-service`);
+    res.status(200).json({ success: true, source: "agent-service", data: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error("[AI CC] Campaign status error:", message);
     res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
+  }
+});
+router8.get("/status/:jobId", async (req, res) => {
+  const { jobId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${jobId}`);
+  try {
+    const cached = await redisClient.get(`job:${jobId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: "redis", data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${jobId}: ${redisErr}`);
+  }
+  try {
+    const result = await agentClient_default.getCampaignStatus(jobId);
+    if (result?.data) {
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=agent-service`);
+      return res.status(200).json({ success: true, source: "agent-service", data: result.data });
+    }
+    logger.info(`[AI CC][STATUS MISS] job_id=${jobId} not found`);
+    return res.status(404).json({ success: false, error: `Job ${jobId} not found` });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[AI CC] Status lookup failed for ${jobId}: ${message}`);
+    res.status(502).json({ success: false, error: "Status lookup failed", detail: message });
   }
 });
 router8.post("/pipeline/campaign/stream", async (req, res) => {

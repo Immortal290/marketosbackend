@@ -214,11 +214,12 @@ function buildDashboardSnapshot() {
   };
 }
 var initSocket = (server) => {
-  const corsOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()) : "*";
   io = new import_socket.Server(server, {
     cors: {
-      origin: corsOrigins,
-      methods: ["GET", "POST"],
+      origin: (origin, callback) => {
+        callback(null, true);
+      },
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true
     }
   });

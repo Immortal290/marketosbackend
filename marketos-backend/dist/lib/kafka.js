@@ -31,9 +31,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var kafka_exports = {};
 __export(kafka_exports, {
   connectKafka: () => connectKafka,
-  consumer: () => consumer,
   kafka: () => kafka,
-  producer: () => producer
+  producer: () => producer,
+  resultConsumer: () => resultConsumer
 });
 module.exports = __toCommonJS(kafka_exports);
 var import_kafkajs = require("kafkajs");
@@ -78,32 +78,21 @@ var logger = import_winston.default.createLogger({
 
 // src/lib/socket.ts
 var import_socket = require("socket.io");
-
-// src/modules/agents/types.ts
-var AgentType = /* @__PURE__ */ ((AgentType2) => {
-  AgentType2["AB_TEST"] = "AB_TEST";
-  AgentType2["ANALYTICS"] = "ANALYTICS";
-  AgentType2["COMPETITOR"] = "COMPETITOR";
-  AgentType2["COMPLIANCE"] = "COMPLIANCE";
-  AgentType2["COPY"] = "COPY";
-  AgentType2["CREATIVE"] = "CREATIVE";
-  AgentType2["EMAIL"] = "EMAIL";
-  AgentType2["FINANCE"] = "FINANCE";
-  AgentType2["LEAD_SCORING"] = "LEAD_SCORING";
-  AgentType2["MONITOR"] = "MONITOR";
-  AgentType2["ONBOARDING"] = "ONBOARDING";
-  AgentType2["PERSONALIZATION"] = "PERSONALIZATION";
-  AgentType2["REPORTING"] = "REPORTING";
-  AgentType2["SEO"] = "SEO";
-  AgentType2["SMS"] = "SMS";
-  AgentType2["SOCIAL"] = "SOCIAL";
-  AgentType2["SUPERVISOR"] = "SUPERVISOR";
-  AgentType2["VOICE"] = "VOICE";
-  return AgentType2;
-})(AgentType || {});
-
-// src/lib/socket.ts
 var io;
+
+// src/lib/redis.ts
+var import_ioredis = __toESM(require("ioredis"));
+var redisClient = new import_ioredis.default({
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  maxRetriesPerRequest: null
+});
+redisClient.on("connect", () => {
+  logger.info("Connected to Redis");
+});
+redisClient.on("error", (err) => {
+  logger.error("Redis connection error:", err);
+});
 
 // src/lib/kafka.ts
 var kafkaBroker = process.env.KAFKA_BROKER || "localhost:9092";
@@ -111,15 +100,24 @@ var clientId = process.env.KAFKA_CLIENT_ID || "marketos-backend";
 var kafka = new import_kafkajs.Kafka({
   clientId,
   brokers: [kafkaBroker],
-  // Reduce retry aggressiveness so startup isn't blocked for minutes
   retry: {
-    retries: 3,
-    initialRetryTime: 300,
-    maxRetryTime: 3e3
+    retries: 5,
+    initialRetryTime: 1e3,
+    maxRetryTime: 1e4
   }
 });
 var producer = kafka.producer();
-var consumer = kafka.consumer({ groupId: "marketos-group" });
+var resultConsumer = kafka.consumer({
+  groupId: "marketos-backend-results"
+});
+var RESULT_TOPICS = [
+  "campaign.events",
+  // Worker publishes campaign_completed / campaign_failed here
+  "agent.supervisor.results",
+  // Supervisor agent result events
+  "agent.dlq"
+  // Dead-letter queue (failed tasks)
+];
 var connectKafka = async () => {
   if (!process.env.KAFKA_BROKER) {
     logger.warn("[Kafka] KAFKA_BROKER env not set \u2014 skipping Kafka connection. Real-time agent events disabled.");
@@ -127,34 +125,62 @@ var connectKafka = async () => {
   }
   try {
     await producer.connect();
-    logger.info("[Kafka] Producer connected");
-    await consumer.connect();
-    logger.info("[Kafka] Consumer connected");
-    const topics = Object.values(AgentType).map((type) => [
-      `agent.${type.toLowerCase()}.responses`,
-      `agent.${type.toLowerCase()}.events`
-    ]).flat();
-    await consumer.subscribe({ topics, fromBeginning: false });
-    logger.info(`[Kafka] Subscribed to ${topics.length} agent topics`);
-    await consumer.run({
+    logger.info(`[Kafka] Producer connected to ${kafkaBroker}`);
+    await resultConsumer.connect();
+    logger.info("[Kafka] Result consumer connected");
+    await resultConsumer.subscribe({
+      topics: RESULT_TOPICS,
+      fromBeginning: false
+    });
+    logger.info(`[Kafka] Result consumer subscribed to: ${RESULT_TOPICS.join(", ")}`);
+    await resultConsumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        if (message.value) {
-          const payload = message.value.toString();
-          logger.info(`[Kafka] Message from ${topic}: ${payload}`);
-          if (io) {
-            io.emit("agentEvent", { topic, payload: JSON.parse(payload) });
+        if (!message.value) return;
+        const raw = message.value.toString();
+        let envelope;
+        try {
+          envelope = JSON.parse(raw);
+        } catch (parseErr) {
+          logger.error(`[Kafka] JSON parse error on ${topic}: ${parseErr}`);
+          return;
+        }
+        const payload = envelope?.payload || envelope;
+        const campaignId = payload?.campaign_id || payload?.campaignId || "unknown";
+        const event = payload?.event || "unknown";
+        const status = event === "campaign_completed" ? "completed" : event === "campaign_failed" ? "failed" : "processing";
+        logger.info(`[Kafka][RESULT CONSUMED] job_id=${campaignId} event=${event} topic=${topic} partition=${partition}`);
+        try {
+          const cachePayload = JSON.stringify({
+            campaign_id: campaignId,
+            status,
+            event,
+            payload,
+            received_at: (/* @__PURE__ */ new Date()).toISOString()
+          });
+          await redisClient.set(`job:${campaignId}:result`, cachePayload, "EX", 3600);
+          logger.info(`[Kafka][REDIS WRITTEN] job_id=${campaignId} status=${status}`);
+        } catch (redisErr) {
+          logger.error(`[Kafka][REDIS WRITE FAILED] job_id=${campaignId}: ${redisErr}`);
+        }
+        if (io) {
+          try {
+            io.emit("agentEvent", { topic, campaignId, event, payload });
+            logger.info(`[Kafka][SOCKET EMITTED] job_id=${campaignId} event=${event}`);
+          } catch (socketErr) {
+            logger.warn(`[Kafka][SOCKET EMIT FAILED] ${socketErr}`);
           }
         }
       }
     });
+    logger.info("[Kafka] Result consumer running persistently \u2014 listening for campaign events...");
   } catch (error) {
-    logger.error("[Kafka] Connection failed (non-fatal). Kafka-dependent features (agent event streaming) will be unavailable:", error);
+    logger.error("[Kafka] Connection failed (non-fatal). Kafka-dependent features will be unavailable:", error);
   }
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   connectKafka,
-  consumer,
   kafka,
-  producer
+  producer,
+  resultConsumer
 });

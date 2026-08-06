@@ -3,14 +3,29 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 const BACKEND_CANDIDATES = [
-  process.env.NEXT_PUBLIC_API_BASE_URL,
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
   process.env.AGENTS_URL,
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
+  process.env.NEXT_PUBLIC_BACKEND_URL,
+  process.env.NEXT_PUBLIC_API_BASE_URL,
+  process.env.API_URL,
   "http://renewed-dedication.railway.internal:8000",
+  "http://renewed-dedication.railway.internal",
+  "http://reneweddedication.railway.internal:8000",
+  "http://reneweddedication.railway.internal",
+  "http://digital_marketing_agent.railway.internal:8000",
+  "http://digitalmarketingagent.railway.internal:8000",
+  "http://digital-marketing-agent.railway.internal:8000",
   "http://marketosbackend.railway.internal:3000",
+  "http://marketosbackend.railway.internal",
   "http://marketos-backend.railway.internal:3000",
+  "http://marketos-backend.railway.internal",
+  "https://marketosbackend-production.up.railway.app",
+  "http://marketos_agents:8000",
   "http://localhost:8000",
+  "http://localhost:3001",
   "http://localhost:3000",
 ].filter((url): url is string => Boolean(url) && typeof url === "string");
 
