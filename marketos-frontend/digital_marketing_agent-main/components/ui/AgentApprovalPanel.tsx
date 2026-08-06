@@ -112,55 +112,58 @@ function EmailPreview({ variant }: { variant: any }) {
 
 /* ── Creative / Image View ─────────────────────────────────────────────────── */
 function CreativeView({ result }: { result: any }) {
-  // Build on-brand Pollinations.ai fallback URLs from the campaign's own creative concept.
-  // These are AI-generated images — never stock photos, never off-brand.
-  const baseConcept = encodeURIComponent(
-    ((result?.creative_concept || result?.campaign_name || "product campaign") + " professional advertising photography, studio lighting, no text")
-      .slice(0, 400)
-  );
-  const pollinationsFallback = (angle: string, w: number, h: number) =>
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(angle + (result?.creative_concept || result?.campaign_name || ""))}?width=${w}&height=${h}&model=flux&nologo=true&safe=true`;
+  const concept = result?.creative_concept || result?.campaign_concept || result?.user_intent || "Product Advertising Campaign";
+  const productSubject = result?.product_name || result?.user_intent || concept;
 
-  const options = result?.banner_options || [
+  const buildBannerUrl = (promptText: string, w: number, h: number) => {
+    const cleanPrompt = `${promptText}, photorealistic advertising photography, studio lighting, product visual focus, 8k resolution, no text`;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt.slice(0, 400))}?width=${w}&height=${h}&model=flux&nologo=true&safe=true`;
+  };
+
+  const rawOptions = result?.banner_options;
+  const options = (Array.isArray(rawOptions) && rawOptions.length > 0) ? rawOptions.map((opt: any) => ({
+    ...opt,
+    url: opt.url || buildBannerUrl(opt.prompt || `${productSubject} ${opt.title}`, opt.w || 1200, opt.h || 628)
+  })) : [
     {
       id: "v1",
       title: "1. Product Hero Banner (1200x628)",
-      url: pollinationsFallback("product hero shot luxury packaging dark dramatic background ", 1200, 628),
+      url: buildBannerUrl(`Luxury studio hero advertising shot of ${productSubject}, sleek surface, dramatic dark background`, 1200, 628),
       overlay: result?.ad_banner_specs?.headline_overlay || "🔥 CLAIM YOUR EXCLUSIVE OFFER",
       format: "LinkedIn / Meta Landscape (1200x628)"
     },
     {
       id: "v2",
       title: "2. Lifestyle Square (1080x1080)",
-      url: pollinationsFallback("lifestyle advertisement natural daylight aspirational mood ", 1080, 1080),
+      url: buildBannerUrl(`Aspirational lifestyle advertisement photo showcasing ${productSubject} in natural daylight setting`, 1080, 1080),
       overlay: "✨ EXPERIENCE THE DIFFERENCE",
       format: "Instagram / Facebook Square (1080x1080)"
     },
     {
       id: "v3",
       title: "3. Mobile Story (1080x1920)",
-      url: pollinationsFallback("close-up detail premium textures shallow depth of field ", 1080, 1920),
+      url: buildBannerUrl(`Vertical macro detail close-up shot of ${productSubject}, shallow depth of field, premium textures`, 1080, 1920),
       overlay: "🚀 LIMITED TIME — SHOP NOW",
       format: "Instagram Stories & Reels (1080x1920)"
     },
     {
       id: "v4",
       title: "4. Minimalist Flat Lay (1200x628)",
-      url: pollinationsFallback("minimalist flat lay clean white surface bold brand colors ", 1200, 628),
+      url: buildBannerUrl(`Clean minimalist product flat lay presentation of ${productSubject} on neutral matte surface`, 1200, 628),
       overlay: "⚡ PURE QUALITY",
       format: "Clean Minimalist Layout"
     },
     {
       id: "v5",
       title: "5. Editorial Square (1080x1080)",
-      url: pollinationsFallback("editorial campaign photo vibrant colors high contrast ", 1080, 1080),
-      overlay: "💡 SEE WHAT'S POSSIBLE",
+      url: buildBannerUrl(`Vibrant high-contrast editorial magazine photo of ${productSubject}, dramatic fashion lighting`, 1080, 1080),
+      overlay: "💡 SEE WHAT IS POSSIBLE",
       format: "Vibrant Editorial Spotlight"
     },
     {
       id: "v6",
       title: "6. Cinematic Wide (1200x628)",
-      url: pollinationsFallback("cinematic wide shot golden hour lighting atmospheric ", 1200, 628),
+      url: buildBannerUrl(`Cinematic wide action angle shot of ${productSubject}, golden hour atmospheric landscape`, 1200, 628),
       overlay: "📈 BUILT TO PERFORM",
       format: "Cinematic Wide Format"
     }

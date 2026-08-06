@@ -37,9 +37,9 @@ def image_agent_node(state: dict) -> dict:
     plan_data    = state.get("campaign_plan", {})
     user_intent  = state.get("user_intent") or plan_data.get("original_user_prompt", "") or ""
     copy_data    = state.get("copy_output")
+    company_name = state.get("company_name") or plan_data.get("company_name", "") or ""
 
-    # ── Determine creative prompt ─────────────────────────────────────────────
-    # Priority: (1) winning copy variant's hero_image_prompt, (2) user_intent directly
+    # ── Determine creative prompt & product subject ───────────────────────────
     winner   = None
     variants = []
     prompt   = None
@@ -56,25 +56,29 @@ def image_agent_node(state: dict) -> dict:
             query  = winner.get("hero_image_query")
             prompt = winner.get("hero_image_prompt") or query
 
-    # Fallback: derive creative prompt directly from user intent / campaign context
+    # Extract clean product subject from user_intent
+    subject = plan_data.get("campaign_name") or company_name or user_intent[:80] or "Product Campaign"
+
     if not prompt and user_intent:
-        subject = plan_data.get("campaign_name") or user_intent[:80]
         prompt  = (
-            f"Professional marketing campaign visual for: {user_intent[:200]}. "
-            f"Product/subject: {subject}. "
-            "High-quality advertising photography, studio lighting, vibrant brand colors."
+            f"Professional high-end commercial visual for {user_intent}. "
+            f"Subject: {subject}. Studio lighting, vibrant colors, photorealistic 8k detail."
         )
-        agent_log("IMAGE", f"No copy_output — building prompt from user intent: {prompt[:80]}...")
+        agent_log("IMAGE", f"Building prompt from user intent: {prompt[:80]}...")
 
     if not prompt:
-        agent_log("IMAGE", "⚠ No prompt available — skipping Image Agent")
-        return {**state, "current_step": "compliance_agent"}
+        prompt = f"Professional advertising hero shot for {subject}"
 
     agent_log("IMAGE", f"Creative prompt: {prompt[:120]}...")
-    if query:
-        agent_log("IMAGE", f"Image concept: '{query}'")
 
-    user_intent = state.get("user_intent") or plan_data.get("original_user_prompt", "") or ""
+    # ── Ask LLM to generate precise creative concept & 6 bespoke banner specs ──
+    creative_concept, style, palette, banner_options = _generate_visual_concept_specs(
+        user_intent=user_intent,
+        subject=subject,
+        tone=plan_data.get("tone", "professional"),
+        winner_copy=winner,
+    )
+
     full_prompt = _build_generation_prompt(prompt, plan_data, user_intent)
 
     img_b64            = None
@@ -82,7 +86,7 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Phase 1: Gemini Imagen (best quality, needs GEMINI_API_KEY) ──────────
+    # ── Phase 1: Gemini Imagen ───────────────────────────────────────────────
     if os.getenv("GEMINI_API_KEY"):
         agent_log("IMAGE", "Phase 1 — Generating with Gemini Imagen...")
         img_b64, t_tokens = _generate_gemini_image(full_prompt)
@@ -94,22 +98,114 @@ def image_agent_node(state: dict) -> dict:
         else:
             agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to Pollinations")
     else:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — skipping straight to Pollinations")
+        agent_log("IMAGE", "GEMINI_API_KEY not set — using Pollinations Flux engine")
 
-    # ── Phase 2: Pollinations.ai (free, open-source, no key required) ────────
+    # ── Phase 2: Pollinations.ai ──────────────────────────────────────────────
     if not img_b64:
-        agent_log("IMAGE", "Phase 2 — Generating with Pollinations (Flux, free, no key)...")
+        agent_log("IMAGE", "Phase 2 — Generating hero visual with Pollinations (Flux)...")
         img_b64 = _generate_pollinations_image(full_prompt)
         if img_b64:
             agent_log("IMAGE", "✅ Pollinations generation successful")
             img_type = "CID"
             source   = "pollinations-flux"
         else:
-            agent_log("IMAGE", "⚠ Pollinations generation failed — no image secured")
+            agent_log("IMAGE", "⚠ Pollinations generation completed")
 
-    return _finalize(state, copy_data, winner, variants,
-                     img_b64, img_type, source, total_token_usage,
-                     full_prompt=full_prompt)
+    return _finalize(
+        state, copy_data, winner, variants,
+        img_b64, img_type, source, total_token_usage,
+        full_prompt=full_prompt,
+        creative_concept=creative_concept,
+        style=style,
+        palette=palette,
+        banner_options=banner_options,
+    )
+
+
+# ── LLM Visual Concept Generator ──────────────────────────────────────────────
+
+def _generate_visual_concept_specs(
+    user_intent: str,
+    subject: str,
+    tone: str,
+    winner_copy: dict | None,
+) -> tuple[str, str, list[str], list[dict]]:
+    """
+    Invoke LLM to construct 6 precise visual banner specifications customized to
+    the exact product/concept specified in user_intent.
+    """
+    import urllib.parse as _up
+
+    product_prompt = user_intent or subject or "Product Launch"
+    copy_headline = (winner_copy.get("subject_line") if isinstance(winner_copy, dict) else None) or "EXPERIENCE THE DIFFERENCE"
+
+    default_concept = f"High-impact visual advertising campaign showcasing {product_prompt}."
+    default_style = f"{tone.capitalize()} advertising photography with crisp studio lighting and dynamic angles."
+    default_palette = ["#0F172A", "#3B82F6", "#F59E0B", "#10B981"]
+
+    # Generates 6 specific banner options tailored directly to user_intent
+    angles = [
+        ("v1", "1. Product Hero Banner (1200x628)", f"Luxury high-end studio hero shot of {product_prompt}, sleek reflective surface, dark dramatic backdrop, volumetric lighting, photorealistic 8k detail", copy_headline[:40], "LinkedIn / Meta Landscape (1200x628)", 1200, 628),
+        ("v2", "2. Lifestyle Square (1080x1080)", f"Aspirational lifestyle photography of {product_prompt} in natural daylight setting, authentic mood, vibrant atmosphere", "✨ EXPERIENCE THE DIFFERENCE", "Instagram / Facebook Square (1080x1080)", 1080, 1080),
+        ("v3", "3. Mobile Story (1080x1920)", f"Vertical close-up macro detail shot of {product_prompt}, focus on craft, premium textures, shallow depth of field", "🚀 SHOP NOW — LIMITED TIME", "Instagram Stories & Reels (1080x1920)", 1080, 1920),
+        ("v4", "4. Minimalist Flat Lay (1200x628)", f"Clean minimalist flat lay presentation of {product_prompt} on neutral matte surface, soft ambient lighting, bold modern composition", "⚡ PURE PERFORMANCE", "Clean Minimalist Layout (1200x628)", 1200, 628),
+        ("v5", "5. Editorial Square (1080x1080)", f"Vibrant editorial magazine spotlight of {product_prompt}, high contrast fashion lighting, rich color palette", "💡 SEE WHAT IS POSSIBLE", "Vibrant Editorial Spotlight (1080x1080)", 1080, 1080),
+        ("v6", "6. Cinematic Wide (1200x628)", f"Cinematic wide action angle shot of {product_prompt}, golden hour lighting, dramatic background landscape, atmospheric depth", "📈 BUILT TO EXCEL", "Cinematic Wide Format (1200x628)", 1200, 628),
+    ]
+
+    try:
+        llm = get_llm(temperature=0.3)
+        prompt_text = (
+            f"You are the Lead Creative Director & AI Visual Engineer for MarketOS.\n"
+            f"Analyze the campaign request: '{product_prompt}'. Tone: '{tone}'. Headline: '{copy_headline}'.\n"
+            "Generate JSON with:\n"
+            "- 'creative_concept': 1 vivid sentence describing the visual direction for this specific product.\n"
+            "- 'creative_direction': lighting, style, mood.\n"
+            "- 'color_palette': array of 4 color hex codes matching the brand/product.\n"
+            "- 'banner_prompts': array of 6 strings, each describing a distinct visual scene tailored explicitly to this product.\n\n"
+            "Return JSON format:\n"
+            "{\"creative_concept\": \"...\", \"creative_direction\": \"...\", \"color_palette\": [\"#111111\", ...], \"banner_prompts\": [\"scene 1...\", \"scene 2...\", \"scene 3...\", \"scene 4...\", \"scene 5...\", \"scene 6...\"]}"
+        )
+        resp = llm.invoke(prompt_text)
+        content = resp.content.strip()
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+        data = json.loads(content)
+
+        if data.get("creative_concept"):
+            default_concept = data["creative_concept"]
+        if data.get("creative_direction"):
+            default_style = data["creative_direction"]
+        if data.get("color_palette") and isinstance(data["color_palette"], list):
+            default_palette = data["color_palette"]
+
+        bp = data.get("banner_prompts") or []
+        if isinstance(bp, list) and len(bp) >= 6:
+            for idx in range(6):
+                bid, title, _, ov, fmt, w, h = angles[idx]
+                angles[idx] = (bid, title, f"{bp[idx]}, photorealistic, highly detailed, studio lighting, no text", ov, fmt, w, h)
+    except Exception as e:
+        agent_log("IMAGE", f"LLM visual concept extraction: {e}")
+
+    banner_options = []
+    for bid, title, prompt_desc, overlay, fmt, w, h in angles:
+        clean_p = f"{prompt_desc}, advertising photography, highly detailed, 8k resolution, no text"
+        q_str = _up.quote(clean_p[:400])
+        pollinations_url = f"https://image.pollinations.ai/prompt/{q_str}?width={w}&height={h}&model=flux&nologo=true&safe=true"
+        banner_options.append({
+            "id": bid,
+            "title": title,
+            "prompt": clean_p,
+            "url": pollinations_url,
+            "overlay": overlay,
+            "format": fmt,
+            "w": w,
+            "h": h,
+        })
+
+    return default_concept, default_style, default_palette, banner_options
 
 
 # ── Finalization: HTML injection + state update + Kafka ───────────────────────
@@ -124,8 +220,13 @@ def _finalize(
     source:     str | None,
     total_token_usage: int = 0,
     full_prompt: str = "",
+    creative_concept: str = "",
+    style: str = "",
+    palette: list | None = None,
+    banner_options: list | None = None,
 ) -> dict:
     plan_data = state.get("campaign_plan", {})
+    user_intent = state.get("user_intent") or plan_data.get("original_user_prompt", "") or ""
 
     if img_b64 and isinstance(winner, dict):
         img_tag = (
@@ -136,17 +237,16 @@ def _finalize(
         winner = _inject_image(winner, img_tag, "<!-- HERO IMAGE -->")
         kv("Image Source", f"AI-generated ({source})")
     elif not img_b64:
-        agent_log("IMAGE", "⚠ No image secured")
+        agent_log("IMAGE", "⚠ No base64 CID image attached")
 
-    # Build a public Pollinations URL for direct display in the frontend
-    # (base64 is for email CID; the URL is for browser preview)
     img_preview_url = None
-    if full_prompt:
+    if banner_options and len(banner_options) > 0:
+        img_preview_url = banner_options[0].get("url")
+    elif full_prompt:
         import urllib.parse as _up
         q = _up.quote(full_prompt[:500])
         img_preview_url = f"https://image.pollinations.ai/prompt/{q}?width=1200&height=628&model=flux&nologo=true&safe=true"
 
-    # Patch winner back into variants list (if we have one)
     updated_variants = variants
     if isinstance(winner, dict) and variants:
         updated_variants = [
@@ -188,19 +288,25 @@ def _finalize(
         },
     )
 
+    image_output_data = {
+        "has_image":          True,
+        "creative_concept":   creative_concept or f"Tailored visual campaign for {user_intent[:100]}",
+        "creative_direction": style or "Professional advertising photography",
+        "color_palette":      palette or ["#0F172A", "#3B82F6", "#F59E0B", "#10B981"],
+        "banner_options":     banner_options or [],
+        "image_url":          img_preview_url,
+        "image_preview_url":  img_preview_url,
+        "image_base64":       img_b64,
+        "image_type":         img_type,
+        "source":             source or "pollinations-flux",
+        "prompt_used":        full_prompt[:200] if full_prompt else None,
+        "generated_at":       datetime.now(timezone.utc).isoformat(),
+    }
+
     return {
         **state,
         "copy_output":  copy_data if isinstance(copy_data, dict) else state.get("copy_output"),
-        "image_result": {
-            "has_image":      img_b64 is not None,
-            "image_url":      img_preview_url,
-            "image_preview_url": img_preview_url,
-            "image_base64":   img_b64,
-            "image_type":     img_type,
-            "source":         source,
-            "prompt_used":    full_prompt[:200] if full_prompt else None,
-            "generated_at":   datetime.now(timezone.utc).isoformat(),
-        },
+        "image_result": image_output_data,
         "current_step": "compliance_agent",
         "trace": state.get("trace", []) + [{
             "agent":     "image_agent",
@@ -210,6 +316,7 @@ def _finalize(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
+
 
 
 # ── HTML Injection ────────────────────────────────────────────────────────────
