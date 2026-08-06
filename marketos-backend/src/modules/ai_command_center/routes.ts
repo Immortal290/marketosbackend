@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '../../lib/logger';
 import agentClient from '../../lib/agentClient';
+import { redisClient } from '../../lib/redis';
 
 const router = Router();
 
@@ -541,13 +542,82 @@ router.post('/pipeline/campaign/async', async (req: Request, res: Response) => {
  *         description: Agent service unavailable
  */
 router.get('/pipeline/:campaignId/status', async (req: Request, res: Response) => {
+  const { campaignId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${campaignId}`);
+
+  // ── Phase 1: Try Redis cache first (fast, ~1ms) ──────────────────────
   try {
-    const result = await agentClient.getCampaignStatus(req.params.campaignId);
-    res.status(200).json({ success: true, data: result });
+    const cached = await redisClient.get(`job:${campaignId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: 'redis', data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${campaignId}: ${redisErr}`);
+  }
+
+  // ── Phase 2: Fall back to agent service (Postgres query) ──────────────
+  try {
+    const result = await agentClient.getCampaignStatus(campaignId);
+    logger.info(`[AI CC][STATUS HIT] job_id=${campaignId} source=agent-service`);
+    res.status(200).json({ success: true, source: 'agent-service', data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[AI CC] Campaign status error:', message);
     res.status(502).json({ success: false, error: 'Agent service unavailable', detail: message });
+  }
+});
+
+/**
+ * @openapi
+ * /ai-command-center/status/{jobId}:
+ *   get:
+ *     summary: Poll job status by job_id (Redis → Postgres fallback)
+ *     description: Primary status endpoint for the event-driven pipeline. Checks Redis cache first, falls back to agent service Postgres.
+ *     tags: [AI Command Center]
+ *     parameters:
+ *       - name: jobId
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Job status and result
+ *       404:
+ *         description: Job not found in any store
+ *       502:
+ *         description: Both Redis and agent service unavailable
+ */
+router.get('/status/:jobId', async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  logger.info(`[AI CC][STATUS POLL] job_id=${jobId}`);
+
+  // ── Redis first ───────────────────────────────────────────────────────
+  try {
+    const cached = await redisClient.get(`job:${jobId}:result`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=redis status=${parsed.status}`);
+      return res.status(200).json({ success: true, source: 'redis', data: parsed });
+    }
+  } catch (redisErr) {
+    logger.warn(`[AI CC] Redis read failed for ${jobId}: ${redisErr}`);
+  }
+
+  // ── Agent service (Postgres) fallback ─────────────────────────────────
+  try {
+    const result = await agentClient.getCampaignStatus(jobId);
+    if (result?.data) {
+      logger.info(`[AI CC][STATUS HIT] job_id=${jobId} source=agent-service`);
+      return res.status(200).json({ success: true, source: 'agent-service', data: result.data });
+    }
+    logger.info(`[AI CC][STATUS MISS] job_id=${jobId} not found`);
+    return res.status(404).json({ success: false, error: `Job ${jobId} not found` });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[AI CC] Status lookup failed for ${jobId}: ${message}`);
+    res.status(502).json({ success: false, error: 'Status lookup failed', detail: message });
   }
 });
 

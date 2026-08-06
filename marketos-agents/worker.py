@@ -11,6 +11,7 @@ Run: python worker.py
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import signal
@@ -71,11 +72,32 @@ def _update_campaign_status(campaign_id: str, status: str, result: dict = None) 
                 )
             )
         db.commit()
+        agent_log("WORKER", f"[job_id={campaign_id}][DB WRITTEN] status={status}")
     except Exception as e:
-        agent_log("WORKER", f"Campaign status update failed: {e}")
+        agent_log("WORKER", f"[job_id={campaign_id}][DB WRITE FAILED] {e}")
     finally:
         if db is not None:
             db.close()
+
+
+# ── Redis cache helper ───────────────────────────────────────────────────────
+
+def _cache_result_in_redis(campaign_id: str, status: str, result: dict = None) -> None:
+    """Write campaign result to Redis for fast polling. TTL = 1 hour."""
+    try:
+        import redis as redis_lib
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        r = redis_lib.from_url(redis_url, decode_responses=True)
+        cache_payload = json.dumps({
+            "campaign_id": campaign_id,
+            "status": status,
+            "result_data": result,
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+        })
+        r.set(f"job:{campaign_id}:result", cache_payload, ex=3600)
+        agent_log("WORKER", f"[job_id={campaign_id}][REDIS CACHED] status={status}")
+    except Exception as e:
+        agent_log("WORKER", f"[job_id={campaign_id}][REDIS CACHE FAILED] {e}")
 
 
 # ── Pipeline Execution ───────────────────────────────────────────────────────
@@ -92,10 +114,10 @@ def execute_campaign(intent: dict) -> dict:
     recipient_phone = intent.get("recipient_phone", "")
     campaign_id     = intent.get("campaign_id", f"CAMP-{int(time.time())}")
 
-    agent_log("WORKER", f"Executing campaign: {campaign_id}")
-    agent_log("WORKER", f"Intent: {user_intent[:100]}...")
+    agent_log("WORKER", f"[job_id={campaign_id}][EXECUTING] Intent: {user_intent[:100]}...")
 
     _update_campaign_status(campaign_id, "running")
+    _cache_result_in_redis(campaign_id, "running")
 
     initial_state = {
         "user_intent":       user_intent,
@@ -114,12 +136,16 @@ def execute_campaign(intent: dict) -> dict:
 
     try:
         result = campaign_graph.invoke(initial_state)
-        _update_campaign_status(campaign_id, "completed", {
+
+        result_summary = {
             "trace_count": len(result.get("trace", [])),
             "errors": result.get("errors", []),
-        })
+        }
 
-        # Publish completion event
+        _update_campaign_status(campaign_id, "completed", result_summary)
+        _cache_result_in_redis(campaign_id, "completed", result_summary)
+
+        # Publish completion event to campaign.events
         publish_event(
             topic=Topics.CAMPAIGN_EVENTS,
             source_agent="worker",
@@ -132,12 +158,14 @@ def execute_campaign(intent: dict) -> dict:
             },
             priority="HIGH",
         )
+        agent_log("WORKER", f"[job_id={campaign_id}][RESULT PUBLISHED] topic=campaign.events agents_run={len(result.get('trace', []))}")
 
         return result
 
     except Exception as e:
-        agent_log("WORKER", f"Pipeline failed: {e}")
+        agent_log("WORKER", f"[job_id={campaign_id}][PIPELINE FAILED] {e}")
         _update_campaign_status(campaign_id, "failed", {"error": str(e)})
+        _cache_result_in_redis(campaign_id, "failed", {"error": str(e)})
 
         publish_event(
             topic=Topics.DEAD_LETTER,
@@ -155,43 +183,66 @@ def execute_campaign(intent: dict) -> dict:
 
 # ── Main Consumer Loop ───────────────────────────────────────────────────────
 
+def _create_consumer_with_retry(max_retries: int = 30, base_delay: float = 2.0) -> KafkaConsumer:
+    """
+    Create a Kafka consumer with exponential backoff retry.
+    Kafka may not be ready at boot — retry instead of crashing.
+    """
+    for attempt in range(1, max_retries + 1):
+        consumer = KafkaConsumer(
+            topics=[Topics.SUPERVISOR_TASKS],
+            group_id="marketos-worker",
+        )
+        if consumer._consumer:
+            agent_log("WORKER", f"Kafka consumer connected on attempt {attempt}")
+            return consumer
+
+        delay = min(base_delay * (2 ** (attempt - 1)), 30.0)  # cap at 30s
+        agent_log("WORKER", f"Kafka not ready (attempt {attempt}/{max_retries}). Retrying in {delay:.0f}s...")
+        time.sleep(delay)
+
+    agent_log("WORKER", f"Kafka consumer failed after {max_retries} attempts — exiting.")
+    sys.exit(1)
+
+
 def main():
     """
     Main worker loop — consumes from agent.supervisor.tasks
     and executes the full pipeline for each message.
+    Runs PERSISTENTLY — never exits under normal operation.
     """
     divider()
-    agent_log("WORKER", "╔═══════════════════════════════════════════╗")
-    agent_log("WORKER", "║   MarketOS Worker — Kafka Consumer        ║")
-    agent_log("WORKER", "║   Listening: agent.supervisor.tasks       ║")
-    agent_log("WORKER", "╚═══════════════════════════════════════════╝")
+    agent_log("WORKER", "╔═══════════════════════════════════════════════╗")
+    agent_log("WORKER", "║   MarketOS Worker — Persistent Kafka Consumer ║")
+    agent_log("WORKER", "║   Topic: agent.supervisor.tasks               ║")
+    agent_log("WORKER", "║   Group: marketos-worker                      ║")
+    agent_log("WORKER", "╚═══════════════════════════════════════════════╝")
     divider()
 
-    consumer = KafkaConsumer(
-        topics=[Topics.SUPERVISOR_TASKS],
-        group_id="marketos-worker",
-    )
+    consumer = _create_consumer_with_retry()
 
-    if not consumer._consumer:
-        agent_log("WORKER", "Kafka consumer not available — exiting.")
-        agent_log("WORKER", "To run without Kafka, use: python demo_full_pipeline.py")
-        sys.exit(1)
-
-    agent_log("WORKER", "Waiting for campaign intents on Kafka...")
+    agent_log("WORKER", "Waiting for campaign intents on Kafka... (persistent loop)")
 
     while _running:
-        envelope = consumer.poll(timeout=2.0)
-        if envelope is None:
-            continue
-
-        payload = envelope.get("payload", {})
-        agent_log("WORKER", f"Received campaign intent: {payload.get('campaign_id', 'unknown')}")
-
         try:
-            result = execute_campaign(payload)
-            agent_log("WORKER", f"Campaign completed with {len(result.get('trace', []))} agents")
+            envelope = consumer.poll(timeout=2.0)
+            if envelope is None:
+                continue
+
+            payload = envelope.get("payload", {})
+            campaign_id = payload.get("campaign_id", "unknown")
+            agent_log("WORKER", f"[job_id={campaign_id}][TASK CONSUMED] from topic=agent.supervisor.tasks")
+
+            try:
+                result = execute_campaign(payload)
+                agent_log("WORKER", f"[job_id={campaign_id}][COMPLETED] agents_run={len(result.get('trace', []))}")
+            except Exception as e:
+                agent_log("WORKER", f"[job_id={campaign_id}][FAILED] {e}")
+
         except Exception as e:
-            agent_log("WORKER", f"Campaign execution failed: {e}")
+            # Catch-all: never let an unexpected error kill the consumer loop
+            agent_log("WORKER", f"[CONSUMER LOOP ERROR] {e} — continuing...")
+            time.sleep(1)
 
     consumer.close()
     get_producer().flush()
