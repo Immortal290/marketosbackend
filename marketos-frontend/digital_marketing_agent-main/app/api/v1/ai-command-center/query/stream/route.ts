@@ -26,35 +26,19 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
 }
 
 function extractSubjectFromPrompt(prompt: string): string {
-  if (!prompt || typeof prompt !== "string") return "Product Campaign";
+  if (!prompt || typeof prompt !== "string") return "Featured Product";
   
-  const lower = prompt.toLowerCase();
-  
-  // Specific brand checks
-  if (lower.includes("tesla")) return "Tesla Model Y";
-  if (lower.includes("nike")) return "Nike Air Max";
-  if (lower.includes("starbucks")) return "Starbucks Coffee";
-  if (lower.includes("apple")) return "Apple Vision Pro";
-  if (lower.includes("bmw")) return "BMW M Series";
-  if (lower.includes("audi")) return "Audi e-tron";
-  if (lower.includes("samsung")) return "Samsung Galaxy";
-  if (lower.includes("shopify")) return "Shopify Store";
-  if (lower.includes("skincare") || lower.includes("beauty")) return "Organic Skincare";
-  if (lower.includes("coffee") || lower.includes("cafe")) return "Artisan Coffee";
-  if (lower.includes("real estate") || lower.includes("property")) return "Luxury Real Estate";
-  if (lower.includes("fitness") || lower.includes("gym")) return "Fitness Coaching";
-  if (lower.includes("saas") || lower.includes("crm")) return "Enterprise AI SaaS";
-  if (lower.includes("crypto") || lower.includes("web3")) return "Web3 Protocol";
-
-  // Clean prompt to extract noun phrase
   let cleaned = prompt
-    .replace(/^(create|generate|launch|build|make|run|design|write)\s+(a|an|the)?\s*/i, "")
-    .replace(/^(multi-channel|marketing|ad|ad campaign|campaign|promo|promotion|drip|email|social|visual)\s+(for|about|on)?\s*/i, "")
+    .replace(/^(create|generate|launch|build|make|run|design|write|plan|start|execute)\s+(a|an|the)?\s*/i, "")
+    .replace(/^(multi-channel|marketing|ad|ad campaign|campaign|promo|promotion|drip|email|social|visual)\s+(for|about|on|targeting)?\s*/i, "")
     .trim();
 
   if (cleaned.length > 0) {
-    const words = cleaned.split(" ").slice(0, 4);
-    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+    const parts = cleaned.split(/,|\.|;|for|targeting|with|in/i)[0].trim();
+    if (parts.length > 0) {
+      const words = parts.split(/\s+/).slice(0, 5);
+      return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+    }
   }
 
   return "Featured Product";
@@ -62,40 +46,54 @@ function extractSubjectFromPrompt(prompt: string): string {
 
 /** Build a Pollinations.ai URL for AI-generated on-brand images. Free, no API key, Flux model. */
 function pollinationsUrl(prompt: string, width: number, height: number): string {
+  const cleanPrompt = prompt.slice(0, 450);
   const encoded = encodeURIComponent(
-    `${prompt}. Professional advertising photography, studio lighting, vibrant brand-consistent colors. NO text, words, or typography in the image.`
-      .slice(0, 500)
+    `${cleanPrompt}. High production commercial visual, professional studio lighting. NO text, words, or letters in image.`
   );
   return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&safe=true&seed=${Math.floor(Math.random() * 99999)}`;
 }
 
 /**
- * Generate 6 campaign-specific banner options using Pollinations.ai.
- * Each variant is AI-generated from a product-specific prompt — no stock photos.
+ * Generate 6 campaign-specific banner options dynamically derived from user intent.
  */
-function getBrandImageGallery(subject: string, lowerPrompt: string): any[] {
-  const cleanSubject = subject
-    .replace(/\b(brand|called|company|store|agency|inc|llc|official|launch|campaign)\b/gi, "")
-    .trim() || "product";
+function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
+  const cleanSubject = subject || "Featured Product";
+  const promptContext = (fullPrompt || "").trim();
 
-  const base = cleanSubject;
+  const isFestive = /diwali|christmas|holiday|festival|new year|eid|black friday|cyber monday|sale|discount|promo/i.test(promptContext);
+  const isTech = /tech|app|software|ai|saas|digital|mobile|phone|laptop|code|data|cloud|platform|gadget/i.test(promptContext);
+  const isOrganic = /organic|green|tea|nature|herbal|natural|eco|clean|skincare|wellness|food|vegan|beauty/i.test(promptContext);
+  const isFashion = /fashion|style|wear|cloth|apparel|watch|jewel|luxury|shoes|bag|design/i.test(promptContext);
+
+  let visualContext = "";
+  if (isFestive) {
+    visualContext = "festive celebration atmosphere, elegant holiday decorative background";
+  } else if (isTech) {
+    visualContext = "modern high-tech studio environment, sleek lighting";
+  } else if (isOrganic) {
+    visualContext = "natural botanical setting, soft fresh ambient daylight";
+  } else if (isFashion) {
+    visualContext = "high-fashion editorial studio setting, premium texture and lighting";
+  } else {
+    visualContext = "professional commercial advertisement setup, balanced studio lighting";
+  }
 
   const angles = [
-    { prompt: `${base} product hero shot, luxury packaging, dark dramatic background`, w: 1200, h: 628 },
-    { prompt: `${base} lifestyle advertisement, natural daylight, aspirational mood`,   w: 1080, h: 1080 },
-    { prompt: `${base} close-up detail, premium textures, shallow depth of field`,      w: 1080, h: 1920 },
-    { prompt: `${base} minimalist flat lay, clean white surface, bold brand colors`,    w: 1200, h: 628 },
-    { prompt: `${base} editorial campaign photo, vibrant colors, high contrast`,        w: 1080, h: 1080 },
-    { prompt: `${base} cinematic wide shot, golden hour lighting, atmospheric`,         w: 1200, h: 628 },
+    { prompt: `${cleanSubject}, hero product photograph, ${promptContext}, ${visualContext}`, w: 1200, h: 628 },
+    { prompt: `${cleanSubject} in real-life lifestyle scene, ${promptContext}, authentic natural mood`, w: 1080, h: 1080 },
+    { prompt: `Macro close-up detail of ${cleanSubject}, showcasing materials and design, ${promptContext}`, w: 1080, h: 1920 },
+    { prompt: `Flat lay arrangement featuring ${cleanSubject}, ${promptContext}, clean aesthetic composition`, w: 1200, h: 628 },
+    { prompt: `Vibrant editorial showcase of ${cleanSubject}, ${promptContext}, striking visual framing`, w: 1080, h: 1080 },
+    { prompt: `Cinematic wide advertisement for ${cleanSubject}, ${promptContext}, rich atmospheric lighting`, w: 1200, h: 628 },
   ];
 
   return [
-    { id: "v1", title: "1. Official Product Banner (1200x628)", url: pollinationsUrl(angles[0].prompt, angles[0].w, angles[0].h), overlay: `🔥 INTRODUCING ${subject.toUpperCase()} — CLAIM OFFER`,   format: "LinkedIn / Meta Landscape (1200x628)" },
-    { id: "v2", title: "2. Lifestyle Square (1080x1080)",        url: pollinationsUrl(angles[1].prompt, angles[1].w, angles[1].h), overlay: `✨ THE ${subject.toUpperCase()} EXPERIENCE`,             format: "Instagram / Facebook Square (1080x1080)" },
-    { id: "v3", title: "3. Mobile Story (1080x1920)",            url: pollinationsUrl(angles[2].prompt, angles[2].w, angles[2].h), overlay: `🚀 UP TO 40% OFF — ${subject.toUpperCase()}`,           format: "Instagram Stories & Reels (1080x1920)" },
-    { id: "v4", title: "4. Minimalist Flat Lay (1200x628)",      url: pollinationsUrl(angles[3].prompt, angles[3].w, angles[3].h), overlay: `⚡ PURE QUALITY — ${subject.toUpperCase()}`,            format: "Clean Minimalist Layout" },
-    { id: "v5", title: "5. Editorial Square (1080x1080)",        url: pollinationsUrl(angles[4].prompt, angles[4].w, angles[4].h), overlay: `💡 DISCOVER THE REAL ${subject.toUpperCase()}`,        format: "Vibrant Editorial Spotlight" },
-    { id: "v6", title: "6. Cinematic Banner (1200x628)",         url: pollinationsUrl(angles[5].prompt, angles[5].w, angles[5].h), overlay: `📈 ${subject.toUpperCase()} — BUILT TO PERFORM`,       format: "Cinematic Wide Format" },
+    { id: "v1", title: "1. Official Product Banner (1200x628)", url: pollinationsUrl(angles[0].prompt, angles[0].w, angles[0].h), overlay: `🔥 INTRODUCING ${cleanSubject.toUpperCase()} — CLAIM OFFER`,   format: "LinkedIn / Meta Landscape (1200x628)" },
+    { id: "v2", title: "2. Lifestyle Square (1080x1080)",        url: pollinationsUrl(angles[1].prompt, angles[1].w, angles[1].h), overlay: `✨ THE ${cleanSubject.toUpperCase()} EXPERIENCE`,             format: "Instagram / Facebook Square (1080x1080)" },
+    { id: "v3", title: "3. Mobile Story (1080x1920)",            url: pollinationsUrl(angles[2].prompt, angles[2].w, angles[2].h), overlay: `🚀 UP TO 40% OFF — ${cleanSubject.toUpperCase()}`,           format: "Instagram Stories & Reels (1080x1920)" },
+    { id: "v4", title: "4. Minimalist Flat Lay (1200x628)",      url: pollinationsUrl(angles[3].prompt, angles[3].w, angles[3].h), overlay: `⚡ PURE QUALITY — ${cleanSubject.toUpperCase()}`,            format: "Clean Minimalist Layout" },
+    { id: "v5", title: "5. Editorial Square (1080x1080)",        url: pollinationsUrl(angles[4].prompt, angles[4].w, angles[4].h), overlay: `💡 DISCOVER THE REAL ${cleanSubject.toUpperCase()}`,        format: "Vibrant Editorial Spotlight" },
+    { id: "v6", title: "6. Cinematic Banner (1200x628)",         url: pollinationsUrl(angles[5].prompt, angles[5].w, angles[5].h), overlay: `📈 ${cleanSubject.toUpperCase()} — BUILT TO PERFORM`,       format: "Cinematic Wide Format" },
   ];
 }
 
