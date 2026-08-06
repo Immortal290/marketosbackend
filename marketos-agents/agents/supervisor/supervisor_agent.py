@@ -48,6 +48,13 @@ RESPONSIBILITIES:
 4. Specify agent tasks in correct execution order with dependencies
 5. Set a tone that matches the brand, product, and audience
 
+BANNED PATTERNS (self-check before outputting — rewrite any field that matches these):
+- NEVER write a key_message that is just "[Campaign Name] launch/offer/promo" — every message must state a concrete claim, number, or benefit specific to this product
+- NEVER write target_audience as "[audience] interested in [product name]" — describe them via behavior, pain point, job role, or demographic; circular references to the product itself are forbidden
+- NEVER use placeholder copy: "game-changer", "elevate your", "unlock", "powerful platform", "next level", "world-class", "seamless", "innovative solution"
+- Every field must be true specifically for THIS campaign — if the same value could appear in a different brand's campaign, rewrite it until it cannot
+- NEVER leave goal vague — it must contain a specific number (e.g. "500 sign-ups", "20% CTR lift", "₹2L revenue in 7 days")
+
 OUTPUT RULES:
 - Respond ONLY with a valid JSON object — no prose, no markdown, no code blocks
 - Be specific and concrete — no vague filler text
@@ -136,20 +143,52 @@ def supervisor_node(state: dict) -> dict:
         },
     )
 
-    llm = get_llm(temperature=0)
-
     agent = SupervisorAgent()
 
+    # ── Call 1: Creative brainstorm (temp=0.6) ────────────────────────────
+    # Free-text output — generate 4 distinctive, specific campaign angles before
+    # committing to a schema. This prevents the structured call from collapsing
+    # into the safest/most generic angle.
+    llm_creative = get_llm(temperature=0.6)
 
+    brainstorm_system = (
+        "You are a senior creative strategist. Given a marketing campaign brief, "
+        "generate exactly 4 distinctive campaign angles. Each angle must:\n"
+        "- Have a specific, provocative headline (not the product name)\n"
+        "- Name a concrete audience pain point or desire\n"
+        "- Propose a unique creative hook or proof point\n"
+        "- Feel different from the other 3 angles in tone and approach\n"
+        "Output plain text. No JSON. No markdown headers. Just numbered 1–4."
+    )
+    brainstorm_messages = [
+        SystemMessage(content=brainstorm_system),
+        HumanMessage(content=f"Brief: {user_intent}\n{memory_context}{brand_context}"),
+    ]
+    agent_log("SUPERVISOR", "Call 1 — creative brainstorm (temp=0.6)...")
+    brainstorm_response = llm_creative.invoke(brainstorm_messages)
+    campaign_angles = brainstorm_response.content.strip()
+    agent_log("SUPERVISOR", f"Angles generated:\n{campaign_angles[:400]}...")
+
+    # ── Call 2: Structured JSON output (temp=0) ───────────────────────────
+    # Pick the strongest angle and structure it into the validated schema.
+    # Strict temp=0 ensures deterministic, parseable JSON every time.
+    llm_structured = get_llm(temperature=0)
+
+    structuring_human = (
+        f"Campaign Intent:\n{user_intent}\n"
+        + (f"\nCRITICAL: The user has explicitly selected only these channels: {user_channels}. "
+           f"You MUST ONLY use these channels for this campaign.\n" if user_channels else "")
+        + f"{memory_context}{brand_context}\n\n"
+        f"CREATIVE ANGLES (brainstormed above — pick the strongest one and build the plan around it):\n"
+        f"{campaign_angles}"
+    )
     messages = [
         SystemMessage(content=agent.build_prompt(SUPERVISORAGENT_EXPERTISE)),
-        HumanMessage(content=f"Campaign Intent:\n{user_intent}\n" +
-                             (f"\nCRITICAL: The user has explicitly selected only these channels: {user_channels}. You MUST ONLY use these channels for this campaign.\n" if user_channels else "") +
-                             f"{memory_context}{brand_context}"),
+        HumanMessage(content=structuring_human),
     ]
 
-    agent_log("SUPERVISOR", "Calling LLM to decompose intent...")
-    response = llm.invoke(messages)
+    agent_log("SUPERVISOR", "Call 2 — structured JSON plan (temp=0)...")
+    response = llm_structured.invoke(messages)
     raw = response.content.strip()
 
     # Parse and validate
