@@ -211,7 +211,7 @@ function CreativeView({ result }: { result: any }) {
                 alt={opt.title} 
                 className="w-full h-14 object-cover rounded-lg shadow-sm"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=1600&q=80";
+                  (e.target as HTMLImageElement).src = pollinationsFallback("professional product advertising background", 1200, 628);
                 }}
               />
               <span className="text-[10px] font-bold truncate w-full text-center">{opt.title.split('.')[1] || opt.title}</span>
@@ -227,7 +227,7 @@ function CreativeView({ result }: { result: any }) {
           alt={activeBanner.title}
           className="w-full h-72 sm:h-80 object-cover transition-all duration-300 group-hover:scale-105"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1511381939415-e44015466834?auto=format&fit=crop&w=1600&q=80";
+            (e.target as HTMLImageElement).src = pollinationsFallback("professional product advertising background", 1200, 628);
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-between p-6">

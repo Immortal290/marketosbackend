@@ -115,7 +115,7 @@ SCORING CRITERIA (score 0–100):
 OUTPUT RULES:
 - Respond ONLY with valid JSON — no prose, no markdown code blocks
 - HTML must be properly escaped inside the JSON string
-- Unsplash Search Query: Provide a short 2-3 word `hero_image_query` that is SPECIFIC to the actual product/brand in the campaign brief (e.g. "dark chocolate bar" for a chocolate brand, "mountain hiking gear" for an outdoor brand). DO NOT default to skincare or generic queries.
+- Image Search Concept: Provide a short 2-3 word `hero_image_query` that is SPECIFIC to the actual product/brand in the campaign brief (e.g. "dark chocolate bar" for a chocolate brand, "mountain hiking gear" for an outdoor brand). DO NOT default to skincare or generic queries.
 - Gemini Imagen Prompt: Provide a highly descriptive `hero_image_prompt` (max 400 chars) as a fallback that is 100% specific to the campaign's product. MUST specify NO TEXT, typography, or words.
 - All scores must be numbers (not strings)
 

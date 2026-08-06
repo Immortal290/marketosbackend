@@ -53,8 +53,9 @@ class CopyVariant(BaseModel):
     cta_url: str = "https://example.com/offer"
 
     # Image fields — populated by Copy Agent, used by Image Agent
-    hero_image_query: Optional[str] = None     # Unsplash search query (2-3 words)
-    hero_image_prompt: Optional[str] = None    # Gemini Imagen fallback prompt
+    hero_image_query: Optional[str] = None     # Image search query / concept (2-3 words)
+    hero_image_prompt: Optional[str] = None    # Gemini Imagen / Pollinations prompt (fallback visual)
+    hero_image_url: Optional[str] = None       # Generated image URL
 
     # Scoring
     readability_score: float        # 0–100, higher = more readable
@@ -71,7 +72,7 @@ class CopyOutput(BaseModel):
     brand_voice_notes: str
 
     # Image fields — populated by Image Agent after copy_agent runs
-    hero_image_url: Optional[str] = None       # Unsplash photo URL (if found + verified)
+    hero_image_url: Optional[str] = None       # Pollinations photo URL (if generated)
     hero_image_base64: Optional[str] = None    # Gemini Imagen base64 bytes (fallback)
     hero_image_type: Optional[str] = None      # "URL" | "CID" | None
 

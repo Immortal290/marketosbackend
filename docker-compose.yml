@@ -155,8 +155,6 @@ services:
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
-      # Creative & search
-      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-}
       - SERPER_API_KEY=${SERPER_API_KEY:-}
       # ClickHouse — use Docker service hostname, not localhost
       - CLICKHOUSE_HOST=marketos_clickhouse

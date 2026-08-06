@@ -22,7 +22,6 @@ except ImportError:
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
 NVIDIA_KEY = os.getenv("NVIDIA_API_KEY", "")
-UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 MSG91_API_KEY = os.getenv("MSG91_API_KEY", "")
@@ -76,19 +75,6 @@ def test_nvidia(key):
         results["NVIDIA API"] = {"status": "FAILED", "code": e.code, "error": body}
     except Exception as e:
         results["NVIDIA API"] = {"status": "FAILED", "error": str(e)}
-
-def test_unsplash(key):
-    url = f"https://api.unsplash.com/photos/random?client_id={key}"
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            results["Unsplash API"] = {"status": "SUCCESS", "info": "Random photo query succeeded"}
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        results["Unsplash API"] = {"status": "FAILED", "code": e.code, "error": body}
-    except Exception as e:
-        results["Unsplash API"] = {"status": "FAILED", "error": str(e)}
-
 def test_serper(key):
     url = "https://google.serper.dev/search"
     headers = {
@@ -169,7 +155,6 @@ if __name__ == "__main__":
     test_gemini(GEMINI_KEY, "Gemini Key")
     test_groq(GROQ_KEY)
     test_nvidia(NVIDIA_KEY)
-    test_unsplash(UNSPLASH_ACCESS_KEY)
     test_serper(SERPER_API_KEY)
     test_sendgrid(SENDGRID_API_KEY)
     test_msg91(MSG91_API_KEY)

@@ -74,10 +74,8 @@ function pollinationsUrl(prompt: string, width: number, height: number): string 
   return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&safe=true&seed=${Math.floor(Math.random() * 99999)}`;
 }
 
-/**
  * Generate 6 campaign-specific banner options using Pollinations.ai (AI-generated,
  * no API key, free). Each variant uses a different visual angle + format size.
- * Replaces the old Unsplash stock-photo lookup which returned off-brand generic images.
  */
 function getBrandImageGallery(subject: string, lowerPrompt: string): any[] {
   // Build a tight, product-specific base prompt from the campaign subject
