@@ -347,9 +347,16 @@ export default function MissionControlPage() {
 
   const handleExecute = async (audienceData?: AudienceData, forceExecute: boolean = false) => {
     const prompt = audienceData?.query || commandInput;
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      toast.error("Please enter a campaign prompt in the command bar.");
+      return;
+    }
 
-    setIsExecuting(true);
+    // Interactively pop up the Target Audience & Delivery Details modal first if not forced
+    if (!forceExecute && !audienceData) {
+      setIsAudienceModalOpen(true);
+      return;
+    }
     setShowSugg(false);
     setSseEvents([]);
     setAgentOutputs([]);
@@ -733,7 +740,7 @@ export default function MissionControlPage() {
         initialPrompt={commandInput}
         onLaunch={(audienceData) => {
           setCommandInput(audienceData.query);
-          handleExecute(audienceData);
+          handleExecute(audienceData, true);
         }}
       />
     </div>
