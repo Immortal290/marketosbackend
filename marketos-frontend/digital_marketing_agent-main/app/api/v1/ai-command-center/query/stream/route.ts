@@ -432,16 +432,15 @@ export async function POST(req: NextRequest) {
   const userQuery = bodyPayload.query || bodyPayload.prompt || "";
   const workspaceId = bodyPayload.workspace_id || bodyPayload.workspaceId || "default";
 
-  // Try forwarding to candidate backend servers (INFINITE WAIT — NO TIMEOUT)
+  // Try candidate backend servers
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
-      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("digital_marketing_agent") || base.includes("marketos_agents");
+      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("reneweddedication") || base.includes("digital_marketing_agent") || base.includes("marketos_agents") || base.includes("agents");
       const targetUrl = isPythonService
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
 
-      // Forward complete payload to Python Agent Service
       const forwardBody = {
         query: userQuery,
         prompt: userQuery,
@@ -449,7 +448,7 @@ export async function POST(req: NextRequest) {
         ...bodyPayload,
       };
 
-      // Fetch without early timeout — wait for real agent execution
+      console.log(`[AI Stream Proxy] Trying targetUrl: ${targetUrl}`);
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -457,6 +456,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (res.ok && res.body) {
+        console.log(`[AI Stream Proxy] Target succeeded: ${targetUrl}`);
         return new NextResponse(res.body, {
           status: 200,
           headers: {
@@ -465,8 +465,13 @@ export async function POST(req: NextRequest) {
             "Access-Control-Allow-Origin": "*",
           },
         });
+      } else {
+        const errTxt = await res.text().catch(() => "");
+        console.warn(`[AI Stream Proxy] Target returned HTTP ${res.status}: ${targetUrl} — ${errTxt.slice(0, 200)}`);
       }
-    } catch (_err) {}
+    } catch (err) {
+      console.warn(`[AI Stream Proxy] Fetch exception for ${base}:`, err);
+    }
   }
 
   // If no live agent server responds, return error stream — NO MOCK CONTENT

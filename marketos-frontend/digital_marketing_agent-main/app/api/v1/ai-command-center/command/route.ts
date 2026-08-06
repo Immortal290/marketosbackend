@@ -400,14 +400,51 @@ async function buildLocalStream(prompt: string): Promise<ReadableStream> {
   return new ReadableStream({
     async pull(controller) {
       if (i < stages.length) {
-        controller.enqueue(encoder.encode(`data: ${stages[i]}\n\n`));
-        i++;
-        await new Promise(r => setTimeout(r, 600));
-      } else {
-        controller.enqueue(encoder.encode(`event: end\ndata: {"status":"done"}\n\n`));
-        controller.close();
-      }
-    },
+function extractSubjectFromPrompt(prompt: string): string {
+  const words = prompt.split(" ");
+  return words[words.length - 1].replace(/['"]/g, "");
+}
+
+const BACKEND_CANDIDATES = [
+  process.env.AGENT_SERVICE_URL,
+  process.env.AGENTS_SERVICE_URL,
+  process.env.AGENTS_URL,
+  process.env.BACKEND_URL,
+  process.env.RAILWAY_BACKEND_URL,
+  process.env.NEXT_PUBLIC_BACKEND_URL,
+  process.env.NEXT_PUBLIC_API_BASE_URL,
+  process.env.API_URL,
+  "http://renewed-dedication.railway.internal:8000",
+  "http://renewed-dedication.railway.internal",
+  "http://reneweddedication.railway.internal:8000",
+  "http://reneweddedication.railway.internal",
+  "https://renewed-dedication-production.up.railway.app",
+  "http://renewed-dedication-production.up.railway.app",
+  "https://reneweddedication-production.up.railway.app",
+  "http://reneweddedication-production.up.railway.app",
+  "https://marketos-agents-production.up.railway.app",
+  "http://digital_marketing_agent.railway.internal:8000",
+  "http://digitalmarketingagent.railway.internal:8000",
+  "http://digital-marketing-agent.railway.internal:8000",
+  "http://marketosbackend.railway.internal:3000",
+  "http://marketosbackend.railway.internal",
+  "http://marketos-backend.railway.internal:3000",
+  "http://marketos-backend.railway.internal",
+  "https://marketosbackend-production.up.railway.app",
+  "http://marketos_agents:8000",
+  "http://localhost:8000",
+  "http://localhost:3001",
+  "http://localhost:3000",
+].filter((url): url is string => Boolean(url) && typeof url === "string");
+
+function buildSSELine(stage: string, agent: string, status: string, detail: string, data: object = {}): string {
+  return JSON.stringify({
+    stage,
+    agent,
+    status,
+    detail,
+    data,
+    timestamp: new Date().toISOString(),
   });
 }
 
@@ -435,16 +472,15 @@ export async function POST(req: NextRequest) {
   const userQuery = bodyPayload.prompt || bodyPayload.query || "";
   const workspaceId = bodyPayload.workspaceId || "default";
 
-  // Try the GLM-orchestrated streaming endpoint on candidate backend servers (INFINITE WAIT — NO TIMEOUT)
+  // Try candidate backend servers
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
-      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("digital_marketing_agent") || base.includes("marketos_agents");
+      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("reneweddedication") || base.includes("digital_marketing_agent") || base.includes("marketos_agents") || base.includes("agents");
       const targetUrl = isPythonService
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
 
-      // Forward complete payload to Python Agent Service
       const forwardBody = {
         query: userQuery,
         prompt: userQuery,
@@ -452,7 +488,7 @@ export async function POST(req: NextRequest) {
         ...bodyPayload,
       };
 
-      // Fetch without early timeout — wait for real agent execution
+      console.log(`[AI Command Proxy] Trying targetUrl: ${targetUrl}`);
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -460,6 +496,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (res.ok && res.body) {
+        console.log(`[AI Command Proxy] Target succeeded: ${targetUrl}`);
         return new NextResponse(res.body, {
           status: 200,
           headers: {
@@ -468,8 +505,13 @@ export async function POST(req: NextRequest) {
             "Access-Control-Allow-Origin": "*",
           },
         });
+      } else {
+        const errTxt = await res.text().catch(() => "");
+        console.warn(`[AI Command Proxy] Target returned HTTP ${res.status}: ${targetUrl} — ${errTxt.slice(0, 200)}`);
       }
-    } catch (_err) {}
+    } catch (err) {
+      console.warn(`[AI Command Proxy] Fetch exception for ${base}:`, err);
+    }
   }
 
   // If no live agent server responds, return error stream — NO MOCK CONTENT
