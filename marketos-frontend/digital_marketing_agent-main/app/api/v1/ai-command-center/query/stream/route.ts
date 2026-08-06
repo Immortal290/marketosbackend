@@ -421,7 +421,7 @@ export async function POST(req: NextRequest) {
   for (const base of BACKEND_CANDIDATES) {
     if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
     try {
-      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("digital_marketing_agent");
+      const isPythonService = base.includes(":8000") || base.includes("renewed-dedication") || base.includes("digital_marketing_agent") || base.includes("marketos_agents");
       const targetUrl = isPythonService
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
@@ -430,7 +430,7 @@ export async function POST(req: NextRequest) {
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: userQuery, workspace_id: workspaceId }),
+        body: JSON.stringify({ query: userQuery, prompt: userQuery, workspace_id: workspaceId }),
       });
 
       if (res.ok && res.body) {
@@ -447,7 +447,7 @@ export async function POST(req: NextRequest) {
   }
 
   // If no live agent server responds, return error stream — NO MOCK CONTENT
-  const errorStream = buildErrorStream("Unable to connect to Railway Agent Service. Please ensure the Python Agent Service (renewed-dedication) is running.");
+  const errorStream = buildErrorStream("Unable to connect to Railway / Docker Agent Service. Please ensure the Python Agent Service (marketos_agents / renewed-dedication on port 8000) is running.");
   return new NextResponse(errorStream, {
     status: 200,
     headers: {
