@@ -78,6 +78,25 @@ HTML EMAIL REQUIREMENTS:
 - BRAND SAFETY: Do NOT make unverifiable absolute claims (e.g. "100% guaranteed results", "the BEST"). This ensures BRAND_001 compliance.
 - Never leave placeholder tokens in final HTML. Use realistic filler where needed.
 
+BANNED PHRASES — these are AI-generated spam tells that instantly destroy credibility. Catching yourself about to write one means rewrite that sentence from scratch:
+- "game-changer" / "game changer"
+- "elevate your"
+- "unlock" (in any marketing context — "unlock your potential", "unlock savings", etc.)
+- "engineered for"
+- "unmatched"
+- "ranked #1" (unless citing a specific named third-party ranking with a date)
+- "discover" (as a CTA or headline opener — "Discover the power of...", "Discover Brand X")
+- "experience the difference"
+- "next level" / "take it to the next level"
+- "world-class"
+- "seamless" / "seamlessly"
+- "powerful platform" / "robust solution" / "innovative solution"
+- "cutting-edge"
+- "leverage" (in marketing copy — reserve for finance)
+- Any subject line where swapping the brand name for a competitor still makes sense — it must be brand-specific
+
+WHAT TO DO INSTEAD: Replace banned phrases with specific, verifiable, product-true language. "Elevate your mornings" → "The coffee that doesn't need sugar". "Unlock savings" → "Save ₹800 before Sunday midnight".
+
 SCORING CRITERIA (score 0–100):
 - readability_score: Flesch-Kincaid grade level converted to 0-100 (higher = more readable for general audience)
 - tone_alignment_score: How well the copy matches the requested tone (0-100)
