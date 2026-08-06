@@ -1,18 +1,22 @@
 """
-MarketOS — Image Agent (Hybrid Visual Engine)
+MarketOS — Image Agent (AI-Generated Visual Engine)
 Pipeline:
-  1. Unsplash photography search (fast, high quality, free tier)
-  2. Gemini Vision relevance check on the photo (multimodal)
-  3. Gemini Imagen 4 generation as fallback (AI-generated, no text)
-  4. HTML injection of the winning image into the selected copy variant
+  1. Gemini Imagen (gemini-3-pro-image-preview) — best quality, needs GEMINI_API_KEY
+  2. Pollinations.ai (Flux, open-source, no API key required) — free, always-available fallback
+  3. HTML injection of the winning image into the selected copy variant
+
+No stock photography is used. Every image is generated from the campaign's
+own creative prompt, so it is always on-brand and on-concept — including for
+brand-new / fictional products that would never match a stock photo library.
 
 Production extension:
-- Cache verified images in S3 by query hash (avoid repeated API calls)
+- Cache generated images in S3/CDN by prompt hash (avoid repeated generation calls)
 - Store base64 in campaign_assets table with CDN URL after upload
-- Track usage for brand consistency across campaigns
+- Track usage for brand/style consistency across campaigns
 """
 
 from __future__ import annotations
+import base64
 import json
 import os
 import urllib.error
@@ -20,31 +24,29 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from langchain_core.messages import HumanMessage
-
-from agents.llm.llm_provider import get_llm
-from utils.logger import agent_log, step_banner, divider, kv, section
+from agents.llm.llm_provider import get_llm  # noqa: F401 — kept for future use
+from utils.logger import agent_log, step_banner, divider, kv
 from utils.kafka_bus import publish_event, Topics
 
 
-# ── Agent Node ───────────────────────────────────────────────────────────────
+# ── Agent Node ────────────────────────────────────────────────────────────────
 
 def image_agent_node(state: dict) -> dict:
-    step_banner("IMAGE AGENT  ─  Hybrid AI Visual Engine")
+    step_banner("IMAGE AGENT  ─  AI Visual Generation Engine")
 
     plan_data = state.get("campaign_plan", {})
-    channels = plan_data.get("channels", [])
+    channels  = plan_data.get("channels", [])
 
     if "email" not in channels and "social" not in channels:
-        agent_log("IMAGE", "Skipping Image Agent because no applicable channels selected.")
+        agent_log("IMAGE", "Skipping Image Agent — no applicable channels selected.")
         return {**state, "current_step": "compliance_agent"}
 
     copy_data = state.get("copy_output")
     if not isinstance(copy_data, dict):
-        agent_log("IMAGE", "No copy_output found, possibly skipped copy_agent. Skipping Image Agent.")
+        agent_log("IMAGE", "No copy_output found — skipping Image Agent.")
         return {**state, "current_step": "compliance_agent"}
 
-    # ── Find winning variant ─────────────────────────────────────────────
+    # ── Find winning variant ─────────────────────────────────────────────────
     selected_id = copy_data.get("selected_variant_id")
     variants    = copy_data.get("variants") or []
     winner      = next(
@@ -57,101 +59,115 @@ def image_agent_node(state: dict) -> dict:
         agent_log("IMAGE", f"ERROR — {err}")
         return {**state, "errors": state.get("errors", []) + [err], "current_step": "failed"}
 
+    # hero_image_query is read for logging only — no longer hits a stock photo API.
+    # hero_image_prompt drives generation (AI-generated, always on-brand).
     query  = winner.get("hero_image_query")
-    prompt = winner.get("hero_image_prompt")
+    prompt = winner.get("hero_image_prompt") or query
 
-    img_url  = None
-    img_b64  = None
-    img_type = None
-    total_token_usage = 0
+    if not prompt:
+        agent_log("IMAGE", "⚠ No hero_image_prompt provided — sending text-only email")
+        return _finalize(state, copy_data, winner, variants,
+                         img_b64=None, img_type=None, source=None)
 
-    # ── Phase 1 & 2: Unsplash & Gemini 3 Pro ─────────────────────────────
+    agent_log("IMAGE", f"Creative prompt: {prompt[:120]}...")
     if query:
-        agent_log("IMAGE", f"Phase 1 — Unsplash search: '{query}'")
-        unsplash_url = _fetch_unsplash(query)
+        agent_log("IMAGE", f"Image concept: '{query}'")
 
-        if unsplash_url:
-            agent_log("IMAGE", "Photo found. Phase 2 — Enhancing image with Gemini 3 Pro...")
-            base_img = _download_as_base64(unsplash_url)
-            img_b64, t_tokens = _generate_enhanced_image(prompt or query, base_img)
-            total_token_usage += t_tokens
-            
-            if img_b64:
-                agent_log("IMAGE", "✅ Gemini 3 Pro Image-to-Image generation successful")
-                img_type = "CID"
-            else:
-                agent_log("IMAGE", "⚠ Gemini generation failed — falling back to original Unsplash photo")
-                img_url  = unsplash_url
-                img_type = "URL"
+    full_prompt = _build_generation_prompt(prompt, plan_data)
+
+    img_b64            = None
+    img_type           = None
+    source             = None
+    total_token_usage  = 0
+
+    # ── Phase 1: Gemini Imagen (best quality, needs GEMINI_API_KEY) ──────────
+    if os.getenv("GEMINI_API_KEY"):
+        agent_log("IMAGE", "Phase 1 — Generating with Gemini Imagen...")
+        img_b64, t_tokens = _generate_gemini_image(full_prompt)
+        total_token_usage += t_tokens
+        if img_b64:
+            agent_log("IMAGE", "✅ Gemini Imagen generation successful")
+            img_type = "CID"
+            source   = "gemini-imagen"
         else:
-            agent_log("IMAGE", "⚠ Unsplash returned no result. Proceeding with prompt-only generation.")
-            img_b64, t_tokens = _generate_enhanced_image(prompt or query, None)
-            total_token_usage += t_tokens
-            if img_b64:
-                img_type = "CID"
+            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to Pollinations")
     else:
-        agent_log("IMAGE", "No hero_image_query provided — proceeding to prompt-based generation.")
-        if prompt:
-            img_b64, t_tokens = _generate_enhanced_image(prompt, None)
-            total_token_usage += t_tokens
-            if img_b64:
-                img_type = "CID"
+        agent_log("IMAGE", "GEMINI_API_KEY not set — skipping straight to Pollinations")
 
-    # ── Phase 3: Inject image into HTML ─────────────────────────────────
-    if img_url and not img_b64:
-        img_tag = (
-            f'<img src="{img_url}" width="600" '
-            f'style="display:block;width:100%;max-width:600px;height:auto;" '
-            f'alt="Campaign Visual">'
-        )
-        winner = _inject_image(winner, img_tag, "<!-- HERO IMAGE -->")
-        kv("Image Source", f"Unsplash URL: {img_url[:70]}...")
+    # ── Phase 2: Pollinations.ai (free, open-source, no key required) ────────
+    if not img_b64:
+        agent_log("IMAGE", "Phase 2 — Generating with Pollinations (Flux, free, no key)...")
+        img_b64 = _generate_pollinations_image(full_prompt)
+        if img_b64:
+            agent_log("IMAGE", "✅ Pollinations generation successful")
+            img_type = "CID"
+            source   = "pollinations-flux"
+        else:
+            agent_log("IMAGE", "⚠ Pollinations generation failed — no image secured")
 
-    elif img_b64:
+    return _finalize(state, copy_data, winner, variants,
+                     img_b64, img_type, source, total_token_usage)
+
+
+# ── Finalization: HTML injection + state update + Kafka ───────────────────────
+
+def _finalize(
+    state:      dict,
+    copy_data:  dict,
+    winner:     dict,
+    variants:   list,
+    img_b64:    str | None,
+    img_type:   str | None,
+    source:     str | None,
+    total_token_usage: int = 0,
+) -> dict:
+
+    if img_b64:
         img_tag = (
             '<img src="cid:hero_image" width="600" '
             'style="display:block;width:100%;max-width:600px;height:auto;" '
             'alt="Campaign Visual">'
         )
         winner = _inject_image(winner, img_tag, "<!-- HERO IMAGE -->")
-        kv("Image Source", "Gemini Imagen (inline CID attachment)")
-
+        kv("Image Source", f"AI-generated ({source})")
     else:
         agent_log("IMAGE", "⚠ No image secured — sending text-only email")
 
-    # ── Update copy_data with image metadata ─────────────────────────────
-    # Patch the winner back into the variants list
-    updated_variants = []
-    for v in variants:
-        if isinstance(v, dict) and v.get("variant_id") == winner.get("variant_id"):
-            updated_variants.append(winner)
-        else:
-            updated_variants.append(v)
+    # Patch winner back into variants list
+    updated_variants = [
+        winner if (isinstance(v, dict) and v.get("variant_id") == winner.get("variant_id"))
+        else v
+        for v in variants
+    ]
 
-    copy_data["variants"]           = updated_variants
-    copy_data["hero_image_url"]     = img_url
-    copy_data["hero_image_base64"]  = img_b64
-    copy_data["hero_image_type"]    = img_type
+    copy_data["variants"]          = updated_variants
+    copy_data["hero_image_url"]    = None   # no external URLs — always inline CID
+    copy_data["hero_image_base64"] = img_b64
+    copy_data["hero_image_type"]   = img_type
+    copy_data["hero_image_source"] = source
 
     divider()
 
-    # ── Publish to Kafka ────────────────────────────────────────────────
     if total_token_usage > 0:
         state["api_tokens"] = state.get("api_tokens", 0) + total_token_usage
         publish_event(
             topic=Topics.IMAGE_RESULTS,
             source_agent="image_agent",
-            payload={"event": "token_usage", "model": "gemini-3-pro-image-preview", "tokens": total_token_usage}
+            payload={
+                "event":  "token_usage",
+                "model":  "gemini-imagen",
+                "tokens": total_token_usage,
+            },
         )
 
     publish_event(
         topic=Topics.IMAGE_RESULTS,
         source_agent="image_agent",
         payload={
-            "event":    "image_processed",
-            "img_type": img_type or "none",
-            "has_url":  img_url is not None,
-            "has_b64":  img_b64 is not None,
+            "event":     "image_processed",
+            "img_type":  img_type or "none",
+            "source":    source or "none",
+            "has_b64":   img_b64 is not None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -160,10 +176,11 @@ def image_agent_node(state: dict) -> dict:
         **state,
         "copy_output":  copy_data,
         "image_result": {
-            "has_image": img_url is not None or img_b64 is not None,
-            "image_url": img_url,
+            "has_image":    img_b64 is not None,
+            "image_url":    None,
             "image_base64": img_b64,
-            "image_type": img_type,
+            "image_type":   img_type,
+            "source":       source,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "current_step": "compliance_agent",
@@ -171,23 +188,23 @@ def image_agent_node(state: dict) -> dict:
             "agent":     "image_agent",
             "status":    "completed",
             "img_type":  img_type or "none",
+            "source":    source or "none",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
 
 
-# ── Internal Helpers ─────────────────────────────────────────────────────────
+# ── HTML Injection ────────────────────────────────────────────────────────────
 
 def _inject_image(winner: dict, img_tag: str, placeholder: str) -> dict:
     """
     Inject the image tag into the HTML body.
-    Replaces placeholder comment if present; otherwise inserts after <body>
-    or the opening wrapper table.
+    Priority: (1) replace placeholder comment, (2) swap existing cid:hero_image,
+    (3) best-effort insert after the first centred <td>.
     """
     html = winner.get("body_html", "")
 
     if placeholder in html:
-        # Replace the placeholder comment row wrapper
         row_html = (
             f"<tr><td style='padding:0;font-family:Arial,sans-serif;'>"
             f"{img_tag}"
@@ -195,103 +212,73 @@ def _inject_image(winner: dict, img_tag: str, placeholder: str) -> dict:
         )
         html = html.replace(placeholder, row_html, 1)
 
-    elif "<img src=\"cid:hero_image\"" in html:
-        # Already has a CID placeholder — swap it
+    elif '<img src="cid:hero_image"' in html:
         import re
         html = re.sub(r'<img\s+src="cid:hero_image"[^>]*>', img_tag, html, count=1)
 
     else:
-        # Best-effort: insert after first <td inside the main content area
-        insert_after = "<td align=\"center\">"
+        insert_after = '<td align="center">'
         if insert_after in html:
             row_html = (
                 f"<tr><td style='padding:0;font-family:Arial,sans-serif;'>"
                 f"{img_tag}"
                 f"</td></tr>"
             )
-            idx = html.find(insert_after) + len(insert_after)
+            idx  = html.find(insert_after) + len(insert_after)
             html = html[:idx] + row_html + html[idx:]
 
     winner["body_html"] = html
     return winner
 
 
-def _fetch_unsplash(query: str) -> str | None:
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return "http://mock.unsplash/image.jpg"
-    api_key = os.getenv("UNSPLASH_ACCESS_KEY")
-    if not api_key:
-        agent_log("IMAGE", "UNSPLASH_ACCESS_KEY not set in .env — skipping Unsplash")
-        return None
+# ── Prompt Construction ───────────────────────────────────────────────────────
 
-    q   = urllib.parse.quote(query)
-    url = f"https://api.unsplash.com/photos/random?query={q}&orientation=landscape"
-    headers = {
-        "Accept-Version": "v1",
-        "Authorization":  f"Client-ID {api_key}",
-        "User-Agent":     "MarketOS/1.0",
-    }
-
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
-        urls = data.get("urls")
-        return urls.get("regular") if isinstance(urls, dict) else None
-
-    except urllib.error.HTTPError as e:
-        codes = {401: "invalid API key", 403: "rate limit / forbidden", 404: "no photos found"}
-        agent_log("IMAGE", f"Unsplash HTTP {e.code}: {codes.get(e.code, e.reason)}")
-        return None
-    except Exception as e:
-        agent_log("IMAGE", f"Unsplash exception: {e}")
-        return None
-
-
-def _download_as_base64(url: str) -> str | None:
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return "mock_base64_string"
-    try:
-        import base64
-        req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return base64.b64encode(resp.read()).decode("utf-8")
-    except Exception as e:
-        agent_log("IMAGE", f"Failed to download image from Unsplash: {e}")
-        return None
-
-def _generate_enhanced_image(prompt: str, base_image_b64: str | None = None) -> tuple[str | None, int]:
+def _build_generation_prompt(concept_prompt: str, plan_data: dict) -> str:
     """
-    Call Gemini 3 Pro with multi-modal parts for Image-to-Image enhancement.
-    Returns (base64_string, token_cost).
+    Enrich the copy agent's hero_image_prompt with campaign context (tone, name)
+    and hard rules (no text in image, high production quality).
+    """
+    tone = plan_data.get("tone", "")
+    name = plan_data.get("campaign_name", "")
+
+    return (
+        f"{concept_prompt.rstrip('.')}. "
+        f"Campaign: {name}. "
+        f"Visual tone: {tone or 'professional and polished'}. "
+        "Photorealistic or high-end illustrative quality. "
+        "Brand-consistent, vibrant color palette. "
+        "Professional studio or editorial lighting. "
+        "High production value. "
+        "Absolutely NO text, words, letters, numbers, or typography anywhere in the image."
+    )
+
+
+# ── Provider 1: Gemini Imagen ─────────────────────────────────────────────────
+
+def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
+    """
+    Call Gemini's image generation endpoint.
+    Returns (base64_string | None, token_count).
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
-        return "mock_base64_generated", 100
+        return "mock_base64_gemini", 100
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — cannot run Gemini 3 Pro Images")
         return None, 0
 
-    full_prompt = (
-        prompt.rstrip(".")
-        + ". Create an image exactly capturing this concept but with a vibrant, consistent brand color palette. Ensure top-notch professional production quality. Absolutely NO text or typography."
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/gemini-3-pro-image-preview:generateContent?key={api_key}"
     )
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={api_key}"
-    
-    parts = [{"text": full_prompt}]
-    if base_image_b64:
-        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": base_image_b64}})
-
     payload = {
-        "contents": [{"role": "user", "parts": parts}],
+        "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
         "generationConfig": {
-            "temperature": 1.0, 
-            "topP": 0.95, 
-            "topK": 64,
-            "responseModalities": ["IMAGE"]
-        }
+            "temperature":        1.0,
+            "topP":               0.95,
+            "topK":               64,
+            "responseModalities": ["IMAGE"],
+        },
     }
 
     try:
@@ -303,17 +290,50 @@ def _generate_enhanced_image(prompt: str, base_image_b64: str | None = None) -> 
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
 
-        metadata = data.get("usageMetadata", {})
-        total_tokens = metadata.get("totalTokenCount", 0)
-
-        candidates = data.get("candidates", [])
-        if candidates:
-            c_parts = candidates[0].get("content", {}).get("parts", [])
-            for part in c_parts:
-                if "inlineData" in part:
-                    return part["inlineData"]["data"], total_tokens
+        total_tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
+        for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+            if "inlineData" in part:
+                return part["inlineData"]["data"], total_tokens
         return None, total_tokens
 
     except Exception as e:
-        agent_log("IMAGE", f"Gemini 3 Pro API exception: {e}")
+        agent_log("IMAGE", f"Gemini Imagen exception: {e}")
         return None, 0
+
+
+# ── Provider 2: Pollinations.ai ───────────────────────────────────────────────
+
+def _generate_pollinations_image(
+    full_prompt: str,
+    width:  int = 1200,
+    height: int = 628,
+) -> str | None:
+    """
+    Generate an image via Pollinations.ai — free, open-source, no API key,
+    no signup. Uses Flux under the hood.
+
+    https://image.pollinations.ai  — no SLA; used as fallback, not primary.
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_pollinations"
+
+    # Truncate prompt to keep URL length browser/server safe
+    q   = urllib.parse.quote(full_prompt[:1000])
+    url = (
+        f"https://image.pollinations.ai/prompt/{q}"
+        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
+    )
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+        return base64.b64encode(raw).decode("utf-8")
+
+    except urllib.error.HTTPError as e:
+        agent_log("IMAGE", f"Pollinations HTTP {e.code}: {e.reason}")
+        return None
+    except Exception as e:
+        agent_log("IMAGE", f"Pollinations exception: {e}")
+        return None
