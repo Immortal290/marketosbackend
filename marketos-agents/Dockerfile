@@ -22,9 +22,9 @@ COPY api.py ./
 COPY main.py ./
 COPY worker.py ./
 
-# Expose the voice daemon port (matching DAEMON_PORT in voice_daemon.py)
+# Expose the API server port for FastAPI and agent pipeline
+EXPOSE 8000
 EXPOSE 8765
 
-# Command to run the main agents supervisor or voice daemon
-# Change this CMD depending on which agent entry point you want to boot on Railway
-CMD ["python", "-m", "agents.voice.voice_daemon"]
+# Command to run FastAPI server on 0.0.0.0 and persistent Kafka worker concurrently
+CMD ["sh", "-c", "python -m uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000} & python worker.py"]
