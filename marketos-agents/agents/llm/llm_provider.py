@@ -2,7 +2,7 @@
 MarketOS — LLM Provider Abstraction
 Switch providers by changing ONE line in .env:
 
-    LLM_PROVIDER=gemini       →  Google Gemini 2.0 Flash  (default, dev)
+    LLM_PROVIDER=gemini       →  Google Gemini 2.5 Pro  (default, dev)
     LLM_PROVIDER=anthropic    →  Anthropic Claude Sonnet 4
     LLM_PROVIDER=openrouter   →  OpenRouter (production)
     LLM_PROVIDER=glm          →  GLM-5.2 via NVIDIA integrate (orchestration head)
@@ -146,10 +146,10 @@ def get_llm(temperature: float = 0):
             logging.getLogger("marketos").warning("GEMINI_API_KEY missing. Falling back to MockLLM.")
             return MockLLM()
         return ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-pro",
             google_api_key=api_key,
             temperature=temperature,
-            max_output_tokens=4096,
+            max_output_tokens=8192,
         )
 
     elif provider == "groq":

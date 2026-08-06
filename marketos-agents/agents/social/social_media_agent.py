@@ -343,7 +343,7 @@ class SocialMediaAgent(AgentBase):
             agent_log("SOCIAL", f"⚠ No API tokens for: {', '.join(missing_tokens)} — content will be generated but NOT published.")
 
         # ── Generate platform content ─────────────────────────────────────
-        llm = self.get_llm(temperature=0.6)
+        llm = self.get_llm(temperature=0.85)  # High creative temp — distinctive platform-native posts
 
         # Pull best performing copy from email as seed
         variants = copy_data.get("variants", [])

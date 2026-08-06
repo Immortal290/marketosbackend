@@ -295,7 +295,7 @@ def copy_agent_node(state: dict) -> dict:
     agent_log("COPY", f"Tone requested: {plan.tone.upper()}")
     agent_log("COPY", f"Generating 2 copy variants (benefit-led + urgency-led)...")
 
-    llm = get_llm(temperature=0.7)   # Slightly higher temp for creative copy
+    llm = get_llm(temperature=0.85)  # High creative temp — forces distinctive, non-generic copy
 
     # ── Fetch Market Intelligence ─────────────────────────────────────────
     intel = state.get("competitor_result", {}).get("intel", {})

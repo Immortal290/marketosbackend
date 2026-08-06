@@ -108,7 +108,7 @@ def voice_agent_node(state: dict) -> dict:
     campaign_id = plan.campaign_id
 
     agent = VoiceAgent()
-    llm = get_llm(temperature=0.4)
+    llm = get_llm(temperature=0.85)  # High creative temp — natural, human-sounding voice scripts
 
     agent_log("VOICE", f"Campaign: {plan.campaign_name}")
 

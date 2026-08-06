@@ -370,7 +370,7 @@ class SMSAgent(AgentBase):
         agent_log("SMS", f"Campaign: {plan.campaign_name}")
 
         # ── Generate SMS copy ─────────────────────────────────────────────
-        llm = self.get_llm(temperature=0.5)
+        llm = self.get_llm(temperature=0.85)  # High creative temp — punchy, surprising SMS hooks
         campaign_context = f"""
 Campaign: {plan.campaign_name}
 Goal: {plan.goal}
