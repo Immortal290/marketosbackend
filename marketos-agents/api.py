@@ -407,6 +407,17 @@ async def get_pipeline_status(campaign_id: str):
 
 # ── GET /v1/health ───────────────────────────────────────────────────────────
 
+@app.get("/")
+async def root():
+    """Root endpoint for status check."""
+    return {
+        "status": "online",
+        "service": "MarketOS Python Agent Service",
+        "version": "1.0.0",
+        "health": "/v1/health",
+        "docs": "/docs"
+    }
+
 @app.get("/v1/health")
 async def health_check():
     """Check infrastructure health."""

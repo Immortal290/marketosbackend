@@ -90,14 +90,13 @@ function buildDashboardSnapshot() {
 }
 
 export const initSocket = (server: HttpServer) => {
-  const corsOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-    : '*';
-
   io = new Server(server, {
     cors: {
-      origin: corsOrigins,
-      methods: ['GET', 'POST'],
+      origin: (origin, callback) => {
+        // Allow all origins (Railway domains, localhost, custom domains) for Socket.io
+        callback(null, true);
+      },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       credentials: true,
     },
   });

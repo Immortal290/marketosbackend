@@ -426,11 +426,19 @@ export async function POST(req: NextRequest) {
         ? `${base.replace(/\/$/, "")}/v1/query/stream`
         : `${base.replace(/\/$/, "")}/api/v1/ai-command-center/query/stream`;
 
+      // Forward complete payload to Python Agent Service
+      const forwardBody = {
+        query: userQuery,
+        prompt: userQuery,
+        workspace_id: workspaceId,
+        ...bodyPayload,
+      };
+
       // Fetch without early timeout — wait for real agent execution
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: userQuery, prompt: userQuery, workspace_id: workspaceId }),
+        body: JSON.stringify(forwardBody),
       });
 
       if (res.ok && res.body) {
