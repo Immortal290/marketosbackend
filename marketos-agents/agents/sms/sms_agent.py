@@ -371,13 +371,19 @@ class SMSAgent(AgentBase):
 
         # ── Generate SMS copy ─────────────────────────────────────────────
         llm = self.get_llm(temperature=0.85)  # High creative temp — punchy, surprising SMS hooks
+        user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
+
         campaign_context = f"""
-Campaign: {plan.campaign_name}
-Goal: {plan.goal}
-Audience: {plan.target_audience}
-Tone: {plan.tone}
-Key messages: {'; '.join(plan.key_messages[:2])}
-Budget: {'₹{:,.0f}'.format(plan.budget) if plan.budget else 'not specified'}
+ORIGINAL USER PROMPT (CRITICAL — SMS must reference THIS specific product/brand/offer):
+"{user_prompt_raw}"
+
+CAMPAIGN BRIEF:
+- Campaign: {plan.campaign_name}
+- Goal: {plan.goal}
+- Audience: {plan.target_audience}
+- Tone: {plan.tone}
+- Key messages: {'; '.join(plan.key_messages[:2])}
+- Budget: {'₹{:,.0f}'.format(plan.budget) if plan.budget else 'not specified'}
 """
         from langchain_core.messages import HumanMessage
         from core.skill_loader import load_skills

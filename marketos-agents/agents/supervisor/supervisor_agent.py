@@ -214,6 +214,7 @@ def supervisor_node(state: dict) -> dict:
         tone=data["tone"],
         key_messages=data["key_messages"],
         tasks=tasks,
+        original_user_prompt=user_intent,
     )
 
     # ── Terminal Output ──────────────────────────────────────────────────────

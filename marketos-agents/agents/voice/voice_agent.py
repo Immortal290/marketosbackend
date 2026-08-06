@@ -120,7 +120,11 @@ def voice_agent_node(state: dict) -> dict:
         if rivals:
             intel_summary = f"\nCompetitor context: {', '.join(r.get('name','') for r in rivals[:3])}"
 
+    user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
+
     context = (
+        f"ORIGINAL USER PROMPT (CRITICAL — Voice script must be grounded in this exact product/offer):\n"
+        f"\"{user_prompt_raw}\"\n\n"
         f"Campaign: {plan.campaign_name}\n"
         f"Goal: {plan.goal}\n"
         f"Audience: {plan.target_audience}\n"

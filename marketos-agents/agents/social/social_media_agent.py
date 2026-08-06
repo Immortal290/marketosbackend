@@ -350,14 +350,20 @@ class SocialMediaAgent(AgentBase):
         sel_id   = copy_data.get("selected_variant_id")
         winner   = next((v for v in variants if isinstance(v, dict) and v.get("variant_id") == sel_id), {})
 
+        user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
+
         context = f"""
-Campaign: {plan.campaign_name}
-Goal: {plan.goal}
-Audience: {plan.target_audience}
-Tone: {plan.tone}
-Key messages: {chr(10).join(f'- {m}' for m in plan.key_messages[:3])}
-Email subject (winning): {winner.get('subject_line', 'N/A')}
-Email CTA: {winner.get('cta_text', 'N/A')}
+ORIGINAL USER PROMPT (CRITICAL — Every post must specifically name THIS product, brand, or offer):
+"{user_prompt_raw}"
+
+CAMPAIGN BRIEF:
+- Name: {plan.campaign_name}
+- Goal: {plan.goal}
+- Audience: {plan.target_audience}
+- Tone: {plan.tone}
+- Key messages: {chr(10).join(f'- {m}' for m in plan.key_messages[:3])}
+- Email subject (winning): {winner.get('subject_line', 'N/A')}
+- Email CTA: {winner.get('cta_text', 'N/A')}
 """
         response = llm.invoke([
             SystemMessage(content=SYSTEM_PROMPT_XML + "\n\nSKILLS:\n" + self.skill_ctx),

@@ -200,9 +200,12 @@ def email_agent_node(state: dict) -> dict:
     agent = EmailAgent()
 
 
+    user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
+
     messages = [
         SystemMessage(content=agent.build_prompt(EMAILAGENT_EXPERTISE)),
         HumanMessage(content=(
+            f"ORIGINAL USER PROMPT: \"{user_prompt_raw}\"\n\n"
             f"Campaign: {plan.campaign_name}\n"
             f"Goal: {plan.goal}\n"
             f"Audience: {plan.target_audience}\n"

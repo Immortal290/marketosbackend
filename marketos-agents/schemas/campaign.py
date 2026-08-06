@@ -36,6 +36,7 @@ class CampaignPlan(BaseModel):
     tone: str
     key_messages: List[str]
     tasks: List[AgentTask]
+    original_user_prompt: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

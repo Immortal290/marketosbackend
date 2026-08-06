@@ -73,7 +73,8 @@ def image_agent_node(state: dict) -> dict:
     if query:
         agent_log("IMAGE", f"Image concept: '{query}'")
 
-    full_prompt = _build_generation_prompt(prompt, plan_data)
+    user_intent = state.get("user_intent") or plan_data.get("original_user_prompt", "") or ""
+    full_prompt = _build_generation_prompt(prompt, plan_data, user_intent)
 
     img_b64            = None
     img_type           = None
@@ -233,16 +234,18 @@ def _inject_image(winner: dict, img_tag: str, placeholder: str) -> dict:
 
 # ── Prompt Construction ───────────────────────────────────────────────────────
 
-def _build_generation_prompt(concept_prompt: str, plan_data: dict) -> str:
+def _build_generation_prompt(concept_prompt: str, plan_data: dict, user_intent: str = "") -> str:
     """
-    Enrich the copy agent's hero_image_prompt with campaign context (tone, name)
+    Enrich the copy agent's hero_image_prompt with campaign context (tone, name, original prompt)
     and hard rules (no text in image, high production quality).
     """
     tone = plan_data.get("tone", "")
     name = plan_data.get("campaign_name", "")
+    intent_part = f"Product context: {user_intent[:200]}. " if user_intent else ""
 
     return (
         f"{concept_prompt.rstrip('.')}. "
+        f"{intent_part}"
         f"Campaign: {name}. "
         f"Visual tone: {tone or 'professional and polished'}. "
         "Photorealistic or high-end illustrative quality. "

@@ -97,6 +97,14 @@ BANNED PHRASES — these are AI-generated spam tells that instantly destroy cred
 
 WHAT TO DO INSTEAD: Replace banned phrases with specific, verifiable, product-true language. "Elevate your mornings" → "The coffee that doesn't need sugar". "Unlock savings" → "Save ₹800 before Sunday midnight".
 
+CONTEXT GROUNDING — MANDATORY (do this BEFORE generating any copy):
+1. Read the ORIGINAL USER PROMPT carefully — it tells you the EXACT product, brand, occasion, and goal
+2. Identify the specific product/service name, any pricing mentioned, the occasion/event, and the target action
+3. Every subject line, headline, body sentence, and CTA you write MUST name THIS specific product and THIS specific occasion
+4. Self-check: if you could swap in a different brand name and the copy still makes sense, REWRITE IT — it's too generic
+5. Never invent features, prices, discounts, or claims that aren't stated or clearly implied by the user's prompt
+6. Ground all copy in the concrete details from the prompt — if the user said "30% off", use "30% off", don't change it to "huge savings"
+
 SCORING CRITERIA (score 0–100):
 - readability_score: Flesch-Kincaid grade level converted to 0-100 (higher = more readable for general audience)
 - tone_alignment_score: How well the copy matches the requested tone (0-100)
@@ -337,8 +345,13 @@ Key Competitors: {', '.join([c.get('name', 'Unknown') for c in intel.get('compet
 Differentiation Strategy: Ensure the copy highlights why {plan.campaign_name} is superior to these specific rivals.
 """
 
+    user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
+
     campaign_context = f"""
-CAMPAIGN BRIEF:
+ORIGINAL USER PROMPT (CRITICAL — ground all copy in this exact product, brand, offer, and intent):
+"{user_prompt_raw}"
+
+CAMPAIGN PLAN SUMMARY:
 - Name: {plan.campaign_name}
 - Goal: {plan.goal}
 - Target Audience: {plan.target_audience}
