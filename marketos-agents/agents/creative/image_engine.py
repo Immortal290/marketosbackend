@@ -96,20 +96,9 @@ def image_agent_node(state: dict) -> dict:
             img_type = "CID"
             source   = "gemini-imagen"
         else:
-            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to Pollinations")
+            agent_log("IMAGE", "⚠ Gemini Imagen failed to generate an image.")
     else:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — using Pollinations Flux engine")
-
-    # ── Phase 2: Pollinations.ai ──────────────────────────────────────────────
-    if not img_b64:
-        agent_log("IMAGE", "Phase 2 — Generating hero visual with Pollinations (Flux)...")
-        img_b64 = _generate_pollinations_image(full_prompt)
-        if img_b64:
-            agent_log("IMAGE", "✅ Pollinations generation successful")
-            img_type = "CID"
-            source   = "pollinations-flux"
-        else:
-            agent_log("IMAGE", "⚠ Pollinations generation completed")
+        agent_log("IMAGE", "GEMINI_API_KEY not set — cannot generate image")
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -190,20 +179,7 @@ def _generate_visual_concept_specs(
         agent_log("IMAGE", f"LLM visual concept extraction: {e}")
 
     banner_options = []
-    for bid, title, prompt_desc, overlay, fmt, w, h in angles:
-        clean_p = f"{prompt_desc}, advertising photography, highly detailed, 8k resolution, no text"
-        q_str = _up.quote(clean_p[:400])
-        pollinations_url = f"https://image.pollinations.ai/prompt/{q_str}?width={w}&height={h}&model=flux&nologo=true&safe=true"
-        banner_options.append({
-            "id": bid,
-            "title": title,
-            "prompt": clean_p,
-            "url": pollinations_url,
-            "overlay": overlay,
-            "format": fmt,
-            "w": w,
-            "h": h,
-        })
+    # Pollinations AI fallback removed - relying solely on Gemini Imagen for the primary hero image.
 
     return default_concept, default_style, default_palette, banner_options
 
@@ -240,12 +216,8 @@ def _finalize(
         agent_log("IMAGE", "⚠ No base64 CID image attached")
 
     img_preview_url = None
-    if banner_options and len(banner_options) > 0:
-        img_preview_url = banner_options[0].get("url")
-    elif full_prompt:
-        import urllib.parse as _up
-        q = _up.quote(full_prompt[:500])
-        img_preview_url = f"https://image.pollinations.ai/prompt/{q}?width=1200&height=628&model=flux&nologo=true&safe=true"
+    if img_b64:
+        img_preview_url = f"data:image/jpeg;base64,{img_b64}"
 
     updated_variants = variants
     if isinstance(winner, dict) and variants:
@@ -396,7 +368,7 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
 
     url = (
         "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/gemini-3-pro-image-preview:generateContent?key={api_key}"
+        f"models/gemini-3.1-flash-image:generateContent?key={api_key}"
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
@@ -427,40 +399,3 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
         agent_log("IMAGE", f"Gemini Imagen exception: {e}")
         return None, 0
 
-
-# ── Provider 2: Pollinations.ai ───────────────────────────────────────────────
-
-def _generate_pollinations_image(
-    full_prompt: str,
-    width:  int = 1200,
-    height: int = 628,
-) -> str | None:
-    """
-    Generate an image via Pollinations.ai — free, open-source, no API key,
-    no signup. Uses Flux under the hood.
-
-    https://image.pollinations.ai  — no SLA; used as fallback, not primary.
-    Returns base64-encoded image bytes, or None on failure.
-    """
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return "mock_base64_pollinations"
-
-    # Truncate prompt to keep URL length browser/server safe
-    q   = urllib.parse.quote(full_prompt[:1000])
-    url = (
-        f"https://image.pollinations.ai/prompt/{q}"
-        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
-    )
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            raw = resp.read()
-        return base64.b64encode(raw).decode("utf-8")
-
-    except urllib.error.HTTPError as e:
-        agent_log("IMAGE", f"Pollinations HTTP {e.code}: {e.reason}")
-        return None
-    except Exception as e:
-        agent_log("IMAGE", f"Pollinations exception: {e}")
-        return None

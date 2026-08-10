@@ -120,7 +120,7 @@ def get_llm(temperature: float = 0):
                 temperature=temperature,
                 max_output_tokens=8192,
                 max_retries=1,
-                timeout=5.0,
+                timeout=30.0,
             )
         except Exception:
             gemini_fallback = None
@@ -138,7 +138,7 @@ def get_llm(temperature: float = 0):
             temperature=temperature,
             max_tokens=4096,
         )
-        return model.with_fallbacks(fallbacks)
+        return model
 
     elif provider == "openrouter":
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -154,7 +154,7 @@ def get_llm(temperature: float = 0):
             max_tokens=4096,
             default_headers={"HTTP-Referer": "https://marketos.ai", "X-Title": "MarketOS"},
         )
-        return model.with_fallbacks(fallbacks)
+        return model
 
     elif provider == "groq":
         api_key = os.getenv("GROQ_API_KEY")
@@ -170,11 +170,11 @@ def get_llm(temperature: float = 0):
             max_retries=1,
             timeout=15,
         )
-        return model.with_fallbacks(fallbacks)
+        return model
 
     elif provider == "gemini":
         if gemini_fallback:
-            return gemini_fallback.with_fallbacks([mock_fallback])
+            return gemini_fallback
         return mock_fallback
 
     elif provider == "glm":
@@ -215,4 +215,4 @@ def get_glm(temperature: float = 0):
         },
     )
 
-    return glm_model.with_fallbacks([base_llm, mock_fallback])
+    return glm_model

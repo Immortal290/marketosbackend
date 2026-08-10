@@ -349,10 +349,11 @@ async function streamCampaign(opts) {
   return agentFetchStream("/v1/pipeline/campaign/stream", opts);
 }
 async function streamQuery(opts) {
-  return agentFetchStream("/v1/query/stream", opts, 18e4);
+  return agentFetchStream("/v1/query/stream", opts);
 }
 var agentClient = {
-  baseUrl: AGENT_SERVICE_URL,
+  baseUrl: AGENT_SERVICE_CANDIDATES[0] || "http://localhost:8000",
+  candidates: AGENT_SERVICE_CANDIDATES,
   getHealth: getAgentServiceHealth,
   listAgents,
   runAgent,

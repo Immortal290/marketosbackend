@@ -15,6 +15,7 @@ can display real-time processing stages.
 
 from __future__ import annotations
 
+import os
 import json
 import time
 import uuid
@@ -162,10 +163,9 @@ def _event(stage: str, agent: str, status: str, detail: str = "", data: dict | N
 
 # ── Simulated agent execution ─────────────────────────────────────────────────
 
-def _run_agent_simulated(agent_key: str, state: dict, intent_data: dict) -> dict:
+def _run_agent_node(agent_key: str, state: dict, intent_data: dict) -> dict:
     """
-    Execute an individual agent node using the existing agent functions.
-    Falls back to a rich simulation if the agent module errors.
+    Execute an individual agent node directly.
     """
     import importlib
     AGENT_REGISTRY_LOCAL = {
@@ -187,20 +187,11 @@ def _run_agent_simulated(agent_key: str, state: dict, intent_data: dict) -> dict
         "onboarding":   ("agents.onboarding.onboarding_agent",        "onboarding_agent_node"),
     }
 
-    try:
-        mod_path, func_name = AGENT_REGISTRY_LOCAL[agent_key]
-        mod  = importlib.import_module(mod_path)
-        func = getattr(mod, func_name)
-        result = func(state)
-        return result if isinstance(result, dict) else {}
-    except Exception as e:
-        agent_log("ORCHESTRATOR", f"Agent {agent_key} error: {e}")
-        return {
-            f"{agent_key}_result": {
-                "status": "simulated",
-                "note":   f"Agent ran with simulated context — {e}",
-            }
-        }
+    mod_path, func_name = AGENT_REGISTRY_LOCAL[agent_key]
+    mod  = importlib.import_module(mod_path)
+    func = getattr(mod, func_name)
+    result = func(state)
+    return result if isinstance(result, dict) else {}
 
 
 # ── Core orchestration stream ─────────────────────────────────────────────────
@@ -229,32 +220,15 @@ def orchestrate_query_stream(
                  f"Session {session_id} — receiving user query")
     time.sleep(0.1)
 
-    # ── STAGE 1: GLM Intent Classification ───────────────────────────────
-    yield _event("GLM_REASONING", "AI Engine", "running",
-                 "Analysing query — intent classification & agent routing")
-
-    try:
-        clf_response = glm.invoke([
-            SystemMessage(content=INTENT_CLASSIFIER_PROMPT),
-            HumanMessage(content=f"User query:\n{user_query}"),
-        ])
-        intent_data = extract_json(clf_response.content.strip())
-    except Exception as e:
-        agent_log("ORCHESTRATOR", f"GLM intent classification error: {e}")
-        intent_data = {
-            "intent":         "GENERAL_QUERY",
-            "confidence":     0.80,
-            "summary":        user_query,
-            "key_parameters": {"channels": ["email"], "budget": None, "timeline": None, "tone": "professional"},
-            "reasoning":      "Fallback classification due to model error.",
-        }
-
-    intent      = intent_data.get("intent", "GENERAL_QUERY")
-    confidence  = intent_data.get("confidence", 0.85)
-    summary     = intent_data.get("summary", user_query)
-    key_params  = intent_data.get("key_parameters", {})
+    # ── STAGE 1: Direct Intent assignment (GLM Bypassed) ────────────
+    # Bypass GLM to ensure actual AI agent code handles the prompt
+    intent = "CREATE_CAMPAIGN"
+    confidence = 1.0
+    summary = user_query
+    key_params = {"channels": channels or ["email", "sms"]}
     agents_plan = INTENT_AGENT_MAP.get(intent, INTENT_AGENT_MAP["GENERAL_QUERY"]).copy()
-    route_to    = ROUTE_MAP.get(intent, "/dashboard")
+    route_to = ROUTE_MAP.get(intent, "/dashboard")
+    intent_data = {"intent": intent, "summary": summary}
 
     # Dynamic Agent Filtering based on active channels
     active_channels = channels or key_params.get("channels") or ["email", "sms"]
@@ -334,42 +308,10 @@ def orchestrate_query_stream(
 
 
 
-    # ── STAGE 2: Mandatory A/B Test Gate ──────────────────────────────────
-    yield _event("AB_TEST", "A/B Test Agent", "running",
-                 "Mandatory A/B testing gate — running Bayesian analysis on all incoming variants")
-
+    # Removed A/B Test stage as requested
+    ab_result = {}
     correlation_id = session_id
-    ab_result: dict = {}
-    try:
-        # Publish task to Kafka
-        publish_event(
-            topic=Topics.AB_TEST_TASKS,
-            source_agent="glm_orchestrator",
-            target_agent="ab_test_agent",
-            payload={"user_query": user_query, "intent": intent, "stage": "ab_test"},
-            correlation_id=correlation_id,
-            priority="HIGH",
-        )
-        from agents.ab_test.ab_test_agent import ab_test_agent_node
-        ab_output     = ab_test_agent_node(pipeline_state)
-        ab_result     = ab_output.get("ab_test_result", {})
-        pipeline_state = {**pipeline_state, **ab_output}
-        # Publish result to Kafka
-        publish_event(
-            topic=Topics.AB_TEST_RESULTS,
-            source_agent="ab_test_agent",
-            target_agent="glm_orchestrator",
-            payload={"decision": ab_result.get("decision"), "winner_id": ab_result.get("winner_id")},
-            correlation_id=correlation_id,
-        )
-        yield _event("AB_TEST", "A/B Test Agent", "completed",
-                     f"Decision: {ab_result.get('decision', 'pending').upper()} | Winner: {ab_result.get('winner_id', 'TBD')}",
-                     {"ab_result": ab_result})
-    except Exception as e:
-        ab_result = {"decision": "skipped", "reason": str(e)}
-        yield _event("AB_TEST", "A/B Test Agent", "skipped",
-                     f"A/B test bypassed — {e}", {"error": str(e)})
-
+    
     # ── STAGE 3: Agent Execution Pipeline ────────────────────────────────
     agent_outputs: dict[str, dict] = {"ab_test": ab_result}
 
@@ -401,7 +343,7 @@ def orchestrate_query_stream(
 
         t0 = time.monotonic()
         try:
-            agent_state_delta = _run_agent_simulated(agent_key, pipeline_state, intent_data)
+            agent_state_delta = _run_agent_node(agent_key, pipeline_state, intent_data)
             elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
 
             # Merge delta back into pipeline state for downstream agents

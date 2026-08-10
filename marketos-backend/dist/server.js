@@ -1335,10 +1335,11 @@ async function streamCampaign(opts) {
   return agentFetchStream("/v1/pipeline/campaign/stream", opts);
 }
 async function streamQuery(opts) {
-  return agentFetchStream("/v1/query/stream", opts, 18e4);
+  return agentFetchStream("/v1/query/stream", opts);
 }
 var agentClient = {
-  baseUrl: AGENT_SERVICE_URL,
+  baseUrl: AGENT_SERVICE_CANDIDATES[0] || "http://localhost:8000",
+  candidates: AGENT_SERVICE_CANDIDATES,
   getHealth: getAgentServiceHealth,
   listAgents,
   runAgent,
@@ -2841,12 +2842,12 @@ var startServer = async () => {
   initSocket(server);
   try {
     logger.info("[DB] Running prisma migrate deploy\u2026");
-    const { stdout, stderr } = await execAsync("node node_modules/.bin/prisma migrate deploy");
-    if (stdout) logger.info("[DB] Migrations:", stdout.trim());
-    if (stderr) logger.warn("[DB] Migration stderr:", stderr.trim());
-    logger.info("[DB] Migrations applied successfully");
+    const res = await execAsync("npx prisma migrate deploy --schema=./prisma/schema.prisma").catch((err) => ({ stdout: "", stderr: String(err) }));
+    if (res.stdout) logger.info("[DB] Migrations:", res.stdout.trim());
+    if (res.stderr) logger.warn("[DB] Migration stderr:", res.stderr.trim());
+    logger.info("[DB] Migrations step finished.");
   } catch (err) {
-    logger.error("[DB] Migration failed (continuing \u2014 DB may already be up to date):", err);
+    logger.warn("[DB] Migration skipped/failed (continuing):", err);
   }
   try {
     await prisma.$connect();
