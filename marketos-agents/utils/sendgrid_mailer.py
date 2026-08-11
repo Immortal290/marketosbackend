@@ -151,6 +151,9 @@ def _send_via_smtp(
 
     alt = MIMEMultipart("alternative")
     msg.attach(alt)
+    import re
+    text_content = re.sub('<[^<]+?>', '', html_content)
+    alt.attach(MIMEText(text_content, "plain"))
     alt.attach(MIMEText(html_content, "html"))
 
     if hero_image_base64:

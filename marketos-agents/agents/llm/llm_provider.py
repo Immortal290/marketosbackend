@@ -19,6 +19,15 @@ load_dotenv()
 
 from langchain_core.runnables import Runnable, RunnableLambda
 
+class StringContentWrapper(Runnable):
+    def __init__(self, llm):
+        self.llm = llm
+    def invoke(self, *args, **kwargs):
+        res = self.llm.invoke(*args, **kwargs)
+        if isinstance(res.content, list):
+            res.content = res.content[0].get("text", str(res.content)) if len(res.content) > 0 else ""
+        return res
+
 class MockLLMResponse:
     def __init__(self, content: str):
         self.content = content
@@ -101,13 +110,9 @@ def get_mock_llm():
 def get_llm(temperature: float = 0):
     """
     Return a LangChain chat model for the configured provider.
-    Includes automated fallback to Gemini and MockLLM on rate limits / network errors.
+    Includes automated fallback to Gemini on rate limits / network errors.
     """
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return MockLLM()
-
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
-    mock_fallback = get_mock_llm()
 
     # Build Gemini fallback if key is available
     gemini_fallback = None
@@ -115,7 +120,7 @@ def get_llm(temperature: float = 0):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fallback = ChatGoogleGenerativeAI(
-                model="gemini-2.5-pro",
+                model="gemini-3.5-flash",
                 google_api_key=os.getenv("GEMINI_API_KEY"),
                 temperature=temperature,
                 max_output_tokens=8192,
@@ -125,12 +130,14 @@ def get_llm(temperature: float = 0):
         except Exception:
             gemini_fallback = None
 
-    fallbacks = [f for f in [gemini_fallback, mock_fallback] if f is not None]
+    fallbacks = [f for f in [gemini_fallback] if f is not None]
 
     if provider == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            return gemini_fallback or mock_fallback
+            if gemini_fallback:
+                return gemini_fallback
+            raise ValueError("ANTHROPIC_API_KEY not set and no Gemini fallback available")
         from langchain_anthropic import ChatAnthropic
         model = ChatAnthropic(
             model="claude-sonnet-4-20250514",
@@ -138,12 +145,14 @@ def get_llm(temperature: float = 0):
             temperature=temperature,
             max_tokens=4096,
         )
-        return model
+        return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "openrouter":
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return gemini_fallback or mock_fallback
+            if gemini_fallback:
+                return gemini_fallback
+            raise ValueError("OPENROUTER_API_KEY not set and no Gemini fallback available")
         from langchain_openai import ChatOpenAI
         model_name = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
         model = ChatOpenAI(
@@ -154,57 +163,53 @@ def get_llm(temperature: float = 0):
             max_tokens=4096,
             default_headers={"HTTP-Referer": "https://marketos.ai", "X-Title": "MarketOS"},
         )
-        return model
+        return StringContentWrapper(model.with_fallbacks(fallbacks))
 
-    elif provider == "groq":
-        api_key = os.getenv("GROQ_API_KEY")
+    elif provider == "groq" or provider == "nvidia":
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            return gemini_fallback or mock_fallback
-        from langchain_openai import ChatOpenAI
-        model = ChatOpenAI(
-            model="llama-3.3-70b-versatile",
-            openai_api_key=api_key,
-            openai_api_base="https://api.groq.com/openai/v1",
+            if gemini_fallback:
+                return gemini_fallback
+            raise ValueError("GEMINI_API_KEY not set")
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash",
+            google_api_key=api_key,
             temperature=temperature,
             max_tokens=4096,
             max_retries=1,
             timeout=15,
         )
-        return model
+        return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "gemini":
         if gemini_fallback:
-            return gemini_fallback
-        return mock_fallback
+            return StringContentWrapper(gemini_fallback)
+        raise ValueError("GEMINI_API_KEY not set")
 
     elif provider == "glm":
         return get_glm(temperature=temperature)
 
     else:
-        return mock_fallback
+        raise ValueError(f"Unknown LLM_PROVIDER: {provider}")
 
 
 def get_glm(temperature: float = 0):
     """
-    Returns GLM reasoning head (Groq Llama-3.3-70B) with automatic fallbacks to Gemini and MockLLM.
+    Returns GLM reasoning head (Groq Llama-3.3-70B) with automatic fallbacks to Gemini.
     """
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return MockLLM()
-
-    mock_fallback = get_mock_llm()
 
     # Base LLM fallback
     base_llm = get_llm(temperature=temperature)
 
-    api_key = os.getenv("GROQ_API_KEY", "")
+    api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
         return base_llm
 
-    from langchain_openai import ChatOpenAI
-    glm_model = ChatOpenAI(
-        model="llama-3.3-70b-versatile",
-        openai_api_key=api_key,
-        openai_api_base="https://api.groq.com/openai/v1",
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    glm_model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=api_key,
         temperature=temperature,
         max_tokens=8192,
         max_retries=1,
@@ -215,4 +220,21 @@ def get_glm(temperature: float = 0):
         },
     )
 
-    return glm_model
+    # Build fallback chain: Groq → Gemini → MockLLM
+    gemini_fb = None
+    if os.getenv("GEMINI_API_KEY"):
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            gemini_fb = ChatGoogleGenerativeAI(
+                model="gemini-3.5-flash",
+                google_api_key=os.getenv("GEMINI_API_KEY"),
+                temperature=temperature,
+                max_output_tokens=8192,
+                max_retries=1,
+                timeout=60.0,
+            )
+        except Exception:
+            gemini_fb = None
+
+    fb = [f for f in [gemini_fb] if f is not None]
+    return StringContentWrapper(glm_model.with_fallbacks(fb))

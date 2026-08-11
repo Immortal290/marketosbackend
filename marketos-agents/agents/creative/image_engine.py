@@ -96,9 +96,20 @@ def image_agent_node(state: dict) -> dict:
             img_type = "CID"
             source   = "gemini-imagen"
         else:
-            agent_log("IMAGE", "⚠ Gemini Imagen failed to generate an image.")
+            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to Pollinations")
     else:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — cannot generate image")
+        agent_log("IMAGE", "GEMINI_API_KEY not set — using Pollinations Flux engine")
+
+    # ── Phase 2: Pollinations.ai ──────────────────────────────────────────────
+    if not img_b64:
+        agent_log("IMAGE", "Phase 2 — Generating hero visual with Pollinations (Flux)...")
+        img_b64 = _generate_pollinations_image(full_prompt)
+        if img_b64:
+            agent_log("IMAGE", "✅ Pollinations generation successful")
+            img_type = "CID"
+            source   = "pollinations-flux"
+        else:
+            agent_log("IMAGE", "⚠ Pollinations generation failed")
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -143,17 +154,28 @@ def _generate_visual_concept_specs(
     ]
 
     try:
-        llm = get_llm(temperature=0.3)
+        llm = get_llm(temperature=0.7)
         prompt_text = (
             f"You are the Lead Creative Director & AI Visual Engineer for MarketOS.\n"
             f"Analyze the campaign request: '{product_prompt}'. Tone: '{tone}'. Headline: '{copy_headline}'.\n"
             "Generate JSON with:\n"
             "- 'creative_concept': 1 vivid sentence describing the visual direction for this specific product.\n"
-            "- 'creative_direction': lighting, style, mood.\n"
+            "- 'creative_direction': A single string describing lighting, style, and mood.\n"
             "- 'color_palette': array of 4 color hex codes matching the brand/product.\n"
-            "- 'banner_prompts': array of 6 strings, each describing a distinct visual scene tailored explicitly to this product.\n\n"
-            "Return JSON format:\n"
-            "{\"creative_concept\": \"...\", \"creative_direction\": \"...\", \"color_palette\": [\"#111111\", ...], \"banner_prompts\": [\"scene 1...\", \"scene 2...\", \"scene 3...\", \"scene 4...\", \"scene 5...\", \"scene 6...\"]}"
+            "- 'banner_options': array of exactly 6 objects, each with:\n"
+            "   'title': short name for the format (e.g. 'Product Hero Banner (1200x628)')\n"
+            "   'prompt_desc': detailed description of the visual scene tailored explicitly to this product\n"
+            "   'overlay': a short, punchy overlay text (3-5 words max) highly relevant to the product and headline. DO NOT use generic phrases like 'EXPERIENCE THE DIFFERENCE' or 'SEE WHAT IS POSSIBLE'. Instead, use highly specific and context-aware phrases based on the user intent.\n"
+            "   'format_label': short label for UI (e.g. 'LinkedIn Landscape (1200x628)')\n"
+            "   'width': integer (1200 or 1080)\n"
+            "   'height': integer (628, 1080, or 1920)\n\n"
+            "Ensure exactly 6 options cover these sizes: 1200x628, 1080x1080, 1080x1920.\n"
+            "Return ONLY valid JSON.\n\n"
+            "STRICT CONTENT SERVICE POLICY:\n"
+            "1. You MUST analyze and use ONLY the provided context and original user prompt.\n"
+            "2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.\n"
+            "3. If information is missing, rely strictly on what is provided; do not guess or assume.\n"
+            "4. Your output MUST be strictly derived from the provided input parameters."
         )
         resp = llm.invoke(prompt_text)
         content = resp.content.strip()
@@ -166,20 +188,55 @@ def _generate_visual_concept_specs(
         if data.get("creative_concept"):
             default_concept = data["creative_concept"]
         if data.get("creative_direction"):
-            default_style = data["creative_direction"]
+            val = data["creative_direction"]
+            if isinstance(val, dict):
+                default_style = ", ".join(f"{v}" for k, v in val.items())
+            elif isinstance(val, list):
+                default_style = ", ".join(str(v) for v in val)
+            else:
+                default_style = str(val)
         if data.get("color_palette") and isinstance(data["color_palette"], list):
             default_palette = data["color_palette"]
 
-        bp = data.get("banner_prompts") or []
-        if isinstance(bp, list) and len(bp) >= 6:
-            for idx in range(6):
-                bid, title, _, ov, fmt, w, h = angles[idx]
-                angles[idx] = (bid, title, f"{bp[idx]}, photorealistic, highly detailed, studio lighting, no text", ov, fmt, w, h)
+        # Handle full banner_options format (preferred)
+        bp = data.get("banner_options")
+        if isinstance(bp, list) and len(bp) > 0:
+            angles = []
+            for idx, item in enumerate(bp[:6]):
+                angles.append((
+                    f"v{idx+1}",
+                    item.get("title", f"Banner {idx+1}"),
+                    item.get("prompt_desc", f"Visual for {product_prompt}"),
+                    item.get("overlay", copy_headline[:40]),
+                    item.get("format_label", f"Format {item.get('width', 1200)}x{item.get('height', 628)}"),
+                    item.get("width", 1200),
+                    item.get("height", 628)
+                ))
+        else:
+            # Handle simpler banner_prompts format (just an array of strings)
+            bp_simple = data.get("banner_prompts") or []
+            if isinstance(bp_simple, list) and len(bp_simple) >= 6:
+                for idx in range(6):
+                    bid, title, _, ov, fmt, w, h = angles[idx]
+                    angles[idx] = (bid, title, f"{bp_simple[idx]}, photorealistic, highly detailed, studio lighting, no text", ov, fmt, w, h)
     except Exception as e:
         agent_log("IMAGE", f"LLM visual concept extraction: {e}")
 
     banner_options = []
-    # Pollinations AI fallback removed - relying solely on Gemini Imagen for the primary hero image.
+    for bid, title, prompt_desc, overlay, fmt, w, h in angles:
+        clean_p = f"{prompt_desc}, advertising photography, highly detailed, 8k resolution, no text"
+        q_str = _up.quote(clean_p[:400])
+        pollinations_url = f"https://image.pollinations.ai/prompt/{q_str}?width={w}&height={h}&model=flux&nologo=true&safe=true"
+        banner_options.append({
+            "id": bid,
+            "title": title,
+            "prompt": clean_p,
+            "url": pollinations_url,
+            "overlay": overlay,
+            "format": fmt,
+            "w": w,
+            "h": h,
+        })
 
     return default_concept, default_style, default_palette, banner_options
 
@@ -216,8 +273,12 @@ def _finalize(
         agent_log("IMAGE", "⚠ No base64 CID image attached")
 
     img_preview_url = None
-    if img_b64:
-        img_preview_url = f"data:image/jpeg;base64,{img_b64}"
+    if banner_options and len(banner_options) > 0:
+        img_preview_url = banner_options[0].get("url")
+    elif full_prompt:
+        import urllib.parse as _up
+        q = _up.quote(full_prompt[:500])
+        img_preview_url = f"https://image.pollinations.ai/prompt/{q}?width=1200&height=628&model=flux&nologo=true&safe=true"
 
     updated_variants = variants
     if isinstance(winner, dict) and variants:
@@ -368,7 +429,7 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
 
     url = (
         "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/gemini-3.1-flash-image:generateContent?key={api_key}"
+        f"models/gemini-2.0-flash-exp:generateContent?key={api_key}"
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
@@ -399,3 +460,40 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
         agent_log("IMAGE", f"Gemini Imagen exception: {e}")
         return None, 0
 
+
+# ── Provider 2: Pollinations.ai ───────────────────────────────────────────────
+
+def _generate_pollinations_image(
+    full_prompt: str,
+    width:  int = 1200,
+    height: int = 628,
+) -> str | None:
+    """
+    Generate an image via Pollinations.ai — free, open-source, no API key,
+    no signup. Uses Flux under the hood.
+
+    https://image.pollinations.ai  — no SLA; used as fallback, not primary.
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_pollinations"
+
+    # Truncate prompt to keep URL length browser/server safe
+    q   = urllib.parse.quote(full_prompt[:1000])
+    url = (
+        f"https://image.pollinations.ai/prompt/{q}"
+        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
+    )
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+        return base64.b64encode(raw).decode("utf-8")
+
+    except urllib.error.HTTPError as e:
+        agent_log("IMAGE", f"Pollinations HTTP {e.code}: {e.reason}")
+        return None
+    except Exception as e:
+        agent_log("IMAGE", f"Pollinations exception: {e}")
+        return None

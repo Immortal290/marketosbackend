@@ -124,7 +124,14 @@ RESPOND with ONLY a valid JSON object:
     "tone": "<urgent|friendly|professional|playful|inspirational|bold or null>"
   },
   "reasoning": "<1-2 sentences explaining your classification>"
-}"""
+}
+
+STRICT CONTENT SERVICE POLICY:
+1. You MUST analyze and use ONLY the provided context and original user prompt.
+2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.
+3. If information is missing, rely strictly on what is provided; do not guess or assume.
+4. Your output MUST be strictly derived from the provided input parameters.
+"""
 
 DOCUMENTATION_SYNTHESIZER_PROMPT = """You are the Documentation Synthesizer for MarketOS.
 You receive the structured outputs from multiple specialist AI agents and produce a refined, structured, 
@@ -143,7 +150,14 @@ OUTPUT FORMAT: A well-structured Markdown document with:
   ## Agent Outputs (one sub-section per agent)
   ## A/B Test Results (if available)
   ## Recommendations
-  ## Next Steps"""
+  ## Next Steps
+
+STRICT CONTENT SERVICE POLICY:
+1. You MUST analyze and use ONLY the provided context and original user prompt.
+2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.
+3. If information is missing, rely strictly on what is provided; do not guess or assume.
+4. Your output MUST be strictly derived from the provided input parameters.
+"""
 
 
 # ── Event helpers ─────────────────────────────────────────────────────────────
@@ -220,15 +234,39 @@ def orchestrate_query_stream(
                  f"Session {session_id} — receiving user query")
     time.sleep(0.1)
 
-    # ── STAGE 1: Direct Intent assignment (GLM Bypassed) ────────────
-    # Bypass GLM to ensure actual AI agent code handles the prompt
-    intent = "CREATE_CAMPAIGN"
-    confidence = 1.0
-    summary = user_query
-    key_params = {"channels": channels or ["email", "sms"]}
+    # ── STAGE 1: GLM Intent Classification ───────────────────────────
+    yield _event("GLM_REASONING", "AI Engine", "running",
+                 "Analysing query — intent classification & agent routing")
+
+    try:
+        clf_response = glm.invoke([
+            SystemMessage(content=INTENT_CLASSIFIER_PROMPT),
+            HumanMessage(content=f"User query:\n{user_query}"),
+        ])
+        content = clf_response.content
+        if isinstance(content, list):
+            content = content[0].get("text", str(content)) if len(content) > 0 else ""
+        intent_data = extract_json(content.strip())
+        if isinstance(intent_data, list) and len(intent_data) > 0:
+            intent_data = intent_data[0]
+        if not isinstance(intent_data, dict):
+            intent_data = {}
+    except Exception as e:
+        agent_log("ORCHESTRATOR", f"GLM intent classification error: {e}")
+        intent_data = {
+            "intent":         "GENERAL_QUERY",
+            "confidence":     0.80,
+            "summary":        user_query,
+            "key_parameters": {"channels": ["email"], "budget": None, "timeline": None, "tone": "professional"},
+            "reasoning":      "Fallback classification due to model error.",
+        }
+
+    intent      = intent_data.get("intent", "GENERAL_QUERY")
+    confidence  = intent_data.get("confidence", 0.85)
+    summary     = intent_data.get("summary", user_query)
+    key_params  = intent_data.get("key_parameters", {})
     agents_plan = INTENT_AGENT_MAP.get(intent, INTENT_AGENT_MAP["GENERAL_QUERY"]).copy()
-    route_to = ROUTE_MAP.get(intent, "/dashboard")
-    intent_data = {"intent": intent, "summary": summary}
+    route_to    = ROUTE_MAP.get(intent, "/dashboard")
 
     # Dynamic Agent Filtering based on active channels
     active_channels = channels or key_params.get("channels") or ["email", "sms"]
@@ -421,7 +459,10 @@ def orchestrate_query_stream(
             SystemMessage(content=DOCUMENTATION_SYNTHESIZER_PROMPT),
             HumanMessage(content=synthesis_input),
         ])
-        documentation = synth_response.content.strip()
+        doc_content = synth_response.content
+        if isinstance(doc_content, list):
+            doc_content = doc_content[0].get("text", str(doc_content)) if len(doc_content) > 0 else ""
+        documentation = doc_content.strip()
     except Exception as e:
         agent_log("ORCHESTRATOR", f"Synthesis error: {e}")
         documentation = _fallback_documentation(user_query, intent, summary, agent_outputs)

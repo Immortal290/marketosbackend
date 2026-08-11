@@ -258,7 +258,14 @@ Valid JSON only.
   "churn_risk": "Most likely churn reason for this workspace type",
   "churn_intervention": "Specific action to take if milestone not hit by Day 3"
 }
-</output_format>"""
+</output_format>
+<guardrails>
+STRICT CONTENT SERVICE POLICY:
+1. You MUST analyze and use ONLY the provided context and original user prompt.
+2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.
+3. If information is missing, rely strictly on what is provided; do not guess or assume.
+4. Your output MUST be strictly derived from the provided input parameters.
+</guardrails>"""
 
 
 # ── Agent ─────────────────────────────────────────────────────────────────────

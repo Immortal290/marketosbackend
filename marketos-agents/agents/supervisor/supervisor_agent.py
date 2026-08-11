@@ -158,7 +158,12 @@ def supervisor_node(state: dict) -> dict:
         "- Name a concrete audience pain point or desire\n"
         "- Propose a unique creative hook or proof point\n"
         "- Feel different from the other 3 angles in tone and approach\n"
-        "Output plain text. No JSON. No markdown headers. Just numbered 1–4."
+        "Output plain text. No JSON. No markdown headers. Just numbered 1–4.\n\n"
+        "STRICT CONTENT SERVICE POLICY:\n"
+        "1. You MUST analyze and use ONLY the provided context and original user prompt.\n"
+        "2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.\n"
+        "3. If information is missing, rely strictly on what is provided; do not guess or assume.\n"
+        "4. Your output MUST be strictly derived from the provided input parameters."
     )
     brainstorm_messages = [
         SystemMessage(content=brainstorm_system),
@@ -166,7 +171,10 @@ def supervisor_node(state: dict) -> dict:
     ]
     agent_log("SUPERVISOR", "Call 1 — creative brainstorm (temp=0.6)...")
     brainstorm_response = llm_creative.invoke(brainstorm_messages)
-    campaign_angles = brainstorm_response.content.strip()
+    content1 = brainstorm_response.content
+    if isinstance(content1, list):
+        content1 = content1[0].get("text", str(content1)) if len(content1) > 0 else ""
+    campaign_angles = content1.strip()
     agent_log("SUPERVISOR", f"Angles generated:\n{campaign_angles[:400]}...")
 
     # ── Call 2: Structured JSON output (temp=0) ───────────────────────────
@@ -189,7 +197,10 @@ def supervisor_node(state: dict) -> dict:
 
     agent_log("SUPERVISOR", "Call 2 — structured JSON plan (temp=0)...")
     response = llm_structured.invoke(messages)
-    raw = response.content.strip()
+    content2 = response.content
+    if isinstance(content2, list):
+        content2 = content2[0].get("text", str(content2)) if len(content2) > 0 else ""
+    raw = content2.strip()
 
     # Parse and validate
     try:
