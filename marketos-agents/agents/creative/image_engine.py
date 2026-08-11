@@ -143,14 +143,10 @@ def _generate_visual_concept_specs(
     default_style = f"{tone.capitalize()} advertising photography with crisp studio lighting and dynamic angles."
     default_palette = ["#0F172A", "#3B82F6", "#F59E0B", "#10B981"]
 
-    # Generates 6 specific banner options tailored directly to user_intent
+    # Generates 2 specific banner options tailored directly to user_intent
     angles = [
         ("v1", "1. Product Hero Banner (1200x628)", f"Luxury high-end studio hero shot of {product_prompt}, sleek reflective surface, dark dramatic backdrop, volumetric lighting, photorealistic 8k detail", copy_headline[:40], "LinkedIn / Meta Landscape (1200x628)", 1200, 628),
         ("v2", "2. Lifestyle Square (1080x1080)", f"Aspirational lifestyle photography of {product_prompt} in natural daylight setting, authentic mood, vibrant atmosphere", "✨ EXPERIENCE THE DIFFERENCE", "Instagram / Facebook Square (1080x1080)", 1080, 1080),
-        ("v3", "3. Mobile Story (1080x1920)", f"Vertical close-up macro detail shot of {product_prompt}, focus on craft, premium textures, shallow depth of field", "🚀 SHOP NOW — LIMITED TIME", "Instagram Stories & Reels (1080x1920)", 1080, 1920),
-        ("v4", "4. Minimalist Flat Lay (1200x628)", f"Clean minimalist flat lay presentation of {product_prompt} on neutral matte surface, soft ambient lighting, bold modern composition", "⚡ PURE PERFORMANCE", "Clean Minimalist Layout (1200x628)", 1200, 628),
-        ("v5", "5. Editorial Square (1080x1080)", f"Vibrant editorial magazine spotlight of {product_prompt}, high contrast fashion lighting, rich color palette", "💡 SEE WHAT IS POSSIBLE", "Vibrant Editorial Spotlight (1080x1080)", 1080, 1080),
-        ("v6", "6. Cinematic Wide (1200x628)", f"Cinematic wide action angle shot of {product_prompt}, golden hour lighting, dramatic background landscape, atmospheric depth", "📈 BUILT TO EXCEL", "Cinematic Wide Format (1200x628)", 1200, 628),
     ]
 
     try:
@@ -162,14 +158,14 @@ def _generate_visual_concept_specs(
             "- 'creative_concept': 1 vivid sentence describing the visual direction for this specific product.\n"
             "- 'creative_direction': A single string describing lighting, style, and mood.\n"
             "- 'color_palette': array of 4 color hex codes matching the brand/product.\n"
-            "- 'banner_options': array of exactly 6 objects, each with:\n"
+            "- 'banner_options': array of exactly 2 objects, each with:\n"
             "   'title': short name for the format (e.g. 'Product Hero Banner (1200x628)')\n"
             "   'prompt_desc': detailed description of the visual scene tailored explicitly to this product\n"
             "   'overlay': a short, punchy overlay text (3-5 words max) highly relevant to the product and headline. DO NOT use generic phrases like 'EXPERIENCE THE DIFFERENCE' or 'SEE WHAT IS POSSIBLE'. Instead, use highly specific and context-aware phrases based on the user intent.\n"
             "   'format_label': short label for UI (e.g. 'LinkedIn Landscape (1200x628)')\n"
             "   'width': integer (1200 or 1080)\n"
-            "   'height': integer (628, 1080, or 1920)\n\n"
-            "Ensure exactly 6 options cover these sizes: 1200x628, 1080x1080, 1080x1920.\n"
+            "   'height': integer (628 or 1080)\n\n"
+            "Ensure exactly 2 options cover these sizes: 1200x628, 1080x1080.\n"
             "Return ONLY valid JSON.\n\n"
             "STRICT CONTENT SERVICE POLICY:\n"
             "1. You MUST analyze and use ONLY the provided context and original user prompt.\n"
@@ -202,7 +198,7 @@ def _generate_visual_concept_specs(
         bp = data.get("banner_options")
         if isinstance(bp, list) and len(bp) > 0:
             angles = []
-            for idx, item in enumerate(bp[:6]):
+            for idx, item in enumerate(bp[:2]):
                 angles.append((
                     f"v{idx+1}",
                     item.get("title", f"Banner {idx+1}"),
@@ -215,8 +211,8 @@ def _generate_visual_concept_specs(
         else:
             # Handle simpler banner_prompts format (just an array of strings)
             bp_simple = data.get("banner_prompts") or []
-            if isinstance(bp_simple, list) and len(bp_simple) >= 6:
-                for idx in range(6):
+            if isinstance(bp_simple, list) and len(bp_simple) >= 2:
+                for idx in range(2):
                     bid, title, _, ov, fmt, w, h = angles[idx]
                     angles[idx] = (bid, title, f"{bp_simple[idx]}, photorealistic, highly detailed, studio lighting, no text", ov, fmt, w, h)
     except Exception as e:
@@ -447,7 +443,7 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
 
         total_tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
@@ -487,7 +483,7 @@ def _generate_pollinations_image(
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read()
         return base64.b64encode(raw).decode("utf-8")
 

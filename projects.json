@@ -1,0 +1,1392 @@
+[
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "626ac309-a280-4177-9337-333864a11109",
+    "name": "courteous-communication",
+    "createdAt": "2026-07-24T09:53:06.561Z",
+    "updatedAt": "2026-07-24T09:53:06.561Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "06b9f3cd-a6a8-48fc-9485-151e5c5b811f",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "2cdfa104-6300-4c1b-a049-4d2f81416bc5",
+            "name": "alluring-consideration"
+          }
+        },
+        {
+          "node": {
+            "id": "37d7f1fb-2898-4d0e-87b8-fb955e37d367",
+            "name": "diligent-expression"
+          }
+        },
+        {
+          "node": {
+            "id": "7cce9f7c-9463-4dc8-b50b-397d4c02ead7",
+            "name": "PromanageV2"
+          }
+        },
+        {
+          "node": {
+            "id": "e6fb8d60-2710-4897-8660-bdd51404b445",
+            "name": "MongoDB"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "6ea22d1a-47df-49db-95d0-7b3557a3da34",
+    "name": "mindful-enjoyment",
+    "createdAt": "2026-07-22T02:20:18.175Z",
+    "updatedAt": "2026-07-22T02:20:18.175Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "ce633d68-82eb-4e99-b384-2a8031558978",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "03f0db44-c1e9-4c7f-9248-c9a62b10d489",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "3fe951d8-1266-472e-8619-6421e03c8a80",
+            "name": "powerful-imagination"
+          }
+        },
+        {
+          "node": {
+            "id": "733556ec-e8f1-4f17-8bae-09443c30fb57",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "f960b365-8159-47a3-ae58-482932cde6a9",
+            "name": "DDFAgenticSystemAPIGateway"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "55f70cf3-093d-462e-a4d3-1649f60552b1",
+    "name": "ravishing-courtesy",
+    "createdAt": "2026-07-20T12:49:19.176Z",
+    "updatedAt": "2026-07-20T12:49:19.176Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "b0afec24-f6f2-4281-b637-9eccbecabadf",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "1c4793db-eda6-41af-b083-c37f4ff2a233",
+            "name": "promanage-backend"
+          }
+        },
+        {
+          "node": {
+            "id": "75b253e9-826b-4be0-9b25-869586a93515",
+            "name": "promanage-frontend"
+          }
+        },
+        {
+          "node": {
+            "id": "97bc1efc-67c8-4db4-b9e3-7b39541a785f",
+            "name": "MongoDB"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "db1874c1-78b0-4737-8dfe-49e6a25c45df",
+    "name": "zonal-smile",
+    "createdAt": "2026-07-13T06:41:35.671Z",
+    "updatedAt": "2026-07-13T06:41:35.671Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "0c5d5050-a5fa-4bce-a404-f68083cba994",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "84913801-a38e-470c-ad04-dc5e4c8b9798",
+            "name": "Lawapplication"
+          }
+        },
+        {
+          "node": {
+            "id": "8bd001e9-6add-4eb4-955a-45d0ff17e5bc",
+            "name": "lucid-youth"
+          }
+        },
+        {
+          "node": {
+            "id": "d13e6deb-abef-4393-81c5-15b4f5b9df0e",
+            "name": "Postgres"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "baa8337b-6ed6-44b8-8638-5308fa8ab2e0",
+    "name": "Abhyzo",
+    "createdAt": "2026-03-07T07:21:05.238Z",
+    "updatedAt": "2026-07-04T16:48:58.887Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "9db8a0f8-e5f2-4ee9-8323-6ad96c6d74b9",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "18f7efb1-b26c-45fe-8fb2-fc74724e6739",
+            "name": "hospitable-truth"
+          }
+        },
+        {
+          "node": {
+            "id": "2a4ae227-d9bb-4d79-9dac-e11ad5a3a639",
+            "name": "lively-empathy"
+          }
+        },
+        {
+          "node": {
+            "id": "48a0b4d9-7a8a-48a4-bad7-c7e81dae47ef",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "4e19a144-a84f-4bba-aebd-172dc5a94d22",
+            "name": "function-bun"
+          }
+        },
+        {
+          "node": {
+            "id": "9a33ed64-d578-42e9-86da-163811b22a19",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "f1126335-4605-4cfa-b2a0-28506cbd7bf0",
+            "name": "eduquest-galaxy"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "1d6c577f-7e21-4a71-a799-2375ed4be22e",
+    "name": "Conference-Management",
+    "createdAt": "2026-06-28T18:14:16.464Z",
+    "updatedAt": "2026-07-01T06:50:10.072Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "f7dc2a1f-6a74-4682-bf63-b54e046d6e1a",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "6fdf3fdf-d77d-415b-a4bf-b47444af631f",
+            "name": "MongoDB"
+          }
+        },
+        {
+          "node": {
+            "id": "ab2eaa23-cf42-4526-a52b-1a4c12fc05a8",
+            "name": "Conference-Management-ResearcherNet"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "d503475d-6c73-4ca7-b2bc-4242eadd3e15",
+    "name": "Market-OS",
+    "createdAt": "2026-06-25T05:32:19.355Z",
+    "updatedAt": "2026-06-26T16:55:16.550Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "0ef5d7fb-af94-4cc8-b9db-5952d1e4701b",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "1417842d-1ee1-4817-9e79-af000054310b",
+            "name": "marketosbackend"
+          }
+        },
+        {
+          "node": {
+            "id": "1b5fb2f6-3b2e-455b-b302-487e0e582a95",
+            "name": "Consumer"
+          }
+        },
+        {
+          "node": {
+            "id": "633e6701-a7cd-41c9-8380-fc8367e167c7",
+            "name": "digital_marketing_agent"
+          }
+        },
+        {
+          "node": {
+            "id": "66265ae4-774e-4dcf-afe3-55241543c132",
+            "name": "Producer"
+          }
+        },
+        {
+          "node": {
+            "id": "663d075b-745c-4965-b8cb-9fc72229fe26",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "7c4ddd5f-7688-493b-b1cf-65ce501784a7",
+            "name": "Kafka"
+          }
+        },
+        {
+          "node": {
+            "id": "81f5be2c-2cd1-4b5c-979e-d90047fb869e",
+            "name": "Zookeeper"
+          }
+        },
+        {
+          "node": {
+            "id": "94c1c745-68be-4a5a-9d55-8b093f511d9e",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "e7542057-d099-481f-9e97-6e8a5fdabaa2",
+            "name": "renewed-dedication"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "1dd735d2-69f5-494e-b040-ab2d5bf22d94",
+    "name": "newsmind",
+    "createdAt": "2026-06-09T07:51:47.618Z",
+    "updatedAt": "2026-06-17T18:36:43.209Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "0c831d2c-2850-4307-9fdf-f9d5c4bbeae4",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "785f0a6c-7dc2-4cf5-969c-9465b6c5f3e3",
+            "name": "MongoDB"
+          }
+        },
+        {
+          "node": {
+            "id": "82ecdd95-63e9-465b-a2ba-bda8efd5fda9",
+            "name": "libretranslate"
+          }
+        },
+        {
+          "node": {
+            "id": "b0251f43-c8cc-447d-883b-55b9d359bbcf",
+            "name": "frontend"
+          }
+        },
+        {
+          "node": {
+            "id": "c7e5408f-8bd4-43ea-84f9-8fca9489e8f0",
+            "name": "Backend"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "8a596ad3-0ef4-4e00-ae5a-9e33b9e50ac5",
+    "name": "KhanaOS",
+    "createdAt": "2026-05-20T05:50:58.093Z",
+    "updatedAt": "2026-06-17T17:21:21.442Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "6c1ea0cd-2fb2-4577-917c-3bc67348ec6c",
+            "name": "production",
+            "canAccess": true
+          }
+        },
+        {
+          "node": {
+            "id": "d10f7f21-1e05-4c28-9acd-5c2278a27b28",
+            "name": "Testing",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "081fc892-9a86-4762-9ca3-d05e89abee6a",
+            "name": "MarginMind"
+          }
+        },
+        {
+          "node": {
+            "id": "0bf6f370-38d4-41f2-bacd-a22dbaed11c3",
+            "name": "Khanaosstaff-marketplace"
+          }
+        },
+        {
+          "node": {
+            "id": "0d672edf-2b9e-44ca-a2ac-23ac85304532",
+            "name": "Khanaosattendance"
+          }
+        },
+        {
+          "node": {
+            "id": "17d7346d-7390-4653-966b-f00b5e8e5394",
+            "name": "Khanaosinventory"
+          }
+        },
+        {
+          "node": {
+            "id": "392d956f-1805-43f8-a9db-642cc7041df1",
+            "name": "Mehmaanos"
+          }
+        },
+        {
+          "node": {
+            "id": "39a79885-d935-4fe4-a46c-c726aad1ae1c",
+            "name": "Khanaosmenu"
+          }
+        },
+        {
+          "node": {
+            "id": "3dd1ee6a-88bc-4cdd-861b-4b9dbc76e1a8",
+            "name": "Khanaosnotification"
+          }
+        },
+        {
+          "node": {
+            "id": "581fd177-0dcc-4b86-b43a-9bb79370c5af",
+            "name": "Khanaosaudit"
+          }
+        },
+        {
+          "node": {
+            "id": "5a0c4224-812d-4d63-a693-f8a5dfc2f3ef",
+            "name": "function-bun"
+          }
+        },
+        {
+          "node": {
+            "id": "5edd32a4-0960-48b3-b242-d4cbc7a1839b",
+            "name": "App"
+          }
+        },
+        {
+          "node": {
+            "id": "614ff112-cd0f-402f-99ff-c120e431a637",
+            "name": "Khanaoschannel"
+          }
+        },
+        {
+          "node": {
+            "id": "70d28654-eca9-4567-8732-7d965b250b7c",
+            "name": "Khanaosscheduler"
+          }
+        },
+        {
+          "node": {
+            "id": "771c4740-b0fd-44b9-bc82-5d75b72aab75",
+            "name": "Khanaospos"
+          }
+        },
+        {
+          "node": {
+            "id": "7c7e0c66-10bb-4bc8-b134-cde4f20d8713",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "8589bcf9-ac13-43c3-b88e-750afe0fd248",
+            "name": "Khanaoscrm"
+          }
+        },
+        {
+          "node": {
+            "id": "9e0757c0-5f83-41e1-afdc-7784198ed0fd",
+            "name": "KhanaosAuth"
+          }
+        },
+        {
+          "node": {
+            "id": "a7ee4be7-7839-4c18-af61-f6de35f07b1c",
+            "name": "Khanaosreservation"
+          }
+        },
+        {
+          "node": {
+            "id": "bcc1a967-15c4-41ba-85db-325e4601c0f4",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "c3469f65-339e-425a-967b-202d3c53d966",
+            "name": "Khanaosadmin"
+          }
+        },
+        {
+          "node": {
+            "id": "d60d85f4-72dc-48b8-bda2-12dfdcd58079",
+            "name": "Khanaosreport"
+          }
+        },
+        {
+          "node": {
+            "id": "e6ff62e9-b5d4-447e-bf63-f20c7071175b",
+            "name": "Khanaossettings"
+          }
+        },
+        {
+          "node": {
+            "id": "f018de36-50ee-46ec-8064-3e1ceb711fcb",
+            "name": "payment-service"
+          }
+        },
+        {
+          "node": {
+            "id": "f3e65ce5-99c4-4c7e-b0c1-31fc667720dc",
+            "name": "Khanaoskds"
+          }
+        },
+        {
+          "node": {
+            "id": "f916aa2b-3bea-4868-ac44-6c3a7c76222e",
+            "name": "Khanaoshotel"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "e0698bfd-b01f-4965-afa0-63a03c170a50",
+    "name": "InstituteFlow",
+    "createdAt": "2026-04-27T08:56:16.931Z",
+    "updatedAt": "2026-06-12T17:00:56.195Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "a43f9af7-1ab7-4747-bc89-30fdf033cbd2",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "0778bc4f-4c44-4c22-bc61-ca9f0bc59904",
+            "name": "HR"
+          }
+        },
+        {
+          "node": {
+            "id": "15cbf8f6-e3cc-4a65-81bc-da196d605add",
+            "name": "Finance"
+          }
+        },
+        {
+          "node": {
+            "id": "1bab5fcf-395c-430b-9ae1-091e3f911d2a",
+            "name": "backend"
+          }
+        },
+        {
+          "node": {
+            "id": "4abe8544-d2d4-421b-be74-7d571fe888e5",
+            "name": "Notification"
+          }
+        },
+        {
+          "node": {
+            "id": "51e81efc-18c1-49c2-b3e8-fb3715b99536",
+            "name": "Academic"
+          }
+        },
+        {
+          "node": {
+            "id": "97cb4cdc-3a36-4ef6-b634-2a8882339c0b",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "b849980e-4ead-4f1a-b022-f5982db6afc0",
+            "name": "Classroom"
+          }
+        },
+        {
+          "node": {
+            "id": "c27404b4-7454-4771-9214-734620f77e22",
+            "name": "Platform"
+          }
+        },
+        {
+          "node": {
+            "id": "cd26a2d3-7711-4ff7-8732-e769d3be6c4f",
+            "name": "IAM"
+          }
+        },
+        {
+          "node": {
+            "id": "f63266b4-f47e-4639-9b56-86fffbe939e5",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "f8f80cf1-6848-40fd-9c25-f9609a7c120f",
+            "name": "Intelligence"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "563673e2-ca36-4f65-bcd3-fcab66bb2a37",
+    "name": "ResearcherNet",
+    "createdAt": "2026-03-07T08:06:20.384Z",
+    "updatedAt": "2026-06-12T16:59:26.324Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "1cae672d-47fc-4a89-b2f9-e6c02f1e2850",
+            "name": "production",
+            "canAccess": true
+          }
+        },
+        {
+          "node": {
+            "id": "62d4ade9-3365-4476-b621-a3970ca5be98",
+            "name": "test",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "145e11c8-c4c3-4e28-8a76-49381654a348",
+            "name": "editor-hub"
+          }
+        },
+        {
+          "node": {
+            "id": "3ecce665-ff00-4388-a310-c74dab2511a5",
+            "name": "Redis-nLnA"
+          }
+        },
+        {
+          "node": {
+            "id": "7871518b-a8a6-4eea-85bb-fcc95a224dc4",
+            "name": "api-service"
+          }
+        },
+        {
+          "node": {
+            "id": "8da423a8-655a-4f33-ae09-490ddb21e7d6",
+            "name": "chat-service"
+          }
+        },
+        {
+          "node": {
+            "id": "90da1281-6691-4b84-81cc-00fd35734779",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "a91f3929-9329-4e22-8195-cd96db01de4c",
+            "name": "analytics-service"
+          }
+        },
+        {
+          "node": {
+            "id": "b71f9350-5db2-4a66-916b-4e87683b307b",
+            "name": "compile-service"
+          }
+        },
+        {
+          "node": {
+            "id": "d0db1726-8bad-4934-9c19-61f119372ffb",
+            "name": "video-chat-service"
+          }
+        },
+        {
+          "node": {
+            "id": "db865c66-698e-4c6f-b5a8-14d2cfec4a06",
+            "name": "MongoDB-1K1v"
+          }
+        },
+        {
+          "node": {
+            "id": "ef0ebd16-1bd6-405f-b206-4142e618b1bd",
+            "name": "frontend"
+          }
+        },
+        {
+          "node": {
+            "id": "fea4ff0f-165a-4fe9-8f77-d3d2c194bd58",
+            "name": "upload-service"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "563ef29a-812d-48bf-b549-4613d4fdac6b",
+    "name": "industrious-endurance",
+    "createdAt": "2026-05-10T04:09:06.188Z",
+    "updatedAt": "2026-05-14T06:52:52.937Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "4a76b4a4-fd6e-459f-94a2-57cabda529ea",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "517c0d4b-2b87-48f0-9606-04dee7015547",
+            "name": "MarginMind"
+          }
+        },
+        {
+          "node": {
+            "id": "6b31b2ef-619b-45ea-b0bd-b2df3ea041b1",
+            "name": "motivated-unity"
+          }
+        },
+        {
+          "node": {
+            "id": "f22d54fd-5e97-4776-ac64-68df958742cd",
+            "name": "Postgres"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "8cf0ea5e-1359-4150-a45c-213e7c36b3d3",
+    "name": "HomeX",
+    "createdAt": "2026-03-11T06:15:53.855Z",
+    "updatedAt": "2026-05-09T18:47:51.727Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "82e7ae0b-6f86-4b8b-8c97-4824d52469cc",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "3b4c93c9-fada-48b7-9f98-16a73bef3869",
+            "name": "homex-frontend"
+          }
+        },
+        {
+          "node": {
+            "id": "eff578a9-d162-4878-a933-81f338c82323",
+            "name": "homex-backend"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "2aff1983-aca7-4ad8-9fc3-9db391385168",
+    "name": "VectorX",
+    "createdAt": "2026-03-07T13:18:03.224Z",
+    "updatedAt": "2026-05-08T08:23:22.024Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "1c55b412-cd50-4c67-adbd-8607137dcd88",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "789fe27a-2cc0-4893-828f-06b18198db72",
+            "name": "insightful-wonder"
+          }
+        },
+        {
+          "node": {
+            "id": "d471b6b8-1f08-46cd-94e6-0c04856c856b",
+            "name": "VectorX-admin"
+          }
+        },
+        {
+          "node": {
+            "id": "ea6ed07e-4217-4958-8d08-abe52d9572c1",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "ef72df6e-1208-4c04-9656-91c95c552e19",
+            "name": "VectorX"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "11f527de-8ca5-49ba-968a-030ff49c5361",
+    "name": "DDF-Pharmacy",
+    "createdAt": "2026-03-12T09:54:05.019Z",
+    "updatedAt": "2026-05-06T10:42:19.292Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "d0d22854-8735-49c1-81a9-33bde21a8d8b",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "269ead20-9b18-4d51-9e52-3e19b7ac25ce",
+            "name": "pharmacy_frontend"
+          }
+        },
+        {
+          "node": {
+            "id": "74d14cd1-b078-4b94-a8ee-1c0ca971cdc8",
+            "name": "pharmacy_backend"
+          }
+        },
+        {
+          "node": {
+            "id": "c081e360-3f21-4f11-9e78-a65578ed4ccf",
+            "name": "Postgres"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "9096cc1c-a2c3-4951-9e0b-493745e35af0",
+    "name": "Aldol-AcceNova",
+    "createdAt": "2026-04-22T07:17:24.276Z",
+    "updatedAt": "2026-04-26T07:31:08.082Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "5c4ebca4-927c-47da-983b-5f6d138b6467",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "17a1333d-30cc-4600-bd79-0a4a385db581",
+            "name": "Aldol"
+          }
+        },
+        {
+          "node": {
+            "id": "28c27fb4-dce3-4a06-a2e7-8e284c2b60ff",
+            "name": "MongoDB"
+          }
+        },
+        {
+          "node": {
+            "id": "d30ed350-0ee5-4b2b-bf67-f23e37def041",
+            "name": "admin"
+          }
+        },
+        {
+          "node": {
+            "id": "e634f138-1c1a-49d4-9207-669c01d813d1",
+            "name": "backend"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "936d2a68-ce54-47a0-8d5f-8be3d457a177",
+    "name": "AcceNova-main",
+    "createdAt": "2026-04-22T07:13:48.462Z",
+    "updatedAt": "2026-04-22T15:56:45.621Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "ce64c32b-d953-4511-8fbc-4f8a87974274",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "128d85b6-d23a-4a23-b28b-f0a067c757ba",
+            "name": "Accenova_backend"
+          }
+        },
+        {
+          "node": {
+            "id": "19c59df3-03d8-4166-a657-27b2dc95bd4a",
+            "name": "AcceNova"
+          }
+        },
+        {
+          "node": {
+            "id": "52a71db1-666a-4b4d-b3cc-7fee454ce27d",
+            "name": "accenova_admin"
+          }
+        },
+        {
+          "node": {
+            "id": "6c82e9c5-c96c-4cf5-bec5-ec32f816d2bc",
+            "name": "MongoDB"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "16812b1a-4cf8-48cb-8d86-8f0100f9b85d",
+    "name": "LawApp",
+    "createdAt": "2026-02-08T05:43:55.141Z",
+    "updatedAt": "2026-04-19T12:04:57.756Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "1b0c87a4-769c-46f9-b7b2-0f4457b72217",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "339512dd-7d87-4274-9d73-86543c44a1c5",
+            "name": "ingenious-fulfillment"
+          }
+        },
+        {
+          "node": {
+            "id": "accca187-48b0-4a8b-848a-253f813a99e3",
+            "name": "Lawapplication"
+          }
+        },
+        {
+          "node": {
+            "id": "f992124d-c7e6-4091-a990-b081cabb498c",
+            "name": "Postgres"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "426b46c9-6d5b-4cf6-8ac6-73a53a94425b",
+    "name": "secure-heart",
+    "createdAt": "2026-04-12T05:59:39.565Z",
+    "updatedAt": "2026-04-12T08:48:50.129Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "5b988360-1e7d-4b35-9063-2a685fe25915",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "23a674d1-3616-4f46-908d-51c0594406ad",
+            "name": "impartial-respect"
+          }
+        },
+        {
+          "node": {
+            "id": "d2cb6d8f-3ca8-4285-b6c7-b2e9b0181804",
+            "name": "cmt.researchernet"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "15e03ba4-9c4a-4982-8e33-3b1394f6b9f7",
+    "name": "adorable-magic",
+    "createdAt": "2026-04-07T09:43:30.379Z",
+    "updatedAt": "2026-04-08T09:08:50.346Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "af550ab9-1710-4cf5-9d7e-63b90f3c1747",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "2a3323cc-8baf-4b6a-a8b3-7cfca819adcb",
+            "name": "NEETpg student"
+          }
+        },
+        {
+          "node": {
+            "id": "7f2bae1e-ea83-42ca-8a43-54fa02064d62",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "f2fc618b-d673-4e3a-814c-54a7e4517f0f",
+            "name": "NEETpg admin"
+          }
+        },
+        {
+          "node": {
+            "id": "fc7b71b9-8252-49df-bb44-6320e51a6176",
+            "name": "NeetPG server"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "1abd1f2c-6340-4e55-b3b7-7706c9c80bc9",
+    "name": "alluring-prosperity",
+    "createdAt": "2026-04-01T12:24:19.574Z",
+    "updatedAt": "2026-04-01T12:24:29.341Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "0918c727-c3f8-4bac-867a-5015706280c1",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "1b361292-980c-4e6e-adbe-9a24bc5f5d29",
+            "name": "adda-backend"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "04aa80be-f0e1-414f-8b12-e8e4f2e70d5b",
+    "name": "ResuFilter AI",
+    "createdAt": "2026-02-13T05:58:44.221Z",
+    "updatedAt": "2026-02-15T05:11:28.137Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "bc2105d4-361e-4b38-af3d-8f12f5c0777e",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "6005dc9b-197d-4ce8-98b9-194878b18c3b",
+            "name": "humble-magic"
+          }
+        },
+        {
+          "node": {
+            "id": "c2139be0-c5d1-4951-8ba1-d71c0a5854a0",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "cd2846a0-cc4c-4959-b5f5-2bd98c960a5d",
+            "name": "resufilterai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "1b3c9bcf-af07-4c00-b2aa-39cb3291b053",
+    "name": "selfless-wisdom",
+    "createdAt": "2026-02-11T07:42:30.142Z",
+    "updatedAt": "2026-02-11T07:43:40.058Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "a5a78498-190c-4a39-9522-1455b0a9da03",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "2e7575a5-11fe-4bb0-bc17-85e7a0dd8f63",
+            "name": "AIIRI"
+          }
+        },
+        {
+          "node": {
+            "id": "a2236751-de55-40a6-bbce-7d0883aef305",
+            "name": "awake-recreation"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "7b2bd1d1-8fd1-47dc-9bc7-3ed8640513d0",
+      "name": "deepduofoundation's Projects"
+    },
+    "id": "56648c33-67cc-4ee8-830a-58024f42986b",
+    "name": "Campus-connect-ju",
+    "createdAt": "2026-01-30T02:43:50.506Z",
+    "updatedAt": "2026-02-08T05:37:34.715Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "7448d957-b5b7-4955-baf7-9966fdec229a",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "850a31e7-c491-4cbe-bf7a-c5efc854d966",
+            "name": "CampusConnect-b"
+          }
+        },
+        {
+          "node": {
+            "id": "99067806-af47-4851-b4bf-3c81ef6f1877",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "ebe48d6f-b69a-4b0d-97d2-57ecde697c35",
+            "name": "CampusConnect"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "76761314-d860-48e5-ad8c-fefe8e69f439",
+      "name": "Samriddha Roy's Projects"
+    },
+    "id": "405e79f9-838d-4c82-87ee-b8f7e66cd907",
+    "name": "zooming-abundance",
+    "createdAt": "2026-03-07T03:29:19.317Z",
+    "updatedAt": "2026-03-07T03:55:25.979Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "a9392b65-cc14-4b67-8656-10d40c0231a5",
+            "name": "production",
+            "canAccess": true
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "637a6711-3eba-4330-bee6-43ed621829af",
+            "name": "Postgres"
+          }
+        },
+        {
+          "node": {
+            "id": "d1ab3cf4-a356-465a-8c16-d1a26cdc982a",
+            "name": "eduquest-galaxy"
+          }
+        }
+      ]
+    }
+  }
+]

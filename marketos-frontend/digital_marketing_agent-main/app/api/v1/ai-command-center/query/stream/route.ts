@@ -100,19 +100,11 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   const angles = [
     { prompt: `${cleanSubject}, hero product photograph, ${promptContext}, ${visualContext}`, w: 1200, h: 628 },
     { prompt: `${cleanSubject} in real-life lifestyle scene, ${promptContext}, authentic natural mood`, w: 1080, h: 1080 },
-    { prompt: `Macro close-up detail of ${cleanSubject}, showcasing materials and design, ${promptContext}`, w: 1080, h: 1920 },
-    { prompt: `Flat lay arrangement featuring ${cleanSubject}, ${promptContext}, clean aesthetic composition`, w: 1200, h: 628 },
-    { prompt: `Vibrant editorial showcase of ${cleanSubject}, ${promptContext}, striking visual framing`, w: 1080, h: 1080 },
-    { prompt: `Cinematic wide advertisement for ${cleanSubject}, ${promptContext}, rich atmospheric lighting`, w: 1200, h: 628 },
   ];
 
   return [
     { id: "v1", title: "1. Official Product Banner (1200x628)", url: pollinationsUrl(angles[0].prompt, angles[0].w, angles[0].h), overlay: `🔥 INTRODUCING ${cleanSubject.toUpperCase()} — CLAIM OFFER`,   format: "LinkedIn / Meta Landscape (1200x628)" },
     { id: "v2", title: "2. Lifestyle Square (1080x1080)",        url: pollinationsUrl(angles[1].prompt, angles[1].w, angles[1].h), overlay: `✨ THE ${cleanSubject.toUpperCase()} EXPERIENCE`,             format: "Instagram / Facebook Square (1080x1080)" },
-    { id: "v3", title: "3. Mobile Story (1080x1920)",            url: pollinationsUrl(angles[2].prompt, angles[2].w, angles[2].h), overlay: `🚀 UP TO 40% OFF — ${cleanSubject.toUpperCase()}`,           format: "Instagram Stories & Reels (1080x1920)" },
-    { id: "v4", title: "4. Minimalist Flat Lay (1200x628)",      url: pollinationsUrl(angles[3].prompt, angles[3].w, angles[3].h), overlay: `⚡ PURE QUALITY — ${cleanSubject.toUpperCase()}`,            format: "Clean Minimalist Layout" },
-    { id: "v5", title: "5. Editorial Square (1080x1080)",        url: pollinationsUrl(angles[4].prompt, angles[4].w, angles[4].h), overlay: `💡 DISCOVER THE REAL ${cleanSubject.toUpperCase()}`,        format: "Vibrant Editorial Spotlight" },
-    { id: "v6", title: "6. Cinematic Banner (1200x628)",         url: pollinationsUrl(angles[5].prompt, angles[5].w, angles[5].h), overlay: `📈 ${cleanSubject.toUpperCase()} — BUILT TO PERFORM`,       format: "Cinematic Wide Format" },
   ];
 }
 
@@ -160,7 +152,7 @@ async function getAgentMockPayload(
       color_palette: ["#111827 (Obsidian)", "#3B82F6 (Vibrant Blue)", "#F59E0B (Amber Gold)", "#FFFFFF (Pure White)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
-      total_variants_generated: 6,
+      total_variants_generated: 2,
       source: "pollinations-flux (AI-generated, on-brand)",
     };
   }

@@ -165,16 +165,34 @@ def get_llm(temperature: float = 0):
         )
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
-    elif provider == "groq" or provider == "nvidia":
-        api_key = os.getenv("GEMINI_API_KEY")
+    elif provider == "nvidia":
+        api_key = os.getenv("NVIDIA_API_KEY")
         if not api_key:
             if gemini_fallback:
-                return gemini_fallback
-            raise ValueError("GEMINI_API_KEY not set")
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        model = ChatGoogleGenerativeAI(
-            model="gemini-3.5-flash",
-            google_api_key=api_key,
+                return StringContentWrapper(gemini_fallback)
+            raise ValueError("NVIDIA_API_KEY not set and no Gemini fallback available")
+        from langchain_openai import ChatOpenAI
+        model = ChatOpenAI(
+            model="meta/llama-3.1-70b-instruct",
+            openai_api_key=api_key,
+            openai_api_base="https://integrate.api.nvidia.com/v1",
+            temperature=temperature,
+            max_tokens=4096,
+            max_retries=1,
+            timeout=60,
+        )
+        return StringContentWrapper(model.with_fallbacks(fallbacks))
+
+    elif provider == "groq":
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            if gemini_fallback:
+                return StringContentWrapper(gemini_fallback)
+            raise ValueError("GROQ_API_KEY not set and no Gemini fallback available")
+        from langchain_groq import ChatGroq
+        model = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            groq_api_key=api_key,
             temperature=temperature,
             max_tokens=4096,
             max_retries=1,
@@ -202,31 +220,42 @@ def get_glm(temperature: float = 0):
     # Base LLM fallback
     base_llm = get_llm(temperature=temperature)
 
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key:
+    nvidia_api = os.getenv("NVIDIA_API_KEY", "")
+    groq_api = os.getenv("GROQ_API_KEY", "")
+
+    glm_model = None
+
+    if nvidia_api:
+        from langchain_openai import ChatOpenAI
+        glm_model = ChatOpenAI(
+            model="meta/llama-3.1-70b-instruct",
+            openai_api_key=nvidia_api,
+            openai_api_base="https://integrate.api.nvidia.com/v1",
+            temperature=temperature,
+            max_tokens=8192,
+            max_retries=1,
+            timeout=60,
+        )
+    elif groq_api:
+        from langchain_groq import ChatGroq
+        glm_model = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            groq_api_key=groq_api,
+            temperature=temperature,
+            max_tokens=8192,
+            max_retries=1,
+            timeout=15,
+        )
+    else:
         return base_llm
 
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    glm_model = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash",
-        google_api_key=api_key,
-        temperature=temperature,
-        max_tokens=8192,
-        max_retries=1,
-        timeout=15,
-        default_headers={
-            "HTTP-Referer": "https://marketos.ai",
-            "X-Title": "MarketOS-Orchestrator",
-        },
-    )
-
-    # Build fallback chain: Groq → Gemini → MockLLM
+    # Build fallback chain: Gemini -> Mock
     gemini_fb = None
     if os.getenv("GEMINI_API_KEY"):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fb = ChatGoogleGenerativeAI(
-                model="gemini-3.5-flash",
+                model="gemini-1.5-flash",
                 google_api_key=os.getenv("GEMINI_API_KEY"),
                 temperature=temperature,
                 max_output_tokens=8192,
