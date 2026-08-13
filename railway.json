@@ -2,7 +2,8 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "marketos-backend/Dockerfile",
+    "watchPatterns": ["marketos-backend/**"]
   },
   "deploy": {
     "startCommand": "node dist/server.js",
