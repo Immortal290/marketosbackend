@@ -2,9 +2,10 @@
 MarketOS — Image Agent (AI-Generated Visual Engine)
 Pipeline:
   1. Gemini Imagen (gemini-2.0-flash-exp)         — best quality, needs GEMINI_API_KEY
-  2. FLUX.1-schnell (HuggingFace Inference API)   — free Apache-2.0 model, needs HF_API_KEY
-  3. Pollinations.ai (FLUX backend, no key)       — always-available fallback
-  4. HTML injection of the winning image into the selected copy variant
+  2. FLUX.1-schnell (HuggingFace Inference API)   — free Apache-2.0 model, needs HF_TOKEN
+  3. Pollinations.ai (FLUX backend, no key)       — always-available free fallback
+  4. Stability AI (Stable Diffusion 3)            — paid fallback, needs STABILITY_API_KEY
+  5. HTML injection of the winning image into the selected copy variant
 
 FLUX.1-schnell is the official open-weight model from Black Forest Labs:
   https://github.com/black-forest-labs/flux
@@ -120,7 +121,18 @@ def image_agent_node(state: dict) -> dict:
             img_type = "CID"
             source   = "pollinations-flux"
         else:
-            agent_log("IMAGE", "⚠ Pollinations generation failed")
+            agent_log("IMAGE", "⚠ Pollinations generation failed — falling back to Stability AI")
+
+    # ── Phase 4: Stability AI (Stable Diffusion 3) ───────────────────────────
+    if not img_b64 and os.getenv("STABILITY_API_KEY"):
+        agent_log("IMAGE", "Phase 4 — Generating with Stability AI (SD3)...")
+        img_b64 = _generate_stability_image(full_prompt)
+        if img_b64:
+            agent_log("IMAGE", "✅ Stability AI generation successful")
+            img_type = "CID"
+            source   = "stability-sd3"
+        else:
+            agent_log("IMAGE", "⚠ Stability AI generation failed — no more providers")
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -558,4 +570,78 @@ def _generate_pollinations_image(
         return None
     except Exception as e:
         agent_log("IMAGE", f"Pollinations exception: {e}")
+        return None
+
+
+# ── Provider 4: Stability AI (Stable Diffusion 3) ────────────────────────────
+
+def _generate_stability_image(
+    full_prompt: str,
+    width:  int = 1024,
+    height: int = 576,
+    style_preset: str = "photographic",
+) -> str | None:
+    """
+    Generate an image via Stability AI's REST API (Stable Diffusion 3).
+    Endpoint: https://api.stability.ai/v2beta/stable-image/generate/core
+
+    Requires STABILITY_API_KEY environment variable.
+    Used as the final paid fallback when all free providers fail.
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_stability"
+
+    api_key = os.getenv("STABILITY_API_KEY")
+    if not api_key:
+        agent_log("IMAGE", "STABILITY_API_KEY not set — skipping Stability AI")
+        return None
+
+    url = "https://api.stability.ai/v2beta/stable-image/generate/core"
+
+    # Stability v2beta uses multipart/form-data
+    import io
+    boundary = "----MarketOSBoundary"
+
+    fields = {
+        "prompt":        full_prompt[:2000],
+        "output_format": "jpeg",
+        "aspect_ratio":  "16:9",
+        "style_preset":  style_preset,
+    }
+
+    body = b""
+    for key, value in fields.items():
+        body += f"--{boundary}\r\n".encode()
+        body += f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode()
+        body += f"{value}\r\n".encode()
+    body += f"--{boundary}--\r\n".encode()
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type":  f"multipart/form-data; boundary={boundary}",
+                "Accept":        "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        # v2beta returns {"image": "<base64>", "finish_reason": "SUCCESS"}
+        img_data = data.get("image")
+        if img_data:
+            return img_data
+
+        agent_log("IMAGE", f"Stability AI returned no image: {data.get('finish_reason', 'unknown')}")
+        return None
+
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode("utf-8", errors="ignore")[:200]
+        agent_log("IMAGE", f"Stability AI HTTP {e.code}: {body_err}")
+        return None
+    except Exception as e:
+        agent_log("IMAGE", f"Stability AI exception: {e}")
         return None
