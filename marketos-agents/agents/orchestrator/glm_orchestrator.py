@@ -45,7 +45,8 @@ INTENT_AGENT_MAP: dict[str, list[str]] = {
     "COMPETITOR_ANALYSIS":  ["competitor", "seo", "reporting"],
     "FINANCE_REVIEW":       ["finance", "analytics", "reporting"],
     "ONBOARDING":           ["onboarding"],
-    "GENERAL_QUERY":        ["supervisor", "reporting"],
+    # GENERAL_QUERY is treated as a full campaign — supervisor decomposes & routes
+    "GENERAL_QUERY":        ["supervisor", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
 }
 
 AGENT_DISPLAY_NAMES: dict[str, str] = {
@@ -90,7 +91,7 @@ INTENT_CLASSIFIER_PROMPT = """You are the Master Orchestrator of MarketOS, an AI
 Your role is to precisely understand user intent and build a strategic routing plan for specialist agents.
 
 CLASSIFY the user's request into exactly ONE of these intents:
-  CREATE_CAMPAIGN   — launch a full multi-channel marketing campaign
+  CREATE_CAMPAIGN   — launch a full multi-channel marketing campaign (DEFAULT for any campaign/launch/promote request)
   VISUAL_CAMPAIGN   — generate images, visuals, creative assets, banners, or product photos for marketing
   GENERATE_CONTENT  — write copy, content, scripts, or creative text (no full campaign)
   ANALYZE_PERFORMANCE — report on existing campaign results, KPIs, metrics
@@ -103,12 +104,14 @@ CLASSIFY the user's request into exactly ONE of these intents:
   COMPETITOR_ANALYSIS — competitor/market research
   FINANCE_REVIEW    — budget, spend, ROAS, revenue
   ONBOARDING        — workspace setup, channel connection
-  GENERAL_QUERY     — anything else
+  GENERAL_QUERY     — ONLY for non-campaign questions like "what is MarketOS?" or "help"
 
-KEY RULES:
-- If the user asks to GENERATE IMAGES, VISUALS, BANNERS, or CREATIVE ASSETS for a product/brand → use VISUAL_CAMPAIGN
-- If the user asks to CREATE / LAUNCH a full CAMPAIGN → use CREATE_CAMPAIGN
-- If channels mentioned include images/visuals/creative in a campaign → use CREATE_CAMPAIGN and include image agent
+KEY RULES (in priority order):
+1. If the user mentions a PRODUCT, SERVICE, BRAND, APP, or STARTUP and wants to PROMOTE, LAUNCH, ADVERTISE, or MARKET it → always use CREATE_CAMPAIGN
+2. If the user mentions EMAIL + SEND + AUDIENCE → use CREATE_CAMPAIGN (not EMAIL_CAMPAIGN)
+3. If the user mentions SOCIAL MEDIA + CAMPAIGN → use CREATE_CAMPAIGN
+4. If the user asks to GENERATE IMAGES, VISUALS, BANNERS, or CREATIVE ASSETS → use VISUAL_CAMPAIGN
+5. GENERAL_QUERY is ONLY for pure informational questions with NO campaign or content intent
 
 RESPOND with ONLY a valid JSON object:
 {
@@ -116,8 +119,8 @@ RESPOND with ONLY a valid JSON object:
   "confidence": <0.0–1.0>,
   "summary": "<1-sentence summary of what the user wants>",
   "key_parameters": {
-    "campaign_name": "<if applicable>",
-    "target_audience": "<if mentioned>",
+    "campaign_name": "<product/brand name + type, e.g. EcoRide Social Launch>",
+    "target_audience": "<specific demographic/psychographic description>",
     "channels": ["<channel>"],
     "budget": <number or null>,
     "timeline": "<if mentioned>",
@@ -315,17 +318,24 @@ def orchestrate_query_stream(
         "current_step":    "ab_test",
         "errors":          [],
         "trace":           [],
-        # CampaignPlan fields — will be updated by Supervisor if it runs
+        # CampaignPlan seed — Supervisor will overwrite with brand-specific plan.
+        # IMPORTANT: key_messages must NOT contain raw user prompt / system context.
+        # These are placeholder values only; they are replaced by supervisor_node.
         "campaign_plan": {
             "campaign_name":   campaign_name,
-            "goal":            key_params.get("goal") or f"Drive engagement for {campaign_name}",
+            "goal":            key_params.get("goal") or f"Drive measurable engagement and conversions for {campaign_name}",
             "target_audience": selected_audience,
             "channels":        active_channels,
             "budget":          key_params.get("budget") or 5000,
             "timeline":        key_params.get("timeline") or "2 weeks",
             "tone":            key_params.get("tone") or "professional",
-            # Use GLM-extracted summary as seed; Supervisor will overwrite with rich brand messages
-            "key_messages":    [summary, f"Explore {campaign_name}", "Contact us today"],
+            # Seed key_messages are NEVER sent as email copy — supervisor replaces these.
+            # Do NOT put the raw user_query here as it leaks into email content.
+            "key_messages":    [
+                f"Discover {campaign_name} — built for {selected_audience}",
+                f"Learn more about {campaign_name} today",
+                "Get started for free",
+            ],
             "tasks":           [],
         }
     }
@@ -334,7 +344,9 @@ def orchestrate_query_stream(
     # This is critical: supervisor LLM generates accurate, brand-specific
     # key_messages, tone, and task graph from the raw user_intent.
     # Without this, downstream agents (copy/sms/email) use generic seeds.
-    if intent in ("CREATE_CAMPAIGN", "EMAIL_CAMPAIGN", "SMS_CAMPAIGN", "SOCIAL_CAMPAIGN", "GENERATE_CONTENT"):
+    # Run supervisor for ALL intents that involve content or campaigns
+    if intent in ("CREATE_CAMPAIGN", "EMAIL_CAMPAIGN", "SMS_CAMPAIGN", "SOCIAL_CAMPAIGN",
+                  "GENERATE_CONTENT", "VISUAL_CAMPAIGN", "GENERAL_QUERY"):
         try:
             from agents.supervisor.supervisor_agent import supervisor_node
             sup_output = supervisor_node(pipeline_state)

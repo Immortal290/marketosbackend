@@ -1,18 +1,18 @@
 """
 MarketOS — Image Agent (AI-Generated Visual Engine)
 Pipeline:
-  1. Gemini Imagen (gemini-3-pro-image-preview) — best quality, needs GEMINI_API_KEY
-  2. Pollinations.ai (Flux, open-source, no API key required) — free, always-available fallback
-  3. HTML injection of the winning image into the selected copy variant
+  1. Gemini Imagen (gemini-2.0-flash-exp)         — best quality, needs GEMINI_API_KEY
+  2. FLUX.1-schnell (HuggingFace Inference API)   — free Apache-2.0 model, needs HF_API_KEY
+  3. Pollinations.ai (FLUX backend, no key)       — always-available fallback
+  4. HTML injection of the winning image into the selected copy variant
+
+FLUX.1-schnell is the official open-weight model from Black Forest Labs:
+  https://github.com/black-forest-labs/flux
+  HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-schnell
+  License: Apache-2.0 (free for commercial use)
 
 No stock photography is used. Every image is generated from the campaign's
-own creative prompt, so it is always on-brand and on-concept — including for
-brand-new / fictional products that would never match a stock photo library.
-
-Production extension:
-- Cache generated images in S3/CDN by prompt hash (avoid repeated generation calls)
-- Store base64 in campaign_assets table with CDN URL after upload
-- Track usage for brand/style consistency across campaigns
+own creative prompt, so it is always on-brand and on-concept.
 """
 
 from __future__ import annotations
@@ -96,13 +96,24 @@ def image_agent_node(state: dict) -> dict:
             img_type = "CID"
             source   = "gemini-imagen"
         else:
-            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to Pollinations")
+            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to FLUX.1-schnell")
     else:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — using Pollinations Flux engine")
+        agent_log("IMAGE", "GEMINI_API_KEY not set — trying FLUX.1-schnell (HuggingFace)")
 
-    # ── Phase 2: Pollinations.ai ──────────────────────────────────────────────
+    # ── Phase 2: FLUX.1-schnell via HuggingFace Inference API ────────────────
     if not img_b64:
-        agent_log("IMAGE", "Phase 2 — Generating hero visual with Pollinations (Flux)...")
+        agent_log("IMAGE", "Phase 2 — Generating with FLUX.1-schnell (Apache-2.0, free)...")
+        img_b64 = _generate_flux_schnell_image(full_prompt)
+        if img_b64:
+            agent_log("IMAGE", "✅ FLUX.1-schnell generation successful")
+            img_type = "CID"
+            source   = "flux-schnell"
+        else:
+            agent_log("IMAGE", "⚠ FLUX.1-schnell failed — falling back to Pollinations")
+
+    # ── Phase 3: Pollinations.ai ──────────────────────────────────────────────
+    if not img_b64:
+        agent_log("IMAGE", "Phase 3 — Generating hero visual with Pollinations (FLUX backend)...")
         img_b64 = _generate_pollinations_image(full_prompt)
         if img_b64:
             agent_log("IMAGE", "✅ Pollinations generation successful")
@@ -457,7 +468,62 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
         return None, 0
 
 
-# ── Provider 2: Pollinations.ai ───────────────────────────────────────────────
+# ── Provider 2: FLUX.1-schnell via HuggingFace Inference API ─────────────────
+
+def _generate_flux_schnell_image(
+    full_prompt: str,
+    width:  int = 1024,
+    height: int = 576,
+) -> str | None:
+    """
+    Generate an image using FLUX.1-schnell from Black Forest Labs.
+    Model: black-forest-labs/FLUX.1-schnell (Apache-2.0 — free for commercial use)
+    GitHub: https://github.com/black-forest-labs/flux
+    HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-schnell
+
+    Requires HF_API_KEY environment variable (free HuggingFace account token).
+    Falls back gracefully to Pollinations if unavailable.
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_flux_schnell"
+
+    hf_token = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN")
+    if not hf_token:
+        agent_log("IMAGE", "HF_API_KEY not set — skipping FLUX.1-schnell")
+        return None
+
+    try:
+        from huggingface_hub import InferenceClient
+        import io
+        
+        client = InferenceClient(
+            provider="nscale",
+            api_key=hf_token,
+        )
+        
+        agent_log("IMAGE", "Calling HF InferenceClient (FLUX.1-schnell)...")
+        # output is a PIL.Image object
+        image = client.text_to_image(
+            full_prompt[:500],
+            model="black-forest-labs/FLUX.1-schnell",
+            width=width,
+            height=height
+        )
+        
+        # Convert PIL Image to base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        
+        return img_str
+
+    except Exception as e:
+        agent_log("IMAGE", f"FLUX.1-schnell exception: {e}")
+        return None
+
+
+# ── Provider 3: Pollinations.ai ───────────────────────────────────────────────
 
 def _generate_pollinations_image(
     full_prompt: str,

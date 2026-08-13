@@ -347,17 +347,47 @@ class ReportingAgent(AgentBase):
         roi = MetricsAggregatorSkill.get_roi(campaign_id)
 
         # ── LLM narrative ─────────────────────────────────────────────────
+        # Build clean, human-readable context for the LLM
+        # IMPORTANT: Never include raw system keys, prompt artifacts, or JSON blobs in LLM input.
+        clean_metrics = {
+            "sent":          metrics.get("sent", 0),
+            "delivered":     metrics.get("delivered", 0),
+            "opens":         metrics.get("opens", 0),
+            "clicks":        metrics.get("clicks", 0),
+            "open_rate":     f"{safe_float(metrics.get('open_rate', 0))*100:.1f}%",
+            "ctr":           f"{safe_float(metrics.get('ctr', 0))*100:.2f}%",
+            "delivery_rate": f"{safe_float(metrics.get('delivery_rate', 0))*100:.1f}%",
+            "bounces":       metrics.get("bounces", 0),
+        }
+        clean_roi = {
+            "spend":    roi.get("total_spend", 0),
+            "revenue":  roi.get("attributed_revenue", 0),
+            "roas":     f"{safe_float(roi.get('roas', 0)):.2f}x",
+            "cpa":      roi.get("cpa", 0),
+        }
+        clean_ab = {
+            "winner":   ab_data.get("winner_id"),
+            "decision": ab_data.get("decision"),
+        }
         metrics_ctx = json.dumps({
-            "metrics":   metrics,
-            "roi":       roi,
-            "ab_test":   {"winner": ab_data.get("winner_id"), "decision": ab_data.get("decision")},
-            "lead_scoring": lead_data.get("stage_distribution", {}),
+            "campaign_name": plan.campaign_name,
+            "goal":          plan.goal,
+            "tone":          plan.tone,
+            "channels":      plan.channels,
+            "metrics":       clean_metrics,
+            "roi":           clean_roi,
+            "ab_test":       clean_ab,
         }, indent=2)
 
         llm = self.get_llm()
         response = llm.invoke([
             SystemMessage(content=SYSTEM_PROMPT_XML + "\n\nSKILLS:\n" + self.skill_ctx),
-            HumanMessage(content=f"Campaign: {plan.campaign_name}\nAudience: {plan.target_audience}\n\n{metrics_ctx}"),
+            HumanMessage(content=(
+                f"Campaign: {plan.campaign_name}\n"
+                f"Goal: {plan.goal}\n"
+                f"Audience: {plan.target_audience}\n\n"
+                f"Performance Data:\n{metrics_ctx}"
+            )),
         ])
 
         try:
