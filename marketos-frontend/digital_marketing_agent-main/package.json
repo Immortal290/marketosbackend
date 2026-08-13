@@ -11,15 +11,19 @@
   "dependencies": {
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
+    "@hookform/resolvers": "^5.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "lucide-react": "^0.441.0",
     "next": "^14.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.85.0",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
-    "swr": "^2.4.2"
+    "swr": "^2.4.2",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

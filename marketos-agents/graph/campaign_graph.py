@@ -77,6 +77,10 @@ class CampaignState(TypedDict):
     company_address:         Optional[str]
     unsubscribe_url:         Optional[str]
 
+    # ── Structured Brief Fields (Phase 3) ──────────────────────────────────────
+    brand_profile:           Optional[dict]
+    campaign_brief:          Optional[dict]
+
     # ── Agent outputs ────────────────────────────────────────────────────────────
     campaign_plan:           Optional[CampaignPlan]
     copy_output:             Optional[CopyOutput]
@@ -96,6 +100,10 @@ class CampaignState(TypedDict):
     onboarding_result:       Optional[OnboardingResult]
     voice_result:            Optional[VoiceResult]
     whatsapp_result:         Optional[WhatsappResult]
+
+    # ── Advisory Compliance State ──────────────────────────────────────────────
+    compliance_retry_count:        Optional[int]
+    compliance_rewrite_suggestion: Optional[str]
 
     # ── Internal ────────────────────────────────────────────────────────────────
     _episodic_memories:      Optional[list]

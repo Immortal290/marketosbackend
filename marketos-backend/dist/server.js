@@ -29,7 +29,7 @@ var import_child_process = require("child_process");
 var import_util = require("util");
 
 // src/app.ts
-var import_express18 = __toESM(require("express"));
+var import_express20 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_compression = __toESM(require("compression"));
 var import_morgan = __toESM(require("morgan"));
@@ -482,7 +482,7 @@ var setupSwagger = (app2) => {
 };
 
 // src/routes.ts
-var import_express17 = require("express");
+var import_express19 = require("express");
 
 // src/modules/auth/routes.ts
 var import_express = require("express");
@@ -1260,14 +1260,14 @@ async function agentFetch(path, opts = {}) {
   let lastErr = null;
   for (const base of AGENT_SERVICE_CANDIDATES) {
     const url = `${base.replace(/\/$/, "")}${path}`;
-    const controller5 = new AbortController();
-    const timer = setTimeout(() => controller5.abort(), timeoutMs);
+    const controller7 = new AbortController();
+    const timer = setTimeout(() => controller7.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: body !== void 0 ? JSON.stringify(body) : void 0,
-        signal: controller5.signal
+        signal: controller7.signal
       });
       clearTimeout(timer);
       if (!response.ok) {
@@ -2773,28 +2773,398 @@ router16.get("/events", (req, res) => {
 });
 var routes_default16 = router16;
 
-// src/routes.ts
+// src/modules/brand_profile/routes.ts
+var import_express17 = require("express");
+
+// src/modules/brand_profile/service.ts
+var BrandProfileService = class {
+  async create(data) {
+    return prisma.brandProfile.create({
+      data: {
+        workspaceId: data.workspaceId,
+        businessName: data.businessName,
+        industry: data.industry,
+        websiteUrl: data.websiteUrl,
+        mission: data.mission,
+        usp: data.usp,
+        positioning: data.positioning,
+        voiceAdjectives: data.voiceAdjectives,
+        voiceDos: data.voiceDos,
+        voiceDonts: data.voiceDonts,
+        logoUrl: data.logoUrl,
+        brandColors: data.brandColors,
+        styleGuideUrl: data.styleGuideUrl,
+        personas: data.personas,
+        competitors: data.competitors,
+        complianceRegion: data.complianceRegion,
+        complianceNotes: data.complianceNotes,
+        pastCampaignRefs: data.pastCampaignRefs
+      }
+    });
+  }
+  async findByWorkspace(workspaceId) {
+    return prisma.brandProfile.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+  async findById(id) {
+    const profile = await prisma.brandProfile.findUnique({ where: { id } });
+    if (!profile) throw new Error("BrandProfile not found");
+    return profile;
+  }
+  async update(id, data) {
+    await this.findById(id);
+    return prisma.brandProfile.update({
+      where: { id },
+      data: {
+        ...data,
+        personas: data.personas,
+        competitors: data.competitors,
+        pastCampaignRefs: data.pastCampaignRefs
+      }
+    });
+  }
+  /**
+   * Calls the Python agent service's brand scraper and returns
+   * suggested autofill values WITHOUT persisting them.
+   * The frontend shows the result for user confirmation/edit.
+   */
+  async autofill(websiteUrl) {
+    const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://localhost:8000";
+    const resp = await fetch(`${agentServiceUrl}/v1/tools/scrape-brand-site`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ websiteUrl }),
+      signal: AbortSignal.timeout(2e4)
+    });
+    if (!resp.ok) {
+      throw new Error(`Agent service scraper returned ${resp.status}`);
+    }
+    return resp.json();
+  }
+};
+
+// src/modules/brand_profile/controller.ts
+var import_http_status_codes6 = require("http-status-codes");
+var BrandProfileController = class {
+  service = new BrandProfileService();
+  /** POST /brand-profile */
+  create = async (req, res, next) => {
+    try {
+      const profile = await this.service.create(req.body);
+      res.status(import_http_status_codes6.StatusCodes.CREATED).json({ success: true, data: profile });
+    } catch (error) {
+      next(error);
+    }
+  };
+  /** GET /brand-profile?workspaceId=... */
+  listByWorkspace = async (req, res, next) => {
+    try {
+      const workspaceId = req.query.workspaceId;
+      if (!workspaceId)
+        return res.status(import_http_status_codes6.StatusCodes.BAD_REQUEST).json({ error: "workspaceId query param is required" });
+      const profiles = await this.service.findByWorkspace(workspaceId);
+      res.status(import_http_status_codes6.StatusCodes.OK).json({ success: true, data: profiles });
+    } catch (error) {
+      next(error);
+    }
+  };
+  /** GET /brand-profile/:id */
+  getById = async (req, res, next) => {
+    try {
+      const profile = await this.service.findById(req.params.id);
+      res.status(import_http_status_codes6.StatusCodes.OK).json({ success: true, data: profile });
+    } catch (error) {
+      next(error);
+    }
+  };
+  /** PATCH /brand-profile/:id */
+  update = async (req, res, next) => {
+    try {
+      const profile = await this.service.update(req.params.id, req.body);
+      res.status(import_http_status_codes6.StatusCodes.OK).json({ success: true, data: profile });
+    } catch (error) {
+      next(error);
+    }
+  };
+  /**
+   * POST /brand-profile/:id/autofill
+   * Body: { websiteUrl: string }
+   * Returns suggested field values WITHOUT saving — user must confirm.
+   */
+  autofill = async (req, res, next) => {
+    try {
+      const suggestions = await this.service.autofill(req.body.websiteUrl);
+      res.status(import_http_status_codes6.StatusCodes.OK).json({ success: true, data: suggestions });
+    } catch (error) {
+      next(error);
+    }
+  };
+};
+
+// src/modules/brand_profile/validator.ts
+var import_zod5 = require("zod");
+var PersonaSchema = import_zod5.z.object({
+  name: import_zod5.z.string().min(1),
+  demographics: import_zod5.z.string().min(1),
+  painPoints: import_zod5.z.string().min(1),
+  goals: import_zod5.z.string().min(1)
+});
+var CompetitorSchema = import_zod5.z.object({
+  name: import_zod5.z.string().min(1),
+  url: import_zod5.z.string().url().optional().or(import_zod5.z.literal("")),
+  notes: import_zod5.z.string().optional()
+});
+var createBrandProfileSchema = import_zod5.z.object({
+  body: import_zod5.z.object({
+    workspaceId: import_zod5.z.string().uuid("workspaceId must be a valid UUID"),
+    businessName: import_zod5.z.string().min(1, "Business name is required"),
+    industry: import_zod5.z.string().min(1, "Industry is required"),
+    websiteUrl: import_zod5.z.string().url().optional().or(import_zod5.z.literal("")),
+    mission: import_zod5.z.string().optional(),
+    usp: import_zod5.z.string().optional(),
+    positioning: import_zod5.z.string().optional(),
+    voiceAdjectives: import_zod5.z.array(import_zod5.z.string()).min(1, "At least one voice adjective is required"),
+    voiceDos: import_zod5.z.array(import_zod5.z.string()),
+    voiceDonts: import_zod5.z.array(import_zod5.z.string()),
+    logoUrl: import_zod5.z.string().optional(),
+    brandColors: import_zod5.z.array(import_zod5.z.string()),
+    styleGuideUrl: import_zod5.z.string().optional(),
+    personas: import_zod5.z.array(PersonaSchema).min(1).max(5),
+    competitors: import_zod5.z.array(CompetitorSchema).max(5),
+    complianceRegion: import_zod5.z.enum(["none", "EU-GDPR", "US-HIPAA", "US-FINRA", "other"]).optional(),
+    complianceNotes: import_zod5.z.string().optional(),
+    pastCampaignRefs: import_zod5.z.array(import_zod5.z.object({}).passthrough()).optional()
+  })
+});
+var updateBrandProfileSchema = import_zod5.z.object({
+  body: import_zod5.z.object({
+    businessName: import_zod5.z.string().min(1).optional(),
+    industry: import_zod5.z.string().min(1).optional(),
+    websiteUrl: import_zod5.z.string().url().optional().or(import_zod5.z.literal("")),
+    mission: import_zod5.z.string().optional(),
+    usp: import_zod5.z.string().optional(),
+    positioning: import_zod5.z.string().optional(),
+    voiceAdjectives: import_zod5.z.array(import_zod5.z.string()).optional(),
+    voiceDos: import_zod5.z.array(import_zod5.z.string()).optional(),
+    voiceDonts: import_zod5.z.array(import_zod5.z.string()).optional(),
+    logoUrl: import_zod5.z.string().optional(),
+    brandColors: import_zod5.z.array(import_zod5.z.string()).optional(),
+    styleGuideUrl: import_zod5.z.string().optional(),
+    personas: import_zod5.z.array(PersonaSchema).max(5).optional(),
+    competitors: import_zod5.z.array(CompetitorSchema).max(5).optional(),
+    complianceRegion: import_zod5.z.enum(["none", "EU-GDPR", "US-HIPAA", "US-FINRA", "other"]).optional(),
+    complianceNotes: import_zod5.z.string().optional(),
+    pastCampaignRefs: import_zod5.z.array(import_zod5.z.object({}).passthrough()).optional()
+  })
+});
+var autofillSchema = import_zod5.z.object({
+  body: import_zod5.z.object({
+    websiteUrl: import_zod5.z.string().url("websiteUrl must be a valid URL")
+  })
+});
+
+// src/modules/brand_profile/routes.ts
 var router17 = (0, import_express17.Router)();
-router17.use("/auth", routes_default);
-router17.use("/settings", routes_default2);
-router17.use("/dashboard", routes_default3);
-router17.use("/campaigns", routes_default4);
-router17.use("/campaign-detail", routes_default5);
-router17.use("/analytics", routes_default6);
-router17.use("/audience", routes_default7);
-router17.use("/ai-command-center", routes_default8);
-router17.use("/agents", routes_default9);
-router17.use("/workflow-engine", routes_default10);
-router17.use("/creative-studio", routes_default11);
-router17.use("/competitive-intelligence", routes_default12);
-router17.use("/finance", routes_default13);
-router17.use("/reports", routes_default14);
-router17.use("/monitoring", routes_default15);
-router17.use("/audit-logs", routes_default16);
+var controller5 = new BrandProfileController();
+router17.post("/", validate(createBrandProfileSchema), controller5.create);
+router17.get("/", controller5.listByWorkspace);
+router17.get("/:id", controller5.getById);
+router17.patch("/:id", validate(updateBrandProfileSchema), controller5.update);
+router17.post("/:id/autofill", validate(autofillSchema), controller5.autofill);
 var routes_default17 = router17;
 
+// src/modules/campaign_brief/routes.ts
+var import_express18 = require("express");
+
+// src/modules/campaign_brief/service.ts
+var CampaignBriefService = class {
+  /**
+   * Creates a CampaignBrief linked to a BrandProfile, then assembles the full
+   * structured payload and forwards it to the agent service's streaming pipeline.
+   * Returns { brief, campaign, agentResponse } so the caller can stream SSE.
+   */
+  async createAndLaunch(data) {
+    const brandProfile = await prisma.brandProfile.findUnique({
+      where: { id: data.brandProfileId }
+    });
+    if (!brandProfile) throw new Error("BrandProfile not found");
+    const brief = await prisma.campaignBrief.create({
+      data: {
+        workspaceId: data.workspaceId,
+        brandProfileId: data.brandProfileId,
+        goal: data.goal,
+        channels: data.channels,
+        budget: data.budget,
+        timelineStart: data.timelineStart ? new Date(data.timelineStart) : void 0,
+        timelineEnd: data.timelineEnd ? new Date(data.timelineEnd) : void 0,
+        keyMessage: data.keyMessage,
+        offerDetails: data.offerDetails,
+        kpiTarget: data.kpiTarget,
+        freeTextContext: data.freeTextContext,
+        rawPromptFallback: data.rawPromptFallback
+      }
+    });
+    const campaign = await prisma.campaign.create({
+      data: {
+        name: `${brandProfile.businessName} \u2014 ${data.goal} campaign`,
+        workspaceId: data.workspaceId,
+        status: "ACTIVE",
+        campaignBriefId: brief.id
+      }
+    });
+    const agentPayload = {
+      brand_profile: {
+        id: brandProfile.id,
+        business_name: brandProfile.businessName,
+        industry: brandProfile.industry,
+        website_url: brandProfile.websiteUrl,
+        mission: brandProfile.mission,
+        usp: brandProfile.usp,
+        positioning: brandProfile.positioning,
+        voice_adjectives: brandProfile.voiceAdjectives,
+        voice_dos: brandProfile.voiceDos,
+        voice_donts: brandProfile.voiceDonts,
+        logo_url: brandProfile.logoUrl,
+        brand_colors: brandProfile.brandColors,
+        personas: brandProfile.personas,
+        competitors: brandProfile.competitors,
+        compliance_region: brandProfile.complianceRegion,
+        compliance_notes: brandProfile.complianceNotes,
+        past_campaign_refs: brandProfile.pastCampaignRefs
+      },
+      campaign_brief: {
+        id: brief.id,
+        goal: brief.goal,
+        channels: brief.channels,
+        budget: brief.budget,
+        timeline_start: brief.timelineStart?.toISOString(),
+        timeline_end: brief.timelineEnd?.toISOString(),
+        key_message: brief.keyMessage,
+        offer_details: brief.offerDetails,
+        kpi_target: brief.kpiTarget,
+        free_text_context: brief.freeTextContext
+      },
+      // Raw prompt fallback for legacy path inside agent
+      user_intent: brief.rawPromptFallback ?? brief.keyMessage ?? `${brief.goal} campaign for ${brandProfile.businessName}`,
+      channels: brief.channels,
+      workspace_id: data.workspaceId,
+      recipient_email: data.recipientEmail,
+      recipient_phone: data.recipientPhone,
+      sender_name: data.senderName ?? brandProfile.businessName,
+      company_name: data.companyName ?? brandProfile.businessName,
+      company_address: data.companyAddress ?? "",
+      unsubscribe_url: data.unsubscribeUrl ?? "https://example.com/unsubscribe"
+    };
+    return { brief, campaign, agentPayload };
+  }
+};
+
+// src/modules/campaign_brief/controller.ts
+var CampaignBriefController = class {
+  service = new CampaignBriefService();
+  /**
+   * POST /campaign/brief
+   * Creates the brief and forwards the request to the agent service.
+   * Streams the agent response back to the client using SSE.
+   */
+  createAndLaunch = async (req, res, next) => {
+    try {
+      const { brief, campaign, agentPayload } = await this.service.createAndLaunch(req.body);
+      const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://localhost:8000";
+      const agentRes = await fetch(`${agentServiceUrl}/v1/pipeline/campaign/brief`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(agentPayload)
+      });
+      if (!agentRes.ok) {
+        throw new Error(`Agent service returned ${agentRes.status}`);
+      }
+      if (!agentRes.body) {
+        throw new Error("Agent service returned no body");
+      }
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      const reader = agentRes.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value));
+      }
+      res.end();
+    } catch (error) {
+      next(error);
+    }
+  };
+};
+
+// src/modules/campaign_brief/validator.ts
+var import_zod6 = require("zod");
+var createCampaignBriefSchema = import_zod6.z.object({
+  body: import_zod6.z.object({
+    workspaceId: import_zod6.z.string().uuid("workspaceId must be a valid UUID"),
+    brandProfileId: import_zod6.z.string().uuid("brandProfileId must be a valid UUID"),
+    goal: import_zod6.z.enum(["awareness", "leads", "sales", "retention"], {
+      errorMap: () => ({
+        message: "goal must be one of: awareness, leads, sales, retention"
+      })
+    }),
+    channels: import_zod6.z.array(import_zod6.z.enum(["email", "sms", "voice", "whatsapp", "social"])).min(1, "At least one channel is required"),
+    budget: import_zod6.z.number().positive().optional(),
+    timelineStart: import_zod6.z.string().datetime({ offset: true }).optional(),
+    timelineEnd: import_zod6.z.string().datetime({ offset: true }).optional(),
+    keyMessage: import_zod6.z.string().min(1).optional(),
+    offerDetails: import_zod6.z.string().optional(),
+    kpiTarget: import_zod6.z.string().optional(),
+    freeTextContext: import_zod6.z.string().optional(),
+    rawPromptFallback: import_zod6.z.string().optional(),
+    // Optional send context
+    recipientEmail: import_zod6.z.string().email().optional(),
+    recipientPhone: import_zod6.z.string().optional(),
+    senderName: import_zod6.z.string().optional(),
+    companyName: import_zod6.z.string().optional(),
+    companyAddress: import_zod6.z.string().optional(),
+    unsubscribeUrl: import_zod6.z.string().url().optional()
+  })
+});
+
+// src/modules/campaign_brief/routes.ts
+var router18 = (0, import_express18.Router)();
+var controller6 = new CampaignBriefController();
+router18.post(
+  "/brief",
+  validate(createCampaignBriefSchema),
+  controller6.createAndLaunch
+);
+var routes_default18 = router18;
+
+// src/routes.ts
+var router19 = (0, import_express19.Router)();
+router19.use("/auth", routes_default);
+router19.use("/settings", routes_default2);
+router19.use("/dashboard", routes_default3);
+router19.use("/campaigns", routes_default4);
+router19.use("/campaign-detail", routes_default5);
+router19.use("/analytics", routes_default6);
+router19.use("/audience", routes_default7);
+router19.use("/ai-command-center", routes_default8);
+router19.use("/agents", routes_default9);
+router19.use("/workflow-engine", routes_default10);
+router19.use("/creative-studio", routes_default11);
+router19.use("/competitive-intelligence", routes_default12);
+router19.use("/finance", routes_default13);
+router19.use("/reports", routes_default14);
+router19.use("/monitoring", routes_default15);
+router19.use("/audit-logs", routes_default16);
+router19.use("/brand-profile", routes_default17);
+router19.use("/campaign", routes_default18);
+var routes_default19 = router19;
+
 // src/app.ts
-var app = (0, import_express18.default)();
+var app = (0, import_express20.default)();
 var allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()) : ["*"];
 app.use(
   (0, import_cors.default)({
@@ -2812,8 +3182,8 @@ app.use(
   })
 );
 app.use((0, import_compression.default)());
-app.use(import_express18.default.json());
-app.use(import_express18.default.urlencoded({ extended: true }));
+app.use(import_express20.default.json());
+app.use(import_express20.default.urlencoded({ extended: true }));
 app.use((0, import_morgan.default)("dev"));
 setupSwagger(app);
 var FRONTEND_URL = (process.env.FRONTEND_URL || "https://digitalmarketingagent-production.up.railway.app").replace(/\/$/, "");
@@ -2821,7 +3191,7 @@ app.get("/", (_req, res) => res.redirect(302, FRONTEND_URL));
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
-app.use("/api/v1", routes_default17);
+app.use("/api/v1", routes_default19);
 app.use("/api/workflows", routes_default10);
 app.use("/api/v1/workflows", routes_default10);
 app.use(errorHandler);

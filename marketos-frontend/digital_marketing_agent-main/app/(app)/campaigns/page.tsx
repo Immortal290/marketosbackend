@@ -98,32 +98,10 @@ export default function CampaignsPage() {
         <h1 className="font-display text-3xl font-black uppercase tracking-tight">
           Campaigns
         </h1>
-        <NeoButton variant="primary" onClick={() => setIsModalOpen(true)}>Create Campaign</NeoButton>
+        <Link href="/campaigns/new">
+          <NeoButton variant="primary">Create Campaign</NeoButton>
+        </Link>
       </div>
-
-      <NeoModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Create Campaign"
-      >
-        <div className="flex flex-col gap-4">
-          <NeoInput label="Campaign Name" placeholder="e.g. Q3 Product Launch" />
-          <NeoInput label="Budget" placeholder="e.g. $10,000" type="number" />
-          <div className="grid grid-cols-2 gap-4">
-            <NeoInput label="Start Date" type="date" />
-            <NeoInput label="End Date" type="date" />
-          </div>
-          <NeoInput label="Target Channels" placeholder="e.g. LinkedIn, Twitter" />
-          <NeoButton variant="primary" className="mt-4" onClick={() => {
-            setIsModalOpen(false);
-            toast.success("Campaign Created!", {
-              description: "Your new campaign has been saved.",
-            });
-          }}>
-            Save Campaign
-          </NeoButton>
-        </div>
-      </NeoModal>
 
       {/* Stats Overview */}
       <section className="grid gap-4 md:grid-cols-4">

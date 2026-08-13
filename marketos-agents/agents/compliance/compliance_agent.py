@@ -261,9 +261,13 @@ def compliance_agent_node(state: dict) -> dict:
 
     llm = get_llm(temperature=0)   # Zero temp — deterministic legal checks
 
+    brand_profile = state.get("brand_profile", {})
+    compliance_region = brand_profile.get("complianceRegion", "none") if brand_profile else "none"
+
     review_payload = f"""
 CAMPAIGN METADATA:
 - Campaign Name: {plan.campaign_name}
+- Compliance Region: {compliance_region}
 - Goal: {plan.goal}
 - Target Audience: {plan.target_audience}
 - Channels: {', '.join(plan.channels)}
@@ -443,7 +447,21 @@ Please run all 10 compliance checks and return the JSON result."""
 
     divider()
 
-    next_step = "email_agent" if result.approved else "blocked"
+    retry_count = state.get("compliance_retry_count", 0)
+    rewrite_suggestion = None
+    
+    if result.approved:
+        next_step = "email_agent"
+    else:
+        if retry_count < 2:
+            next_step = "copy_agent"
+            retry_count += 1
+            if result.suggestions:
+                rewrite_suggestion = result.suggestions[0]
+            agent_log("COMPLIANCE", f"Triggering advisory retry {retry_count}/2 to copy_agent")
+        else:
+            next_step = "blocked"
+            agent_log("COMPLIANCE", "Max retries reached. Campaign blocked.")
 
     # ── Publish compliance result to Kafka ────────────────────────────────
     publish_event(
@@ -479,6 +497,8 @@ Please run all 10 compliance checks and return the JSON result."""
         **state,
         "copy_output": copy_output.model_dump(),
         "compliance_result": result.model_dump(),
+        "compliance_retry_count": retry_count,
+        "compliance_rewrite_suggestion": rewrite_suggestion,
         "current_step": next_step,
         "trace": state.get("trace", []) + [{
             "agent":            "compliance_agent",
@@ -501,5 +521,8 @@ def compliance_router(state: dict) -> str:
     if compliance.get("approved", False):
         return "email_agent"
     else:
+        retry_count = state.get("compliance_retry_count", 0)
+        if retry_count > 0 and retry_count <= 2:
+            return "copy_agent"
         agent_log("COMPLIANCE", "Pipeline halted — campaign did not pass compliance gate.")
         return "end"

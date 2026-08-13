@@ -151,6 +151,19 @@ class CampaignRequest(BaseModel):
     unsubscribe_url: str = "https://example.com/unsubscribe"
     workspace_id:    str = "default"
 
+class StructuredCampaignRequest(BaseModel):
+    brand_profile:   dict = Field(..., description="Full BrandProfile JSON")
+    campaign_brief:  dict = Field(..., description="Full CampaignBrief JSON")
+    user_intent:     Optional[str] = Field(None, description="Fallback natural language intent")
+    channels:        Optional[list[str]] = Field(None, description="Explicit channels chosen by the user")
+    recipient_email: Optional[str] = None
+    recipient_phone: Optional[str] = None
+    sender_name:     str = "MarketOS"
+    company_name:    str = "MarketOS"
+    company_address: str = os.getenv("COMPANY_ADDRESS", "")
+    unsubscribe_url: str = "https://example.com/unsubscribe"
+    workspace_id:    str = "default"
+
 
 # ── GET / — Serve Dashboard ──────────────────────────────────────────────────
 
@@ -256,6 +269,56 @@ async def run_pipeline_stream(request: CampaignRequest):
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/v1/pipeline/campaign/brief")
+async def run_pipeline_structured_stream(request: StructuredCampaignRequest):
+    """Run the campaign pipeline from a structured brief and stream events via SSE."""
+    from graph.campaign_graph import campaign_graph
+    from utils.brand_indexer import index_brand_profile
+    import asyncio
+    
+    # 3.2: Asynchronously index the brand profile for RAG
+    # In a real system, we'd do this once on creation, but here we do it on campaign launch for the demo
+    # running in a thread so we don't block the stream startup too much
+    asyncio.get_event_loop().run_in_executor(None, index_brand_profile, request.brand_profile)
+    
+    campaign_id = f"CAMP-{int(time.time())}-{str(uuid.uuid4())[:4].upper()}"
+
+    state = {
+        "brand_profile":   request.brand_profile,
+        "campaign_brief":  request.campaign_brief,
+        "user_intent":     request.user_intent or f"{request.campaign_brief.get('goal', 'awareness')} campaign for {request.brand_profile.get('businessName', 'brand')}",
+        "user_channels":   request.channels or request.campaign_brief.get('channels', []),
+        "pipeline":        "campaign",
+        "workspace_id":    request.workspace_id,
+        "recipient_email": request.recipient_email,
+        "recipient_phone": request.recipient_phone,
+        "sender_name":     request.sender_name,
+        "company_name":    request.company_name,
+        "company_address": request.company_address,
+        "unsubscribe_url": request.unsubscribe_url,
+        "current_step":    "supervisor",
+        "errors":          [],
+        "trace":           [],
+        "compliance_retry_count": 0,
+    }
+
+    def event_generator():
+        try:
+            for event in campaign_graph.stream(state):
+                for node, update_state in event.items():
+                    data = {
+                        "node": node, 
+                        "trace": [{"agent": t["agent"], "status": t.get("status"), "ok": t.get("ok", True)} for t in update_state.get("trace", [])],
+                        "errors": update_state.get("errors", [])
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+            yield f"event: end\ndata: {json.dumps({'status': 'completed'})}\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 
 # ── POST /v1/query/stream — GLM-Orchestrated Query Pipeline ─────────────────
@@ -412,6 +475,67 @@ async def get_pipeline_status(campaign_id: str):
             db.close()
 
 
+# ── POST /v1/tools/scrape-brand-site ────────────────────────────────────────
+
+class ScrapeRequest(BaseModel):
+    url: str
+
+@app.post("/v1/tools/scrape-brand-site")
+async def scrape_brand_site(request: ScrapeRequest):
+    """Scrape a URL to auto-generate a BrandProfile."""
+    import requests
+    from bs4 import BeautifulSoup
+    import re
+    from agents.llm.llm_provider import get_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    try:
+        # 1. Scrape text
+        headers = {'User-Agent': 'MarketOS-Bot/1.0'}
+        response = requests.get(request.url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Kill scripts and styles
+        for script in soup(["script", "style", "nav", "footer"]):
+            script.extract()
+            
+        text_content = soup.get_text(separator=' ')
+        # Clean up whitespace
+        text_content = re.sub(r'\s+', ' ', text_content).strip()
+        text_content = text_content[:15000] # Limit to avoid massive token costs
+        
+        # 2. Extract with LLM
+        llm = get_llm(temperature=0)
+        system = """You are a brand strategist. Analyze the provided website content and extract key brand profile elements.
+Return a valid JSON object matching this structure EXACTLY:
+{
+  "businessName": "Company Name",
+  "industry": "Broad industry category",
+  "mission": "Core mission statement if found or inferred",
+  "usp": "Unique selling proposition",
+  "voiceAdjectives": ["adjective1", "adjective2", "adjective3"]
+}
+Do not return anything except JSON."""
+
+        res = llm.invoke([
+            SystemMessage(content=system),
+            HumanMessage(content=f"Website URL: {request.url}\n\nContent: {text_content}")
+        ])
+        
+        import json
+        from utils.json_utils import extract_json
+        extracted = extract_json(res.content)
+        
+        return {"ok": True, "data": extracted}
+        
+    except Exception as e:
+        agent_log("SCRAPER", f"Scrape failed for {request.url}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 # ── GET /v1/health ───────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -436,6 +560,11 @@ async def health_check():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         checks["postgres"] = "connected"
+        
+        # Check pgvector
+        with engine.connect() as conn:
+            conn.execute(text("SELECT extname FROM pg_extension WHERE extname = 'vector'")).fetchone()
+        checks["pgvector"] = "connected"
     except Exception:
         pass
 

@@ -387,7 +387,15 @@ class CompetitorAgent(AgentBase):
         search_results = serper_search_tool.invoke({"query": search_query})
         
         # 3. ANALYSIS & DISCOVERY
-        competitors = json.loads(os.getenv("COMPETITOR_URLS", "[]"))
+        competitors = []
+        brand_profile = state.get("brand_profile")
+        if brand_profile and brand_profile.get("competitors"):
+            competitors = brand_profile["competitors"]
+            agent_log("COMPETITOR", f"Loaded {len(competitors)} competitors from brand profile")
+            
+        if not competitors:
+            competitors = json.loads(os.getenv("COMPETITOR_URLS", "[]"))
+            
         if not competitors and not search_results.startswith("ERROR"):
             agent_log("COMPETITOR", "Discovering rivals from live search...")
             search_data = json.loads(search_results)

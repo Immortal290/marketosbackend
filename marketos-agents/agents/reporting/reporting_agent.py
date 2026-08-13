@@ -525,6 +525,28 @@ class ReportingAgent(AgentBase):
 
         divider()
 
+        # ── Cross-Campaign Memory (Phase 3.5) ─────────────────────────────
+        brand_profile = state.get("brand_profile")
+        if brand_profile and brand_profile.get("id"):
+            try:
+                from utils.rag import upsert_brand_context
+                
+                campaign_name = plan.campaign_name
+                summary_text = insights.get("executive_summary", "")
+                grade = insights.get("campaign_grade", "N/A")
+                
+                if summary_text and summary_text != "N/A":
+                    content = f"Campaign: {campaign_name}\nGrade: {grade}\nSummary: {summary_text}\n"
+                    # Add recommendations if any
+                    recs = insights.get("recommendations", [])
+                    if recs:
+                        content += "Recommendations: " + " ".join(recs)
+                        
+                    upsert_brand_context(brand_profile["id"], "past_campaign", content)
+                    agent_log("REPORTING", "Saved campaign performance to brand pgvector memory.")
+            except Exception as e:
+                agent_log("REPORTING", f"Failed to save to pgvector: {e}")
+
         return {
             **state,
             "reporting_result": {

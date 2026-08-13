@@ -355,6 +355,29 @@ Differentiation Strategy: Ensure the copy highlights why {plan.campaign_name} is
 
     user_prompt_raw = state.get("user_intent") or getattr(plan, "original_user_prompt", "") or ""
 
+    # ── RAG: Retrieve Brand Context ───────────────────────────────────────
+    brand_context = ""
+    brand_profile = state.get("brand_profile")
+    if brand_profile and brand_profile.get("id"):
+        try:
+            from utils.rag import retrieve_brand_context
+            voice_chunks = retrieve_brand_context(brand_profile["id"], "How should the brand sound?", k=2, source_type="brand_voice")
+            identity_chunks = retrieve_brand_context(brand_profile["id"], "What is the brand identity?", k=1, source_type="brand_identity")
+            past_campaign_chunks = retrieve_brand_context(brand_profile["id"], plan.goal, k=2, source_type="past_campaign")
+            
+            all_chunks = voice_chunks + identity_chunks + past_campaign_chunks
+            if all_chunks:
+                brand_context = "\nBRAND KNOWLEDGE (Strict Guidelines):\n" + "\n".join(all_chunks) + "\n"
+        except ImportError:
+            pass
+            
+    # ── Advisory Compliance Rewrite ───────────────────────────────────────
+    rewrite_context = ""
+    rewrite_suggestion = state.get("compliance_rewrite_suggestion")
+    if rewrite_suggestion:
+        agent_log("COPY", f"Executing advisory compliance rewrite: {rewrite_suggestion}")
+        rewrite_context = f"\n\nCRITICAL COMPLIANCE FIX REQUIRED:\nYour previous copy failed the compliance check. You MUST implement the following fix in this new generation:\n{rewrite_suggestion}\n\n"
+
     campaign_context = f"""
 ORIGINAL USER PROMPT (CRITICAL — ground all copy in this exact product, brand, offer, and intent):
 "{user_prompt_raw}"
@@ -365,6 +388,8 @@ CAMPAIGN PLAN SUMMARY:
 - Target Audience: {plan.target_audience}
 - Tone: {plan.tone}
 {intel_ctx}
+{brand_context}
+{rewrite_context}
 
 KEY MESSAGES TO INCORPORATE:
 {chr(10).join(f'  {i+1}. {msg}' for i, msg in enumerate(plan.key_messages))}

@@ -22,8 +22,54 @@ from langchain_core.runnables import Runnable, RunnableLambda
 class StringContentWrapper(Runnable):
     def __init__(self, llm):
         self.llm = llm
+        
     def invoke(self, *args, **kwargs):
-        res = self.llm.invoke(*args, **kwargs)
+        import time
+        from utils.logger import agent_log
+        
+        start_t = time.time()
+        
+        # Determine temperature from kwargs or from the underlying LLM
+        temp = kwargs.get("temperature")
+        if temp is None and hasattr(self.llm, "temperature"):
+            temp = self.llm.temperature
+            
+        max_retries = 3
+        res = None
+        for attempt in range(max_retries):
+            try:
+                res = self.llm.invoke(*args, **kwargs)
+                break
+            except Exception as e:
+                err_str = str(e).lower()
+                is_rate_limit = "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    wait_time = 32 * (attempt + 1)
+                    agent_log("LLM_PROVIDER", f"Rate limit reached. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    agent_log("LLM_PROVIDER", f"Error during invoke: {e}")
+                    raise
+            
+        elapsed = time.time() - start_t
+        
+        # Get token counts if available
+        input_tokens = "?"
+        output_tokens = "?"
+        if hasattr(res, "response_metadata") and "token_usage" in res.response_metadata:
+            usage = res.response_metadata["token_usage"]
+            input_tokens = usage.get("prompt_tokens", "?")
+            output_tokens = usage.get("completion_tokens", "?")
+            
+        agent_log(
+            "LLM_PROVIDER", 
+            f"Invoked {self.llm.__class__.__name__} | "
+            f"Temp: {temp} | "
+            f"Time: {elapsed:.2f}s | "
+            f"Tokens: In:{input_tokens} Out:{output_tokens}"
+        )
+        
         if isinstance(res.content, list):
             res.content = res.content[0].get("text", str(res.content)) if len(res.content) > 0 else ""
         return res
@@ -113,6 +159,9 @@ def get_llm(temperature: float = 0):
     Includes automated fallback to Gemini on rate limits / network errors.
     """
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+
+    if provider == "mock":
+        return get_mock_llm()
 
     # Build Gemini fallback if key is available
     gemini_fallback = None

@@ -106,9 +106,14 @@ def supervisor_node(state: dict) -> dict:
 
     user_intent = state.get("user_intent", "")
     user_channels = state.get("user_channels")
+    brand_profile = state.get("brand_profile")
+    campaign_brief = state.get("campaign_brief")
+    
     agent_log("SUPERVISOR", f"Received intent → \"{user_intent[:80]}{'...' if len(user_intent) > 80 else ''}\"")
     if user_channels:
         agent_log("SUPERVISOR", f"Explicit user channels set: {user_channels}")
+    if brand_profile and campaign_brief:
+        agent_log("SUPERVISOR", f"Structured brief detected for brand: {brand_profile.get('businessName')}")
 
     # ── Recall past campaigns from episodic memory ────────────────────────
     past_campaigns = episodic_memory.recall(
@@ -146,50 +151,58 @@ def supervisor_node(state: dict) -> dict:
     agent = SupervisorAgent()
 
     # ── Call 1: Creative brainstorm (temp=0.6) ────────────────────────────
-    # Free-text output — generate 4 distinctive, specific campaign angles before
-    # committing to a schema. This prevents the structured call from collapsing
-    # into the safest/most generic angle.
-    llm_creative = get_llm(temperature=0.6)
+    campaign_angles = ""
+    if not (brand_profile and campaign_brief):
+        llm_creative = get_llm(temperature=0.6)
 
-    brainstorm_system = (
-        "You are a senior creative strategist. Given a marketing campaign brief, "
-        "generate exactly 4 distinctive campaign angles. Each angle must:\n"
-        "- Have a specific, provocative headline (not the product name)\n"
-        "- Name a concrete audience pain point or desire\n"
-        "- Propose a unique creative hook or proof point\n"
-        "- Feel different from the other 3 angles in tone and approach\n"
-        "Output plain text. No JSON. No markdown headers. Just numbered 1–4.\n\n"
-        "STRICT CONTENT SERVICE POLICY:\n"
-        "1. You MUST analyze and use ONLY the provided context and original user prompt.\n"
-        "2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.\n"
-        "3. If information is missing, rely strictly on what is provided; do not guess or assume.\n"
-        "4. Your output MUST be strictly derived from the provided input parameters."
-    )
-    brainstorm_messages = [
-        SystemMessage(content=brainstorm_system),
-        HumanMessage(content=f"Brief: {user_intent}\n{memory_context}{brand_context}"),
-    ]
-    agent_log("SUPERVISOR", "Call 1 — creative brainstorm (temp=0.6)...")
-    brainstorm_response = llm_creative.invoke(brainstorm_messages)
-    content1 = brainstorm_response.content
-    if isinstance(content1, list):
-        content1 = content1[0].get("text", str(content1)) if len(content1) > 0 else ""
-    campaign_angles = content1.strip()
-    agent_log("SUPERVISOR", f"Angles generated:\n{campaign_angles[:400]}...")
+        brainstorm_system = (
+            "You are a senior creative strategist. Given a marketing campaign brief, "
+            "generate exactly 4 distinctive campaign angles. Each angle must:\n"
+            "- Have a specific, provocative headline (not the product name)\n"
+            "- Name a concrete audience pain point or desire\n"
+            "- Propose a unique creative hook or proof point\n"
+            "- Feel different from the other 3 angles in tone and approach\n"
+            "Output plain text. No JSON. No markdown headers. Just numbered 1–4.\n\n"
+            "STRICT CONTENT SERVICE POLICY:\n"
+            "1. You MUST analyze and use ONLY the provided context and original user prompt.\n"
+            "2. DO NOT invent, hallucinate, or inject any external facts, features, or offers outside of the provided context.\n"
+            "3. If information is missing, rely strictly on what is provided; do not guess or assume.\n"
+            "4. Your output MUST be strictly derived from the provided input parameters."
+        )
+        brainstorm_messages = [
+            SystemMessage(content=brainstorm_system),
+            HumanMessage(content=f"Brief: {user_intent}\n{memory_context}{brand_context}"),
+        ]
+        agent_log("SUPERVISOR", "Call 1 — creative brainstorm (temp=0.6)...")
+        brainstorm_response = llm_creative.invoke(brainstorm_messages)
+        content1 = brainstorm_response.content
+        if isinstance(content1, list):
+            content1 = content1[0].get("text", str(content1)) if len(content1) > 0 else ""
+        campaign_angles = content1.strip()
+        agent_log("SUPERVISOR", f"Angles generated:\n{campaign_angles[:400]}...")
+    else:
+        agent_log("SUPERVISOR", "Call 1 — skipped (using structured brief)")
 
     # ── Call 2: Structured JSON output (temp=0) ───────────────────────────
-    # Pick the strongest angle and structure it into the validated schema.
-    # Strict temp=0 ensures deterministic, parseable JSON every time.
     llm_structured = get_llm(temperature=0)
 
-    structuring_human = (
-        f"Campaign Intent:\n{user_intent}\n"
-        + (f"\nCRITICAL: The user has explicitly selected only these channels: {user_channels}. "
-           f"You MUST ONLY use these channels for this campaign.\n" if user_channels else "")
-        + f"{memory_context}{brand_context}\n\n"
-        f"CREATIVE ANGLES (brainstormed above — pick the strongest one and build the plan around it):\n"
-        f"{campaign_angles}"
-    )
+    if brand_profile and campaign_brief:
+        structuring_human = (
+            f"Campaign Intent:\n{user_intent}\n\n"
+            f"BRAND PROFILE:\n{brand_profile}\n\n"
+            f"CAMPAIGN BRIEF:\n{campaign_brief}\n\n"
+            "Generate the structured CampaignPlan matching the schema. Use the provided goal, channels, and message directly."
+        )
+    else:
+        structuring_human = (
+            f"Campaign Intent:\n{user_intent}\n"
+            + (f"\nCRITICAL: The user has explicitly selected only these channels: {user_channels}. "
+               f"You MUST ONLY use these channels for this campaign.\n" if user_channels else "")
+            + f"{memory_context}{brand_context}\n\n"
+            f"CREATIVE ANGLES (brainstormed above — pick the strongest one and build the plan around it):\n"
+            f"{campaign_angles}"
+        )
+    
     messages = [
         SystemMessage(content=agent.build_prompt(SUPERVISORAGENT_EXPERTISE)),
         HumanMessage(content=structuring_human),

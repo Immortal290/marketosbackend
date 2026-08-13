@@ -16,6 +16,8 @@ import financeRoutes from './modules/finance/routes';
 import reportsRoutes from './modules/reports/routes';
 import monitoringRoutes from './modules/monitoring/routes';
 import auditLogsRoutes from './modules/audit_logs/routes';
+import brandProfileRoutes from './modules/brand_profile/routes';
+import campaignBriefRoutes from './modules/campaign_brief/routes';
 
 const router = Router();
 
@@ -35,5 +37,7 @@ router.use('/finance', financeRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/monitoring', monitoringRoutes);
 router.use('/audit-logs', auditLogsRoutes);
+router.use('/brand-profile', brandProfileRoutes);
+router.use('/campaign', campaignBriefRoutes);
 
 export default router;

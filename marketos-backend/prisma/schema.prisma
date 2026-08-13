@@ -26,8 +26,9 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members   WorkspaceMember[]
-  campaigns Campaign[]
+  members       WorkspaceMember[]
+  campaigns     Campaign[]
+  brandProfiles BrandProfile[]
 }
 
 model WorkspaceMember {
@@ -45,14 +46,72 @@ model WorkspaceMember {
 }
 
 model Campaign {
-  id          String   @id @default(uuid())
-  name        String
-  status      CampaignStatus @default(DRAFT)
-  workspaceId String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(uuid())
+  name             String
+  status           CampaignStatus @default(DRAFT)
+  workspaceId      String
+  campaignBriefId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaignBrief  CampaignBrief? @relation(fields: [campaignBriefId], references: [id])
+}
+
+// ── BrandProfile ───────────────────────────────────────────────────────────────
+// Stores the long-lived brand identity for a workspace. Multiple profiles
+// allowed per workspace (for agencies managing multiple brands).
+
+model BrandProfile {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  businessName      String
+  industry          String
+  websiteUrl        String?
+  mission           String?
+  usp               String?
+  positioning       String?
+  voiceAdjectives   String[]        // e.g. ["bold", "witty", "no-nonsense"]
+  voiceDos          String[]
+  voiceDonts        String[]
+  logoUrl           String?
+  brandColors       String[]        // hex codes
+  styleGuideUrl     String?
+  personas          Json            // [{name, demographics, painPoints, goals}]
+  competitors       Json            // [{name, url, notes}]
+  complianceRegion  String?         // "EU-GDPR" | "US-HIPAA" | "US-FINRA" | "none"
+  complianceNotes   String?
+  pastCampaignRefs  Json?           // [{url, campaignId, description}]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaignBriefs CampaignBrief[]
+}
+
+// ── CampaignBrief ──────────────────────────────────────────────────────────────
+// A single campaign launch spec, linked to a BrandProfile.
+// The assembled BrandProfile + CampaignBrief object is forwarded to the agent
+// service as the structured initial_state for the pipeline.
+
+model CampaignBrief {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  brandProfileId    String
+  goal              String          // "awareness" | "leads" | "sales" | "retention"
+  channels          String[]        // ["email","sms","voice","whatsapp","social"]
+  budget            Float?
+  timelineStart     DateTime?
+  timelineEnd       DateTime?
+  keyMessage        String?
+  offerDetails      String?
+  kpiTarget         String?
+  freeTextContext   String?         // supplemental nuance (Step 3 of wizard)
+  rawPromptFallback String?         // used only when user skips the structured form
+  createdAt         DateTime @default(now())
+
+  brandProfile BrandProfile @relation(fields: [brandProfileId], references: [id])
+  campaigns    Campaign[]
 }
 
 enum Role {
