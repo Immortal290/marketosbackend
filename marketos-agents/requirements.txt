@@ -58,4 +58,6 @@ apscheduler>=3.10.0           # 5-min analytics polling + hourly finance checks
 # ── ORM & Migrations ─────────────────────────────────────────────────────────
 SQLAlchemy>=2.0.30
 alembic>=1.13.0
-huggingface_hub\npillow
+
+# ── Image Generation (FLUX.1-schnell) ────────────────────────────────────────
+huggingface_hub>=0.25.0
