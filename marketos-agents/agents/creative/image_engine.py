@@ -481,16 +481,16 @@ def _generate_flux_schnell_image(
     GitHub: https://github.com/black-forest-labs/flux
     HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-schnell
 
-    Requires HF_API_KEY environment variable (free HuggingFace account token).
+    Requires HF_TOKEN environment variable (free HuggingFace account token).
     Falls back gracefully to Pollinations if unavailable.
     Returns base64-encoded image bytes, or None on failure.
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_flux_schnell"
 
-    hf_token = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN")
+    hf_token = os.getenv("HF_TOKEN")
     if not hf_token:
-        agent_log("IMAGE", "HF_API_KEY not set — skipping FLUX.1-schnell")
+        agent_log("IMAGE", "HF_TOKEN not set — skipping FLUX.1-schnell")
         return None
 
     try:
