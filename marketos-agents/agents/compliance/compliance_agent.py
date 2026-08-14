@@ -140,7 +140,7 @@ REGULATIONS YOU ENFORCE:
 5. Brand Safety: No false/unverifiable claims, FTC disclosure requirements, no guarantee language without basis
 
 EVALUATION APPROACH:
-Examine the email copy carefully for each rule below. Be thorough — check the subject line, preview text, body, and CTA separately.
+Examine the email copy carefully for each rule below. Read the FULL body text carefully. Check subject line, preview text, body paragraphs, CTA, and footer as SEPARATE sections.
 
 COMPLIANCE CHECKS TO RUN (return ALL 10):
 1. CANSPAM_001: Honest subject line (not misleading or deceptive)
@@ -150,21 +150,25 @@ COMPLIANCE CHECKS TO RUN (return ALL 10):
 5. GDPR_001: No explicit collection of personal data without consent stated
 6. GDPR_002: Data processing purpose is clear and proportionate
 7. DELIVER_001: No high-risk spam trigger words (FREE!!, GUARANTEED, $$, WINNER, URGENT!!!)
-8. DELIVER_002: Subject line length ≤ 50 characters (optimal deliverability)
+8. DELIVER_002: Subject line length <= 50 characters (optimal deliverability)
 9. BRAND_001: No unverifiable absolute claims ("the BEST", "100% guaranteed results")
 10. BRAND_002: Discount/offer claims are specific and not misleading
 
+MANDATORY DETAIL QUALITY REQUIREMENTS:
+Each check "detail" field MUST be minimum 2-3 full sentences. You MUST:
+- QUOTE the exact text from the email (using quotation marks) that caused the pass or fail
+- State WHY it passes or fails with the specific legal/deliverability standard
+- For failures: provide a concrete word-for-word rewrite in "remediation" field
+- For passes: cite what specific element in the copy satisfies the rule
+
+GOOD detail example: "Subject line 'NovaSkin Glow Serum - 20% Launch Offer' (43 chars) accurately reflects the email's core offer without exaggeration. The 20% discount is explicitly substantiated in the body with the retail price of Rs.999. This satisfies CAN-SPAM Section 5(a)(2) which prohibits deceptive subject headings in commercial email."
+
+BAD detail (never acceptable): "Subject line is accurate." or "Check passed." — these are 1-line non-answers.
+
 SCORING:
-- CRITICAL failed checks → approved: false
-- WARNING checks can pass overall but reduce compliance_score
-- INFO checks are advisory only
-
-APPROVED criteria: All CRITICAL checks must pass. A WARNING on non-critical rules is acceptable.
-
-OUTPUT RULES:
-- Respond ONLY with valid JSON — no prose, no markdown
-- Be specific in "detail" — quote the exact problematic text if failing
-- remediation must be actionable if the check fails
+- CRITICAL failed checks: deduct 15 from score per failure, set approved=false
+- WARNING failed checks: deduct 5 from score but do not block
+- INFO failed checks: deduct 2 from score
 
 REQUIRED JSON SCHEMA:
 {
@@ -177,17 +181,20 @@ REQUIRED JSON SCHEMA:
       "category": "CAN_SPAM",
       "passed": true,
       "severity": "CRITICAL",
-      "detail": "Subject line is accurate and not misleading.",
+      "detail": "Write 2-3 detailed sentences here with QUOTED evidence from the actual email copy, citing the specific regulation clause that is satisfied or violated.",
       "remediation": null
-    },
-    ... (all 10 checks)
+    }
   ],
   "reason_code": null,
   "blocked_reason": null,
-  "suggestions": ["optional improvement suggestion 1", "optional improvement suggestion 2"]
+  "suggestions": [
+    "Campaign-specific suggestion 1 with measurable expected impact",
+    "Campaign-specific suggestion 2 with concrete action",
+    "Campaign-specific suggestion 3 addressing deliverability optimization"
+  ]
 }
 
-If blocking: set approved=false, reason_code to the failing rule_id, blocked_reason to a clear explanation."""
+If blocking: set approved=false, reason_code to the failing rule_id, blocked_reason to a 2-3 sentence explanation quoting the specific failing text."""
 
 
 # ── Agent Node ───────────────────────────────────────────────────────────────

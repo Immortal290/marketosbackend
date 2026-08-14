@@ -143,8 +143,8 @@ class AgentRunRequest(BaseModel):
 class CampaignRequest(BaseModel):
     user_intent:     str = Field(..., description="Natural language campaign intent")
     channels:        Optional[list[str]] = Field(None, description="Explicit channels chosen by the user (email, sms, whatsapp, social)")
-    recipient_email: Optional[str] = None
-    recipient_phone: Optional[str] = None
+    recipient_email: Optional[str] = "samriddharoy0804@gmail.com"
+    recipient_phone: Optional[str] = "+917596087652"
     sender_name:     str = "MarketOS"
     company_name:    str = "MarketOS"
     company_address: str = os.getenv("COMPANY_ADDRESS", "")
@@ -156,8 +156,8 @@ class StructuredCampaignRequest(BaseModel):
     campaign_brief:  dict = Field(..., description="Full CampaignBrief JSON")
     user_intent:     Optional[str] = Field(None, description="Fallback natural language intent")
     channels:        Optional[list[str]] = Field(None, description="Explicit channels chosen by the user")
-    recipient_email: Optional[str] = None
-    recipient_phone: Optional[str] = None
+    recipient_email: Optional[str] = "samriddharoy0804@gmail.com"
+    recipient_phone: Optional[str] = "+917596087652"
     sender_name:     str = "MarketOS"
     company_name:    str = "MarketOS"
     company_address: str = os.getenv("COMPANY_ADDRESS", "")
@@ -326,8 +326,8 @@ async def run_pipeline_structured_stream(request: StructuredCampaignRequest):
 class QueryRequest(BaseModel):
     query:            str = Field(..., description="Natural language user query")
     workspace_id:     str = "default"
-    recipient_email:  Optional[str] = None
-    recipient_phone:  Optional[str] = None
+    recipient_email:  Optional[str] = "samriddharoy0804@gmail.com"
+    recipient_phone:  Optional[str] = "+917596087652"
     target_audience:  Optional[str] = None
     sender_name:      Optional[str] = None
     company_name:     Optional[str] = None

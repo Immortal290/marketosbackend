@@ -108,14 +108,15 @@ export function TargetAudienceModal({
   initialPrompt,
 }: TargetAudienceModalProps) {
   const [targetAudience, setTargetAudience] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("samriddharoy0804@gmail.com");
+  const [recipientPhone, setRecipientPhone] = useState("+917596087652");
   const [senderName, setSenderName]         = useState("");
   const [companyName, setCompanyName]       = useState("");
   const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
-  // Auto-extract email / phone whenever the prompt changes — always overwrite
+  // Auto-extract email / phone whenever the prompt changes
+  // Only overwrite if a valid email/phone is found in the prompt
   useEffect(() => {
     if (!initialPrompt) return;
     const eRe = new RegExp(EMAIL_PATTERN.source, "g");
@@ -125,8 +126,9 @@ export function TargetAudienceModal({
     // Strip digits-only that aren't phone-length (avoid matching zip codes)
     const rawPhone = phoneMatch ? phoneMatch[0].replace(/[\s()\-]/g, "") : "";
     const isValidPhone = rawPhone.replace(/\D/g, "").length >= 10;
-    setRecipientEmail(emailMatch ? emailMatch[0] : "");
-    setRecipientPhone(isValidPhone ? rawPhone : "");
+    // Only override defaults if explicit email/phone found in prompt
+    if (emailMatch) setRecipientEmail(emailMatch[0]);
+    if (isValidPhone) setRecipientPhone(rawPhone);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPrompt]);
 
@@ -262,7 +264,7 @@ export function TargetAudienceModal({
                   type="email"
                   value={recipientEmail}
                   onChange={(e) => setRecipientEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  placeholder="samriddharoy0804@gmail.com"
                   className="w-full border-2 border-cyan-400 p-2 font-mono text-xs bg-cyan-50 text-black shadow-[2px_2px_0_0_#0891b2] focus:outline-none focus:border-cyan-600"
                 />
               </div>
@@ -275,7 +277,7 @@ export function TargetAudienceModal({
                   type="tel"
                   value={recipientPhone}
                   onChange={(e) => setRecipientPhone(e.target.value)}
-                  placeholder="+919876543210"
+                  placeholder="+917596087652"
                   className="w-full border-2 border-emerald-400 p-2 font-mono text-xs bg-emerald-50 text-black shadow-[2px_2px_0_0_#059669] focus:outline-none focus:border-emerald-600"
                 />
               </div>

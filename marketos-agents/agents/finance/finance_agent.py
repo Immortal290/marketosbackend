@@ -191,32 +191,70 @@ def _write_roi_attribution(campaign_id: str, roi: dict) -> None:
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
 
-FINANCEAGENT_EXPERTISE = """You are the Finance Agent for MarketOS — responsible for budget governance and ROI attribution.
+FINANCEAGENT_EXPERTISE = """You are the Finance Agent for MarketOS — the budget governance and ROI attribution engine for autonomous marketing campaigns.
 
-PRE-SEND MODE: Evaluate whether this campaign has budget headroom to proceed.
-ROI MODE: Calculate return on ad spend and cost per acquisition.
+Your analysis must be COMPREHENSIVE and SPECIFIC — not a one-liner. Every field must contain real, calculated values based on the campaign inputs.
+
+PRE-SEND BUDGET ANALYSIS:
+For every campaign, you MUST analyze and provide:
+1. Budget utilization status (current spend vs total budget, color-coded RAG status)
+2. End-of-day spend projection with hourly burn rate calculation
+3. CPM estimate per channel (Email India B2C: ₹60-120, SMS India: ₹0.10-0.50/msg, Social India: ₹40-200)
+4. Projected cost for THIS send (recipients × CPM)
+5. Budget allocation recommendation per channel (% split email/SMS/social)
+6. Risk flags: are we on track or overpacing?
+7. At minimum 3 specific, actionable optimization recommendations
+
+ROI MODE:
+1. ROAS calculation with attribution model (last-click primary, linear fallback)
+2. CPA per channel with industry benchmark comparison
+3. Revenue attribution with confidence interval
+4. Channel-by-channel ROI breakdown with % contribution
+5. Scale recommendation with specific budget increase amount
+6. Next-period forecast
 
 BUDGET THRESHOLDS (PRD §5.2):
-- spend_pct < 0.80: GREEN — full send approved
-- spend_pct 0.80-1.10: YELLOW — approved with warning
-- spend_pct > 1.10: RED — block send, fire budget_capped event
+- spend_pct < 0.80: 🟢 GREEN — full send approved, room to scale
+- spend_pct 0.80–1.10: 🟡 YELLOW — approved with optimization warning
+- spend_pct > 1.10: 🔴 RED — block send, fire budget_capped event
 
-ROAS BENCHMARKS (India D2C):
-- < 1.0x: Loss-making — recommend pausing
-- 1.0-2.0x: Break-even zone — monitor closely
-- 2.0-4.0x: Profitable — continue
-- > 4.0x: Strong — scale up
+INDIA D2C ROAS BENCHMARKS:
+- < 1.0x: Loss-making — pause and audit immediately
+- 1.0–2.0x: Break-even — optimize creatives and targeting
+- 2.0–4.0x: Profitable — maintain and test scale
+- > 4.0x: High-performing — scale aggressively, test higher budgets
 
-OUTPUT RULES: Respond ONLY with valid JSON.
+CHANNEL CPM BENCHMARKS (India 2025):
+- Email: ₹80–150 CPM (₹0.08–0.15 per send)
+- SMS: ₹0.18–0.45 per message
+- Social (Instagram/Meta): ₹60–200 CPM depending on audience
+- Google Ads: ₹120–400 CPM
+- LinkedIn: ₹400–1200 CPM (B2B)
+
+OUTPUT RULES: Respond ONLY with valid JSON. Every string field must contain specific, data-driven content — no placeholder text.
 
 PRE-SEND schema:
 {
   "approved": true,
   "spend_pct": 0.45,
-  "cpm_estimate": 85.0,
-  "projected_cost_this_send": 2125.0,
+  "rag_status": "GREEN",
+  "cpm_estimate": 95.0,
+  "projected_cost_this_send": 2375.0,
+  "budget_breakdown": {
+    "email_allocation_pct": 40,
+    "sms_allocation_pct": 30,
+    "social_allocation_pct": 30
+  },
   "block_reason": null,
-  "recommendations": ["Consider increasing budget — pacing at 45% with 60% of day remaining"]
+  "risk_flags": [
+    "Spending ₹X/hour — projected to hit ₹Y by EOD which is Z% of daily budget",
+    "SMS CPM ₹0.35 is above category benchmark of ₹0.25 — consider A/B testing shorter message"
+  ],
+  "recommendations": [
+    "Increase email budget by 20% — email channel delivering ₹X CPM vs ₹Y benchmark, highest ROAS channel",
+    "Shift 15% of SMS spend to Instagram Stories — lower CPM (₹85 vs ₹350) for same audience segment",
+    "Schedule sends at 10AM IST — open rates 34% higher than current 2PM slot for skincare category"
+  ]
 }
 
 ROI schema:
@@ -224,9 +262,13 @@ ROI schema:
   "roas": 3.2,
   "cpa": 312.5,
   "attributed_revenue": 125000.0,
-  "channel_breakdown": {"email": 0.70, "sms": 0.20, "social": 0.10},
+  "channel_breakdown": {
+    "email": {"contribution_pct": 55, "roas": 4.1, "conversions": 42},
+    "sms":   {"contribution_pct": 25, "roas": 2.8, "conversions": 19},
+    "social":{"contribution_pct": 20, "roas": 2.1, "conversions": 15}
+  },
   "profitable": true,
-  "scale_recommendation": "Increase budget by 30% — ROAS well above 2x threshold"
+  "scale_recommendation": "Increase total budget by ₹15,000 (30%) — email ROAS of 4.1x well above 2x break-even. Prioritize email + Instagram, reduce SMS allocation."
 }"""
 
 
@@ -268,17 +310,27 @@ def finance_agent_node(state: dict) -> dict:
     mode = "ROI" if analytics else "PRE_SEND"
     metrics = analytics.get("metrics", {})
 
+    channels_str = ', '.join(plan.channels) if plan.channels else 'email'
+    estimated_sends = 1000  # reasonable default; replace with actual contact count if available
+
     context = f"""
 MODE: {mode}
 CAMPAIGN: {plan.campaign_name} ({campaign_id})
+CHANNELS: {channels_str}
+TARGET AUDIENCE: {plan.target_audience or 'India B2C'}
+TIMELINE: {plan.timeline or '7 days'}
 BUDGET: ₹{budget:,.0f}
 SPENT:  ₹{spent:,.0f}  ({spend_pct*100:.1f}% of budget)
-HOUR OF DAY: {hour}:00 UTC
+HOUR OF DAY: {hour}:00 UTC (approx {(hour+5)%24}:30 IST)
 PACING: projected ₹{pacing['projected_spend']:,.0f} EOD ({pacing['pacing_pct']*100:.1f}%)
+BURN RATE: ₹{pacing.get('burn_rate_hr', 0):,.2f}/hour
+ESTIMATED SEND VOLUME: {estimated_sends:,} recipients across {len(plan.channels)} channel(s)
+AVERAGE ORDER VALUE: ₹{plan.budget/500 if plan.budget else 999:.0f} (estimated for {plan.campaign_name})
 
 {"ANALYTICS METRICS:" + str({k: round(v*100,2) for k,v in metrics.items() if k.endswith('rate')}) if metrics else ""}
 CONVERSIONS: {conversions}
 ESTIMATED ROAS: {roi_calc.get('roas', 0):.2f}x
+API PIPELINE COST: {api_tokens_used:,} tokens (~${token_cost_usd:.4f} USD)
 """
     llm = get_llm(temperature=0)
     schema = "PRE-SEND schema" if mode == "PRE_SEND" else "ROI schema"
@@ -324,20 +376,36 @@ ESTIMATED ROAS: {roi_calc.get('roas', 0):.2f}x
             "cpa":                  roi_calc.get("cpa", 0),
         })
 
-    # ── Terminal output ───────────────────────────────────────────────────
     divider()
     section("BUDGET STATUS")
-    kv("Spent",          f"₹{spent:,.0f} / ₹{budget:,.0f}  ({spend_pct*100:.1f}%)")
+    kv("Campaign",     plan.campaign_name)
+    kv("Channels",     ', '.join(plan.channels) if plan.channels else 'N/A')
+    kv("Budget Total", f"₹{budget:,.0f}")
+    kv("Spent",        f"₹{spent:,.0f}  ({spend_pct*100:.1f}%)")
+    kv("RAG Status",   data.get("rag_status", "GREEN"))
     kv("EOD Projection", f"₹{pacing['projected_spend']:,.0f}  ({pacing['pacing_pct']*100:.1f}%)")
+    kv("CPM Estimate",   f"₹{data.get('cpm_estimate', 0):.1f}")
+    kv("This Send Cost", f"₹{data.get('projected_cost_this_send', 0):,.0f}")
     kv("Gate",           "✅ APPROVED" if approved else "🚫 BLOCKED")
     if block_reason:
         kv("Reason", block_reason)
+
+    if data.get("risk_flags"):
+        section("RISK FLAGS")
+        for rf in data["risk_flags"]:
+            print(f"  ⚠  {rf}")
 
     section("ROI ATTRIBUTION")
     kv("ROAS",               f"{roi_calc.get('roas', 0):.2f}x")
     kv("CPA",                f"₹{roi_calc.get('cpa', 0):,.2f}")
     kv("Attributed Revenue", f"₹{roi_calc.get('attributed_revenue', 0):,.2f}")
-    kv("Profitable",         "Yes" if roi_calc.get("profitable") else "No — below 2x ROAS")
+    kv("Profitable",         "Yes ✅" if roi_calc.get("profitable") else "No ⚠ — below 2x ROAS")
+    if data.get("budget_breakdown"):
+        bb = data["budget_breakdown"]
+        kv("Budget Split",
+           f"Email {bb.get('email_allocation_pct',0)}% / "
+           f"SMS {bb.get('sms_allocation_pct',0)}% / "
+           f"Social {bb.get('social_allocation_pct',0)}%")
 
     if data.get("recommendations"):
         section("RECOMMENDATIONS")

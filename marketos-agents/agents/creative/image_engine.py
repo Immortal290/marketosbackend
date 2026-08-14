@@ -242,10 +242,23 @@ def _generate_visual_concept_specs(
         agent_log("IMAGE", f"LLM visual concept extraction: {e}")
 
     banner_options = []
+    negative = "text, watermark, logo, words, letters, typography, blurry, low quality, pixelated, distorted, ugly, amateur, overexposed, underexposed, noisy, grain, jpeg artifacts, cartoon, anime, illustration"
     for bid, title, prompt_desc, overlay, fmt, w, h in angles:
-        clean_p = f"{prompt_desc}, advertising photography, highly detailed, 8k resolution, no text"
-        q_str = _up.quote(clean_p[:400])
-        pollinations_url = f"https://image.pollinations.ai/prompt/{q_str}?width={w}&height={h}&model=flux&nologo=true&safe=true"
+        clean_p = (
+            f"{prompt_desc}, "
+            "award-winning advertising photography, ultra-detailed, 8k UHD resolution, "
+            "professional studio lighting, vibrant color grading, sharp focus, "
+            "cinematic composition, editorial quality, high production value, "
+            "photorealistic, commercial product photography"
+        )
+        q_str = _up.quote(clean_p[:800])
+        neg_str = _up.quote(negative)
+        seed = abs(hash(prompt_desc)) % 9999999
+        pollinations_url = (
+            f"https://image.pollinations.ai/prompt/{q_str}"
+            f"?width={w}&height={h}&model=flux-pro&nologo=true&safe=true"
+            f"&negative={neg_str}&seed={seed}&enhance=true"
+        )
         banner_options.append({
             "id": bid,
             "title": title,
@@ -412,23 +425,47 @@ def _inject_image(winner: dict, img_tag: str, placeholder: str) -> dict:
 
 def _build_generation_prompt(concept_prompt: str, plan_data: dict, user_intent: str = "") -> str:
     """
-    Enrich the copy agent's hero_image_prompt with campaign context (tone, name, original prompt)
-    and hard rules (no text in image, high production quality).
+    Build a highly detailed, product-specific generation prompt from campaign context.
+    Emphasizes photorealism, brand identity, and explicitly bans text/watermarks.
     """
-    tone = plan_data.get("tone", "")
-    name = plan_data.get("campaign_name", "")
-    intent_part = f"Product context: {user_intent[:200]}. " if user_intent else ""
+    tone     = plan_data.get("tone", "professional")
+    name     = plan_data.get("campaign_name", "")
+    audience = plan_data.get("target_audience", "")
+    channels = plan_data.get("channels", [])
+
+    # Extract key product/brand identifiers from user_intent for hyper-specific prompts
+    intent_part = ""
+    if user_intent:
+        # Use first 300 chars to keep the most product-specific info
+        intent_part = f"PRODUCT CONTEXT: {user_intent[:300]}. "
+
+    # Tone → lighting style mapping
+    tone_lighting = {
+        "luxury": "moody dramatic backlighting, deep shadows, golden reflections",
+        "professional": "clean studio lighting, soft diffused shadows, neutral background",
+        "bold": "high contrast dramatic lighting, vivid saturated colors, dynamic composition",
+        "playful": "bright natural daylight, vibrant pastels, cheerful warm tones",
+        "elegant": "soft ambient lighting, muted sophisticated palette, minimalist composition",
+    }.get(tone.lower(), "professional studio three-point lighting, controlled shadows")
+
+    channel_format = ""
+    if "social" in channels:
+        channel_format = "Optimized for social media feed, eye-catching at small size. "
 
     return (
         f"{concept_prompt.rstrip('.')}. "
         f"{intent_part}"
-        f"Campaign: {name}. "
-        f"Visual tone: {tone or 'professional and polished'}. "
-        "Photorealistic or high-end illustrative quality. "
-        "Brand-consistent, vibrant color palette. "
-        "Professional studio or editorial lighting. "
-        "High production value. "
-        "Absolutely NO text, words, letters, numbers, or typography anywhere in the image."
+        f"Campaign: '{name}'. "
+        f"Target audience: {audience}. "
+        f"Lighting: {tone_lighting}. "
+        f"{channel_format}"
+        "Ultra-high resolution 8K photorealistic commercial photography. "
+        "Award-winning advertising visual quality. "
+        "Rich color depth, sharp fine detail, bokeh background. "
+        "Shot on Hasselblad medium format, 85mm lens, f/2.8. "
+        "Professional color grading, cinematic aspect ratio. "
+        "STRICT NEGATIVE: absolutely NO text, words, letters, numbers, watermarks, "
+        "logos, typography, captions, UI elements, or signatures anywhere in the image."
     )
 
 
@@ -552,16 +589,24 @@ def _generate_pollinations_image(
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_pollinations"
 
-    # Truncate prompt to keep URL length browser/server safe
-    q   = urllib.parse.quote(full_prompt[:1000])
+    # Build high-quality Pollinations URL with flux-pro model and negative prompts
+    negative = (
+        "text, watermark, logo, words, letters, typography, blurry, low resolution, "
+        "pixelated, distorted, deformed, ugly, amateur, overexposed, underexposed, "
+        "noise, grain, jpeg artifacts, cartoon, anime, illustration, painting"
+    )
+    q       = urllib.parse.quote(full_prompt[:1000])
+    neg_q   = urllib.parse.quote(negative)
+    seed    = abs(hash(full_prompt[:100])) % 9999999
     url = (
         f"https://image.pollinations.ai/prompt/{q}"
-        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
+        f"?width={width}&height={height}&model=flux-pro&nologo=true&safe=true"
+        f"&negative={neg_q}&seed={seed}&enhance=true"
     )
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=45) as resp:
             raw = resp.read()
         return base64.b64encode(raw).decode("utf-8")
 

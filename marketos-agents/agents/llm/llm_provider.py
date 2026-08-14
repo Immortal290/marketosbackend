@@ -169,7 +169,7 @@ def get_llm(temperature: float = 0):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fallback = ChatGoogleGenerativeAI(
-                model="gemini-3.5-flash",
+                model="gemini-2.0-flash-lite",
                 google_api_key=os.getenv("GEMINI_API_KEY"),
                 temperature=temperature,
                 max_output_tokens=8192,
@@ -228,7 +228,7 @@ def get_llm(temperature: float = 0):
             temperature=temperature,
             max_tokens=4096,
             max_retries=1,
-            timeout=60,
+            timeout=30,
         )
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
@@ -304,12 +304,12 @@ def get_glm(temperature: float = 0):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fb = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
+                model="gemini-2.0-flash-lite",
                 google_api_key=os.getenv("GEMINI_API_KEY"),
                 temperature=temperature,
                 max_output_tokens=8192,
                 max_retries=1,
-                timeout=60.0,
+                timeout=30.0,
             )
         except Exception:
             gemini_fb = None
