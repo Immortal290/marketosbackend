@@ -365,7 +365,7 @@ export function TargetAudienceModal({
                     setLlmModel(e.target.value);
                     if (e.target.value !== "custom") setCustomModel("");
                   }}
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-gray-50 text-black shadow-sm outline-none focus:ring-0"
+                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
                   <optgroup label="Google Gemini">
                     <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recommended / Default)</option>
@@ -402,7 +402,7 @@ export function TargetAudienceModal({
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
                     placeholder="e.g. your-org/fine-tuned-llama3:v1"
-                    className="w-full mt-1.5 border-2 border-black p-2 font-mono text-xs bg-yellow-50 text-black shadow-sm placeholder:text-gray-400"
+                    className="w-full mt-1.5 bg-yellow-50 border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                   />
                 )}
               </div>
@@ -416,7 +416,7 @@ export function TargetAudienceModal({
                   value={llmApiKey}
                   onChange={(e) => setLlmApiKey(e.target.value)}
                   placeholder="Enter API Key for selected model..."
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-sm placeholder:text-gray-400"
+                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 />
               </div>
             </div>
@@ -429,7 +429,7 @@ export function TargetAudienceModal({
                 <select
                   value={imageModel}
                   onChange={(e) => setImageModel(e.target.value)}
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-gray-50 text-black shadow-sm outline-none focus:ring-0"
+                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
                   <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell (Fast)</option>
                   <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev (High Quality)</option>
@@ -445,7 +445,7 @@ export function TargetAudienceModal({
                   value={imageApiKey}
                   onChange={(e) => setImageApiKey(e.target.value)}
                   placeholder="Enter API Key for image generation..."
-                  className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-sm placeholder:text-gray-400"
+                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 />
               </div>
             </div>
