@@ -11,6 +11,7 @@ import {
   Sparkles, Zap, Bot, TrendingUp, ArrowRight, Send, Lightbulb,
   Loader2, CheckCircle2, Brain, GitBranch, FileText, Cpu,
   Terminal, Download, ChevronDown, ChevronUp, CheckSquare, XSquare, Users,
+  History, Clock, RefreshCw, ChevronRight,
 } from "lucide-react";
 
 const kpis = [
@@ -246,6 +247,106 @@ function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
   );
 }
 
+/* ── Real-Time Command History ───────────────────────────────────────────── */
+type HistoryRun = {
+  id: string;
+  command: string;
+  status: string;
+  startedAt: string;
+  updatedAt: string;
+  steps: { agentName: string; status: string }[];
+  duration: number;
+};
+
+function CommandHistory({ refreshKey }: { refreshKey: number }) {
+  const [runs, setRuns]       = useState<HistoryRun[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen]       = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/v1/ai-command-center/tasks?limit=10");
+      if (r.ok) {
+        const j = await r.json();
+        setRuns(j.data || []);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [refreshKey]);
+
+  if (!loading && runs.length === 0) return null;
+
+  const statusColor = (s: string) =>
+    s === "completed"         ? "bg-green-400 text-black" :
+    s === "failed"            ? "bg-red-400 text-white" :
+    s === "running"           ? "bg-cyan-400 text-black animate-pulse" :
+    s === "awaiting_approval" ? "bg-yellow-400 text-black" :
+    "bg-gray-200 text-black";
+
+  return (
+    <div className="border-[3px] border-black bg-white shadow-[4px_4px_0_0_#000]">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b-[3px] border-black">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-cyan-400" />
+          <span className="font-display font-black text-sm uppercase text-white">AI Command History</span>
+          <span className="font-mono text-xs text-gray-400">(live)</span>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={load} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => setOpen(!open)} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
+            {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="divide-y-[2px] divide-black/10">
+          {loading ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading history...
+            </div>
+          ) : runs.map(run => (
+            <div key={run.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-sm font-bold text-black truncate">{run.command}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${statusColor(run.status)}`}>{run.status}</span>
+                    <span className="flex items-center gap-1 font-mono text-[10px] text-gray-500">
+                      <Clock className="w-3 h-3" />
+                      {new Date(run.startedAt).toLocaleString()}
+                    </span>
+                    {run.duration > 0 && (
+                      <span className="font-mono text-[10px] text-gray-400">{(run.duration / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
+                  {run.steps?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {run.steps.map((s, i) => (
+                        <span key={i} className={`text-[9px] font-bold px-1.5 py-0.5 border border-black rounded ${
+                          s.status === "done" || s.status === "approved" ? "bg-green-100 text-green-800" :
+                          s.status === "running" ? "bg-blue-100 text-blue-800" :
+                          s.status === "failed" || s.status === "rejected" ? "bg-red-100 text-red-800" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>{s.agentName}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 import { AgentApprovalModal, PendingApprovalData } from "@/components/ui/AgentApprovalModal";
 import { TargetAudienceModal, AudienceData } from "@/components/ui/TargetAudienceModal";
 import { io as socketIOClient } from "socket.io-client";
@@ -268,6 +369,7 @@ export default function MissionControlPage() {
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [liveActivities, setLiveActivities] = useState<string[]>([]);
   const [agentStatusMap, setAgentStatusMap] = useState<Record<string, { status: string; task: string }>>({});
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const { data: kpisData }    = useSWR("/dashboard/kpis?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
   const { data: agentsData }  = useSWR("/dashboard/agents?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
@@ -320,6 +422,17 @@ export default function MissionControlPage() {
       const payload = eventData?.payload;
       if (payload && payload.message) {
         setLiveActivities((prev) => [`[${payload.agent_name || "Agent"}] ${payload.message}`, ...prev.slice(0, 15)]);
+      }
+    });
+
+    // Refresh history panel whenever a workflow completes or is created
+    socket.on("workflow:update", (data: any) => {
+      if (data?.event === "COMPLETED" || data?.event === "FAILED" || data?.event === "CREATED") {
+        setHistoryRefreshKey(k => k + 1);
+      }
+      if (data?.event === "COMPLETED") {
+        const msg = `✅ Workflow completed: "${(data.command || "").slice(0, 60)}${(data.command||'').length > 60 ? '...' : ''}")`;
+        setLiveActivities(prev => [msg, ...prev.slice(0, 15)]);
       }
     });
 
@@ -729,6 +842,11 @@ export default function MissionControlPage() {
             ))}
           </div>
         </NeoCard>
+      </section>
+
+      {/* Real-time Command History */}
+      <section>
+        <CommandHistory refreshKey={historyRefreshKey} />
       </section>
 
       {/* Agent Approval Modal */}

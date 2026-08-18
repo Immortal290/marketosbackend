@@ -121,6 +121,7 @@ export function TargetAudienceModal({
   const [customModel, setCustomModel]       = useState("");
   const [llmApiKey, setLlmApiKey]           = useState("");
   const [imageModel, setImageModel]         = useState("black-forest-labs/FLUX.1-schnell");
+  const [customImageModel, setCustomImageModel] = useState("");
   const [imageApiKey, setImageApiKey]       = useState("");
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
@@ -167,7 +168,7 @@ export function TargetAudienceModal({
       channels,
       llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
       llmApiKey,
-      imageModel,
+      imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
       imageApiKey,
     };
     try {
@@ -428,12 +429,33 @@ export function TargetAudienceModal({
                 </label>
                 <select
                   value={imageModel}
-                  onChange={(e) => setImageModel(e.target.value)}
+                  onChange={(e) => {
+                    setImageModel(e.target.value);
+                    if (e.target.value !== "custom") setCustomImageModel("");
+                  }}
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
-                  <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell (Fast)</option>
-                  <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev (High Quality)</option>
+                  <optgroup label="HuggingFace / BFL">
+                    <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell (Fast)</option>
+                    <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev (High Quality)</option>
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    <option value="dall-e-3">DALL-E 3 (High Quality)</option>
+                    <option value="dall-e-2">DALL-E 2 (Fast)</option>
+                  </optgroup>
+                  <optgroup label="Custom / Other">
+                    <option value="custom">✨ Enter Custom Image Model ID...</option>
+                  </optgroup>
                 </select>
+                {imageModel === "custom" && (
+                  <input
+                    type="text"
+                    value={customImageModel}
+                    onChange={(e) => setCustomImageModel(e.target.value)}
+                    placeholder="e.g. stabilityai/stable-diffusion-xl-base-1.0"
+                    className="w-full mt-1.5 bg-yellow-50 border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
+                  />
+                )}
               </div>
 
               <div className="flex-1 space-y-1 mt-3 sm:mt-0">

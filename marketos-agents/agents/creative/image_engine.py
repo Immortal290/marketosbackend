@@ -94,15 +94,20 @@ def image_agent_node(state: dict) -> dict:
 
     image_model = state.get("image_model") or "black-forest-labs/FLUX.1-schnell"
 
-    agent_log("IMAGE", f"Generating with {image_model} strictly...")
-    img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
+    if "dall-e" in image_model.lower():
+        agent_log("IMAGE", f"Generating with OpenAI ({image_model}) strictly...")
+        img_b64 = _generate_openai_image(full_prompt, api_key=image_api_key, model=image_model)
+        source = "openai"
+    else:
+        agent_log("IMAGE", f"Generating with {image_model} strictly...")
+        img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
+        source = "flux-schnell"
     
     if not img_b64:
-        raise ValueError("FLUX.1 image generation failed or returned empty. No fallback allowed.")
+        raise ValueError(f"{image_model} image generation failed or returned empty. No fallback allowed.")
         
-    agent_log("IMAGE", "✅ FLUX.1 generation successful")
+    agent_log("IMAGE", f"✅ {image_model} generation successful")
     img_type = "CID"
-    source   = "flux-schnell"
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -488,6 +493,26 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
 
 
 # ── Provider 2: FLUX.1-schnell via HuggingFace Inference API ─────────────────
+
+def _generate_openai_image(
+    full_prompt: str,
+    api_key: str,
+    model: str = "dall-e-3"
+) -> str | None:
+    from openai import OpenAI
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.images.generate(
+            model=model,
+            prompt=full_prompt[:1000],
+            n=1,
+            size="1024x1024",
+            response_format="b64_json"
+        )
+        return response.data[0].b64_json
+    except Exception as e:
+        agent_log("IMAGE", f"OpenAI DALL-E error: {e}")
+        return None
 
 def _generate_flux_schnell_image(
     full_prompt: str,

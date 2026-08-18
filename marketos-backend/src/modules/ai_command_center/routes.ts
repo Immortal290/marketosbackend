@@ -163,9 +163,27 @@ router.get('/suggestions', (req: Request, res: Response) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/agents', (req: Request, res: Response) => {
-  const agents = ['SUPERVISOR','COPY','CREATIVE','ANALYTICS','COMPLIANCE','EMAIL','SMS','SOCIAL','SEO','COMPETITOR','FINANCE'];
-  res.status(200).json({ success: true, data: agents.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: i < 3 ? 'RUNNING' : 'IDLE', queueLength: i < 3 ? 2 : 0, successRate: 97 + Math.random() * 2 })) });
+import { prisma } from '../../lib/prisma';
+
+router.get('/agents', async (req: Request, res: Response) => {
+  try {
+    const health = await agentClient.getHealth();
+    const infra = health?.data || {};
+    const agentNames = ['SUPERVISOR','COPY','CREATIVE','ANALYTICS','COMPLIANCE','EMAIL','SMS','SOCIAL','SEO','COMPETITOR','FINANCE'];
+    const agents = agentNames.map((type, i) => ({
+      id: `agent-${i}`,
+      name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`,
+      type,
+      status: infra.status === 'healthy' ? (i < 3 ? 'RUNNING' : 'IDLE') : 'OFFLINE',
+      queueLength: i < 3 ? 2 : 0,
+      successRate: 97 + Math.random() * 2,
+    }));
+    res.status(200).json({ success: true, data: agents });
+  } catch {
+    // Fallback — agent service down
+    const agentNames = ['SUPERVISOR','COPY','CREATIVE','ANALYTICS','COMPLIANCE','EMAIL','SMS','SOCIAL','SEO','COMPETITOR','FINANCE'];
+    res.status(200).json({ success: true, data: agentNames.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: 'OFFLINE', queueLength: 0, successRate: 0 })) });
+  }
 });
 
 /**
@@ -214,8 +232,43 @@ router.get('/agents', (req: Request, res: Response) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/tasks', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router.get('/tasks', async (req: Request, res: Response) => {
+  const page  = parseInt(String(req.query.page  || '1'));
+  const limit = parseInt(String(req.query.limit || '20'));
+  const skip  = (page - 1) * limit;
+
+  const where = req.query.status
+    ? { steps: { some: { status: req.query.status as string } } }
+    : {};
+
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: { steps: { orderBy: { createdAt: 'asc' } } },
+    }),
+    prisma.workflowRun.count({ where }),
+  ]);
+
+  const data = runs.map(r => ({
+    id: r.id,
+    command: r.command,
+    status: r.status,
+    agentType: 'PIPELINE',
+    task: r.command,
+    startedAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    steps: r.steps,
+    duration: r.updatedAt.getTime() - r.createdAt.getTime(),
+  }));
+
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) },
+  });
 });
 
 /**
@@ -256,10 +309,23 @@ router.get('/tasks', (req: Request, res: Response) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/decisions', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: [
-    { id: 'd1', decision: 'Pause underperforming ad set B', reasoning: 'CTR dropped 40% over 3 days with no conversions', confidence: 0.91, outcome: 'EXECUTED', timestamp: new Date().toISOString() },
-  ]});
+router.get('/decisions', async (req: Request, res: Response) => {
+  const limit = parseInt(String(req.query.limit || '20'));
+  const runs = await prisma.workflowRun.findMany({
+    take: limit,
+    orderBy: { updatedAt: 'desc' },
+    include: { steps: { orderBy: { createdAt: 'asc' }, take: 1 } },
+  });
+  const data = runs.map(r => ({
+    id: r.id,
+    decision: r.command,
+    reasoning: `Workflow executed ${r.steps.length} agent step(s). Status: ${r.status}.`,
+    confidence: 0.91,
+    outcome: r.status === 'completed' ? 'EXECUTED' : r.status === 'failed' ? 'REJECTED' : r.status === 'awaiting_approval' ? 'PENDING' : 'PENDING',
+    timestamp: r.updatedAt.toISOString(),
+    steps: r.steps,
+  }));
+  res.status(200).json({ success: true, data });
 });
 
 /**
@@ -319,8 +385,37 @@ router.get('/decisions', (req: Request, res: Response) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/memory', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router.get('/memory', async (req: Request, res: Response) => {
+  const page  = parseInt(String(req.query.page  || '1'));
+  const limit = parseInt(String(req.query.limit || '20'));
+  const skip  = (page - 1) * limit;
+
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: { steps: { where: { output: { not: null } }, take: 3 } },
+    }),
+    prisma.workflowRun.count(),
+  ]);
+
+  const data = runs.flatMap(r =>
+    r.steps.map(s => ({
+      id: s.id,
+      agentType: s.agentName.toUpperCase().replace('AGENT', ''),
+      memType: 'EPISODIC',
+      key: `run:${r.id}:${s.agentName}`,
+      value: s.output,
+      createdAt: s.createdAt,
+    }))
+  );
+
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) },
+  });
 });
 
 /**
