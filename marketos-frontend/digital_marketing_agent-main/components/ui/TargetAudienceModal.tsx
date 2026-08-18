@@ -112,8 +112,8 @@ export function TargetAudienceModal({
   initialPrompt,
 }: TargetAudienceModalProps) {
   const [targetAudience, setTargetAudience] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("samriddharoy0804@gmail.com");
-  const [recipientPhone, setRecipientPhone] = useState("+917596087652");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
   const [senderName, setSenderName]         = useState("");
   const [companyName, setCompanyName]       = useState("");
   const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);

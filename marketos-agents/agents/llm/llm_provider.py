@@ -153,12 +153,31 @@ class MockLLM(Runnable):
 def get_mock_llm():
     return RunnableLambda(MockLLM().invoke)
 
-def get_llm(temperature: float = 0):
+import contextvars
+
+active_llm_model: contextvars.ContextVar[str | None] = contextvars.ContextVar("active_llm_model", default=None)
+active_llm_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar("active_llm_api_key", default=None)
+
+def get_llm(temperature: float = 0, model_override: str | None = None, api_key_override: str | None = None):
     """
     Return a LangChain chat model for the configured provider.
-    Includes automated fallback to Gemini on rate limits / network errors.
+    Supports user-specified runtime model selection and API key overrides.
     """
+    requested_model = model_override or active_llm_model.get() or os.getenv("LLM_MODEL") or ""
+    requested_key = api_key_override or active_llm_api_key.get()
+
+    # Determine provider dynamically from requested model string if supplied
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    if "groq" in requested_model.lower():
+        provider = "groq"
+    elif "gpt" in requested_model.lower() or "o3" in requested_model.lower() or "openai" in requested_model.lower():
+        provider = "openai"
+    elif "claude" in requested_model.lower() or "anthropic" in requested_model.lower():
+        provider = "anthropic"
+    elif "deepseek" in requested_model.lower() or "/" in requested_model:
+        provider = "openrouter"
+    elif "gemini" in requested_model.lower():
+        provider = "gemini"
 
     if provider == "mock":
         return get_mock_llm()
