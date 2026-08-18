@@ -150,6 +150,8 @@ class CampaignRequest(BaseModel):
     company_address: str = os.getenv("COMPANY_ADDRESS", "")
     unsubscribe_url: str = "https://example.com/unsubscribe"
     workspace_id:    str = "default"
+    llm_model:       Optional[str] = None
+    llm_api_key:     Optional[str] = None
 
 class StructuredCampaignRequest(BaseModel):
     brand_profile:   dict = Field(..., description="Full BrandProfile JSON")
@@ -163,6 +165,8 @@ class StructuredCampaignRequest(BaseModel):
     company_address: str = os.getenv("COMPANY_ADDRESS", "")
     unsubscribe_url: str = "https://example.com/unsubscribe"
     workspace_id:    str = "default"
+    llm_model:       Optional[str] = None
+    llm_api_key:     Optional[str] = None
 
 
 # ── GET / — Serve Dashboard ──────────────────────────────────────────────────
@@ -249,6 +253,8 @@ async def run_pipeline_stream(request: CampaignRequest):
         "company_name":    request.company_name,
         "company_address": request.company_address,
         "unsubscribe_url": request.unsubscribe_url,
+        "llm_model":       request.llm_model,
+        "llm_api_key":     request.llm_api_key,
         "current_step":    "supervisor",
         "errors":          [],
         "trace":           [],
@@ -332,6 +338,10 @@ class QueryRequest(BaseModel):
     sender_name:      Optional[str] = None
     company_name:     Optional[str] = None
     channels:         Optional[list[str]] = None
+    llm_model:        Optional[str] = None
+    llm_api_key:      Optional[str] = None
+    image_model:      Optional[str] = None
+    image_api_key:    Optional[str] = None
 
 @app.post("/v1/query/stream")
 async def run_query_stream(request: QueryRequest):
@@ -359,6 +369,10 @@ async def run_query_stream(request: QueryRequest):
                 sender_name=request.sender_name,
                 company_name=request.company_name,
                 channels=request.channels,
+                llm_model=request.llm_model,
+                llm_api_key=request.llm_api_key,
+                image_model=request.image_model,
+                image_api_key=request.image_api_key,
             ):
                 yield event
         except Exception as e:

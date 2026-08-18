@@ -22,6 +22,10 @@ export interface AudienceData {
   senderName: string;
   companyName: string;
   channels: string[];
+  llmModel?: string;
+  llmApiKey?: string;
+  imageModel?: string;
+  imageApiKey?: string;
 }
 
 // ── Highlighted prompt — marks emails & phones visually ─────────────────────
@@ -113,6 +117,11 @@ export function TargetAudienceModal({
   const [senderName, setSenderName]         = useState("");
   const [companyName, setCompanyName]       = useState("");
   const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);
+  const [llmModel, setLlmModel]             = useState("gemini-2.0-flash");
+  const [customModel, setCustomModel]       = useState("");
+  const [llmApiKey, setLlmApiKey]           = useState("");
+  const [imageModel, setImageModel]         = useState("black-forest-labs/FLUX.1-schnell");
+  const [imageApiKey, setImageApiKey]       = useState("");
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
   // Auto-extract email / phone whenever the prompt changes
@@ -156,6 +165,10 @@ export function TargetAudienceModal({
       senderName,
       companyName,
       channels,
+      llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
+      llmApiKey,
+      imageModel,
+      imageApiKey,
     };
     try {
       if (onLaunch) onLaunch(payload);
@@ -334,10 +347,108 @@ export function TargetAudienceModal({
             </p>
           </div>
 
-          {/* Verification notice */}
-          <div className="border-2 border-black bg-neo-lime/30 p-3 flex items-center gap-2 text-[10px] font-mono font-bold text-black shadow-[2px_2px_0_0_#000]">
-            <ShieldCheck className="h-4 w-4 text-emerald-700 flex-shrink-0" />
-            <span>Keys verified: Gemini 2.5 Flash · Groq · Twilio · SendGrid · MSG91 — All live.</span>
+          {/* LLM Model & API Key Configuration */}
+          <div className="bg-white border-2 border-black shadow-[2px_2px_0_0_#000] p-4 flex flex-col gap-3">
+            <h4 className="font-display font-black text-[11px] uppercase tracking-wider text-black flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              LLM Provider Configuration
+            </h4>
+            
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="flex-1 space-y-1">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
+                  Model Provider / Agent LLM
+                </label>
+                <select
+                  value={llmModel}
+                  onChange={(e) => {
+                    setLlmModel(e.target.value);
+                    if (e.target.value !== "custom") setCustomModel("");
+                  }}
+                  className="w-full border-2 border-black p-2 font-mono text-xs bg-gray-50 text-black shadow-sm outline-none focus:ring-0"
+                >
+                  <optgroup label="Google Gemini">
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recommended / Default)</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  </optgroup>
+                  <optgroup label="Groq AI (Ultra-fast)">
+                    <option value="groq-llama-3.3-70b">Groq — Llama 3.3 70B Versatile</option>
+                    <option value="groq-llama3-8b">Groq — Llama 3 8B Instant</option>
+                    <option value="groq-mixtral-8x7b">Groq — Mixtral 8x7B</option>
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    <option value="gpt-4o">OpenAI GPT-4o (Omni)</option>
+                    <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
+                    <option value="o3-mini">OpenAI o3-Mini Reasoning</option>
+                  </optgroup>
+                  <optgroup label="Anthropic Claude">
+                    <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
+                    <option value="claude-3-haiku">Anthropic Claude 3 Haiku</option>
+                  </optgroup>
+                  <optgroup label="OpenRouter / Open Source">
+                    <option value="deepseek/deepseek-chat">DeepSeek V3 (via OpenRouter)</option>
+                    <option value="deepseek/deepseek-r1">DeepSeek R1 (via OpenRouter)</option>
+                    <option value="meta-llama/llama-3.1-405b-instruct">Llama 3.1 405B (via OpenRouter)</option>
+                  </optgroup>
+                  <optgroup label="Custom / Specialized Agent">
+                    <option value="custom">✨ Enter Custom Model ID...</option>
+                  </optgroup>
+                </select>
+
+                {llmModel === "custom" && (
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    placeholder="e.g. your-org/fine-tuned-llama3:v1"
+                    className="w-full mt-1.5 border-2 border-black p-2 font-mono text-xs bg-yellow-50 text-black shadow-sm placeholder:text-gray-400"
+                  />
+                )}
+              </div>
+
+              <div className="flex-1 space-y-1 mt-3 sm:mt-0">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
+                  LLM API Key
+                </label>
+                <input
+                  type="password"
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
+                  placeholder="Enter API Key for selected model..."
+                  className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-sm placeholder:text-gray-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start mt-2 border-t-2 border-black/10 pt-3">
+              <div className="flex-1 space-y-1">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
+                  Image Generator Model
+                </label>
+                <select
+                  value={imageModel}
+                  onChange={(e) => setImageModel(e.target.value)}
+                  className="w-full border-2 border-black p-2 font-mono text-xs bg-gray-50 text-black shadow-sm outline-none focus:ring-0"
+                >
+                  <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell (Fast)</option>
+                  <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev (High Quality)</option>
+                </select>
+              </div>
+
+              <div className="flex-1 space-y-1 mt-3 sm:mt-0">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
+                  Image API Key (HF/BFL)
+                </label>
+                <input
+                  type="password"
+                  value={imageApiKey}
+                  onChange={(e) => setImageApiKey(e.target.value)}
+                  placeholder="Enter API Key for image generation..."
+                  className="w-full border-2 border-black p-2 font-mono text-xs bg-white text-black shadow-sm placeholder:text-gray-400"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Actions */}

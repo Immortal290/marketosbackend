@@ -547,8 +547,8 @@ function ComplianceView({ result }: { result: any }) {
               <div key={i} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-gray-50 border border-gray-100">
                 {c.passed ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"/> : <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5"/>}
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 truncate">{c.rule_name || c.rule_id}</p>
-                  {c.detail && <p className="text-[11px] text-gray-500 truncate">{c.detail}</p>}
+                  <p className="font-bold text-gray-900 leading-tight">{c.rule_name || c.rule_id}</p>
+                  {c.detail && <p className="text-[11px] text-gray-500 mt-1 whitespace-pre-wrap">{c.detail}</p>}
                 </div>
               </div>
             ))}
@@ -716,13 +716,13 @@ function GenericView({ result }: { result: any }) {
   return (
     <div className="flex flex-col gap-2">
       {Object.entries(result).map(([k, v]) => (
-        <div key={k} className="flex gap-3 items-start border-b border-gray-100 pb-2 last:border-0">
+        <div key={k} className="flex gap-3 items-start border-b border-gray-100 pb-2 last:border-0 min-w-0">
           <span className="text-xs font-mono text-gray-500 pt-0.5 w-40 shrink-0">{k.replace(/_/g," ")}</span>
-          <div className="flex-1 text-sm text-gray-800 break-all">
+          <div className="flex-1 text-sm text-gray-800 break-all min-w-0">
             {typeof v === "boolean" ? (v ? "✅ Yes" : "❌ No") :
              typeof v === "number" ? <span className="font-mono font-bold text-blue-700">{v.toLocaleString()}</span> :
              Array.isArray(v) ? v.join(", ") :
-             typeof v === "object" ? <pre className="text-xs bg-gray-50 p-1 rounded overflow-x-auto max-h-32">{JSON.stringify(v, null, 2)}</pre> :
+             typeof v === "object" ? <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto max-h-64 whitespace-pre-wrap border border-gray-100">{JSON.stringify(v, null, 2)}</pre> :
              String(v)}
           </div>
         </div>

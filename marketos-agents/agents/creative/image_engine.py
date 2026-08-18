@@ -87,52 +87,22 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Phase 1: Gemini Imagen ───────────────────────────────────────────────
-    if os.getenv("GEMINI_API_KEY"):
-        agent_log("IMAGE", "Phase 1 — Generating with Gemini Imagen...")
-        img_b64, t_tokens = _generate_gemini_image(full_prompt)
-        total_token_usage += t_tokens
-        if img_b64:
-            agent_log("IMAGE", "✅ Gemini Imagen generation successful")
-            img_type = "CID"
-            source   = "gemini-imagen"
-        else:
-            agent_log("IMAGE", "⚠ Gemini Imagen failed — falling back to FLUX.1-schnell")
-    else:
-        agent_log("IMAGE", "GEMINI_API_KEY not set — trying FLUX.1-schnell (HuggingFace)")
+    # ── Strict Image Generation via FLUX.1 (No Fallbacks) ────────────────────
+    image_api_key = state.get("image_api_key") or os.getenv("HF_TOKEN")
+    if not image_api_key:
+        raise ValueError("Image API Key (Black Forest Labs / HF) is missing. No fallback allowed.")
 
-    # ── Phase 2: FLUX.1-schnell via HuggingFace Inference API ────────────────
+    image_model = state.get("image_model") or "black-forest-labs/FLUX.1-schnell"
+
+    agent_log("IMAGE", f"Generating with {image_model} strictly...")
+    img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
+    
     if not img_b64:
-        agent_log("IMAGE", "Phase 2 — Generating with FLUX.1-schnell (Apache-2.0, free)...")
-        img_b64 = _generate_flux_schnell_image(full_prompt)
-        if img_b64:
-            agent_log("IMAGE", "✅ FLUX.1-schnell generation successful")
-            img_type = "CID"
-            source   = "flux-schnell"
-        else:
-            agent_log("IMAGE", "⚠ FLUX.1-schnell failed — falling back to Pollinations")
-
-    # ── Phase 3: Pollinations.ai ──────────────────────────────────────────────
-    if not img_b64:
-        agent_log("IMAGE", "Phase 3 — Generating hero visual with Pollinations (FLUX backend)...")
-        img_b64 = _generate_pollinations_image(full_prompt)
-        if img_b64:
-            agent_log("IMAGE", "✅ Pollinations generation successful")
-            img_type = "CID"
-            source   = "pollinations-flux"
-        else:
-            agent_log("IMAGE", "⚠ Pollinations generation failed — falling back to Stability AI")
-
-    # ── Phase 4: Stability AI (Stable Diffusion 3) ───────────────────────────
-    if not img_b64 and os.getenv("STABILITY_API_KEY"):
-        agent_log("IMAGE", "Phase 4 — Generating with Stability AI (SD3)...")
-        img_b64 = _generate_stability_image(full_prompt)
-        if img_b64:
-            agent_log("IMAGE", "✅ Stability AI generation successful")
-            img_type = "CID"
-            source   = "stability-sd3"
-        else:
-            agent_log("IMAGE", "⚠ Stability AI generation failed — no more providers")
+        raise ValueError("FLUX.1 image generation failed or returned empty. No fallback allowed.")
+        
+    agent_log("IMAGE", "✅ FLUX.1 generation successful")
+    img_type = "CID"
+    source   = "flux-schnell"
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -521,6 +491,8 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
 
 def _generate_flux_schnell_image(
     full_prompt: str,
+    api_key: str,
+    model: str = "black-forest-labs/FLUX.1-schnell",
     width:  int = 1024,
     height: int = 576,
 ) -> str | None:
@@ -537,9 +509,8 @@ def _generate_flux_schnell_image(
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_flux_schnell"
 
-    hf_token = os.getenv("HF_TOKEN")
-    if not hf_token:
-        agent_log("IMAGE", "HF_TOKEN not set — skipping FLUX.1-schnell")
+    if not api_key:
+        agent_log("IMAGE", "api_key not provided — skipping FLUX.1-schnell")
         return None
 
     try:
@@ -548,14 +519,14 @@ def _generate_flux_schnell_image(
         
         client = InferenceClient(
             provider="nscale",
-            api_key=hf_token,
+            api_key=api_key,
         )
         
-        agent_log("IMAGE", "Calling HF InferenceClient (FLUX.1-schnell)...")
+        agent_log("IMAGE", f"Calling HF InferenceClient ({model})...")
         # output is a PIL.Image object
         image = client.text_to_image(
             full_prompt[:500],
-            model="black-forest-labs/FLUX.1-schnell",
+            model=model,
             width=width,
             height=height
         )

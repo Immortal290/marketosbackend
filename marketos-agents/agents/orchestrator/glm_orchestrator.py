@@ -222,6 +222,10 @@ def orchestrate_query_stream(
     sender_name: Optional[str] = None,
     company_name: Optional[str] = None,
     channels: Optional[list[str]] = None,
+    llm_model: Optional[str] = None,
+    llm_api_key: Optional[str] = None,
+    image_model: Optional[str] = None,
+    image_api_key: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """
     Main entry point. Yields SSE event strings in sequence.
@@ -230,6 +234,13 @@ def orchestrate_query_stream(
       INIT → GLM_REASONING → AB_TEST (mandatory) → AGENT_EXEC (per agent) → SYNTHESIS → COMPLETE
     """
     session_id = str(uuid.uuid4())[:8].upper()
+    
+    from agents.llm.llm_provider import active_llm_model, active_llm_api_key
+    if llm_model:
+        active_llm_model.set(llm_model)
+    if llm_api_key:
+        active_llm_api_key.set(llm_api_key)
+        
     glm = get_glm(temperature=0)
 
     # ── STAGE 0: Initialisation ───────────────────────────────────────────
@@ -315,6 +326,10 @@ def orchestrate_query_stream(
         "company_name":    active_company,
         "company_address": os.getenv("COMPANY_ADDRESS", ""),
         "unsubscribe_url": "https://example.com/unsubscribe",
+        "llm_model":       llm_model,
+        "llm_api_key":     llm_api_key,
+        "image_model":     image_model,
+        "image_api_key":   image_api_key,
         "current_step":    "ab_test",
         "errors":          [],
         "trace":           [],
