@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import {
   Users, Mail, Phone, Send, X, ShieldCheck,
-  Sliders, Globe, Sparkles, Tag, Eye,
+  Sliders, Globe, Sparkles, Tag, Eye, KeyRound, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiRequest } from "@/lib/api";
 
 interface TargetAudienceModalProps {
   isOpen: boolean;
@@ -120,10 +121,28 @@ export function TargetAudienceModal({
   const [llmModel, setLlmModel]             = useState("gemini-2.0-flash");
   const [customModel, setCustomModel]       = useState("");
   const [llmApiKey, setLlmApiKey]           = useState("");
+  const [savedKeyLoaded, setSavedKeyLoaded] = useState(false);
   const [imageModel, setImageModel]         = useState("black-forest-labs/FLUX.1-schnell");
   const [customImageModel, setCustomImageModel] = useState("");
   const [imageApiKey, setImageApiKey]       = useState("");
   const [isSubmitting, setIsSubmitting]     = useState(false);
+
+  // Auto-load the saved Gemini API key from Settings > AI Models
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadSavedKey = async () => {
+      try {
+        const response = await apiRequest<any>("/settings/api-keys");
+        if (response?.data?.gemini) {
+          setLlmApiKey((prev) => prev || response.data.gemini);
+          setSavedKeyLoaded(true);
+        }
+      } catch (_) {
+        // silently ignore — user can still type manually
+      }
+    };
+    void loadSavedKey();
+  }, [isOpen]);
 
   // Auto-extract email / phone whenever the prompt changes
   // Only overwrite if a valid email/phone is found in the prompt
@@ -409,16 +428,27 @@ export function TargetAudienceModal({
               </div>
 
               <div className="flex-1 space-y-1 mt-3 sm:mt-0">
-                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60 flex items-center gap-1">
                   LLM API Key
+                  {savedKeyLoaded && (
+                    <span className="flex items-center gap-0.5 bg-green-100 text-green-700 border border-green-400 px-1 py-0.5 rounded text-[8px] font-bold">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> LOADED FROM SETTINGS
+                    </span>
+                  )}
                 </label>
-                <input
-                  type="password"
-                  value={llmApiKey}
-                  onChange={(e) => setLlmApiKey(e.target.value)}
-                  placeholder="Enter API Key for selected model..."
-                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
-                />
+                <div className="relative">
+                  <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-black/40" />
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => { setLlmApiKey(e.target.value); setSavedKeyLoaded(false); }}
+                    placeholder={savedKeyLoaded ? "••••••••••••••••••• (saved)" : "Paste your Gemini/OpenAI/Groq key..."}
+                    className="w-full bg-white border-[3px] border-black rounded-none pl-7 pr-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
+                  />
+                </div>
+                <p className="font-mono text-[8px] text-black/40">
+                  Save your key in <a href="/settings/ai-models" target="_blank" className="underline text-blue-600">Settings › AI Models</a> to auto-fill here.
+                </p>
               </div>
             </div>
 

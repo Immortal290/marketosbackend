@@ -4,7 +4,8 @@ export type SettingsSectionId =
   | "integrations"
   | "compliance"
   | "billing"
-  | "security";
+  | "security"
+  | "ai-models";
 
 export interface TeamMember {
   id: string;

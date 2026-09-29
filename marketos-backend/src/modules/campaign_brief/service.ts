@@ -14,6 +14,10 @@ export class CampaignBriefService {
     });
     if (!brandProfile) throw new Error('BrandProfile not found');
 
+    const user = await prisma.user.findFirst();
+    const apiKeys = user?.apiKeys as Record<string, string> | undefined;
+    const llmApiKey = apiKeys?.gemini;
+
     // 2. Persist the CampaignBrief
     const brief = await prisma.campaignBrief.create({
       data: {
@@ -85,6 +89,7 @@ export class CampaignBriefService {
       company_name: data.companyName ?? brandProfile.businessName,
       company_address: data.companyAddress ?? '',
       unsubscribe_url: data.unsubscribeUrl ?? 'https://example.com/unsubscribe',
+      llm_api_key: llmApiKey,
     };
 
     return { brief, campaign, agentPayload };

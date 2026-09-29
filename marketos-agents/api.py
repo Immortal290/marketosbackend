@@ -25,6 +25,9 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
+from agents.llm.llm_provider import active_llm_api_key, active_llm_model
+
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -240,6 +243,9 @@ async def run_pipeline_stream(request: CampaignRequest):
     """Run the campaign pipeline synchronously and stream events via SSE."""
     from graph.campaign_graph import campaign_graph
     
+    active_llm_api_key.set(request.llm_api_key)
+    active_llm_model.set(request.llm_model)
+
     campaign_id = f"CAMP-{int(time.time())}-{str(uuid.uuid4())[:4].upper()}"
 
     state = {
@@ -288,6 +294,9 @@ async def run_pipeline_structured_stream(request: StructuredCampaignRequest):
     # running in a thread so we don't block the stream startup too much
     asyncio.get_event_loop().run_in_executor(None, index_brand_profile, request.brand_profile)
     
+    active_llm_api_key.set(request.llm_api_key)
+    active_llm_model.set(request.llm_model)
+
     campaign_id = f"CAMP-{int(time.time())}-{str(uuid.uuid4())[:4].upper()}"
 
     state = {
@@ -357,6 +366,9 @@ async def run_query_stream(request: QueryRequest):
     Returns SSE stream of stage-by-stage events for the frontend terminal.
     """
     from agents.orchestrator.glm_orchestrator import orchestrate_query_stream
+    
+    active_llm_api_key.set(request.llm_api_key)
+    active_llm_model.set(request.llm_model)
 
     def event_generator():
         try:
@@ -393,6 +405,9 @@ async def run_query_stream(request: QueryRequest):
 async def run_pipeline_sync(request: CampaignRequest):
     """Run the full campaign pipeline synchronously. Returns complete result."""
     from graph.campaign_graph import campaign_graph
+
+    active_llm_api_key.set(request.llm_api_key)
+    active_llm_model.set(request.llm_model)
 
     campaign_id = f"CAMP-{int(time.time())}-{str(uuid.uuid4())[:4].upper()}"
     trace_id = str(uuid.uuid4())[:8]

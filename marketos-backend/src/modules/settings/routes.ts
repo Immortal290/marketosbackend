@@ -327,4 +327,44 @@ router.patch('/security', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * @openapi
+ * /settings/api-keys:
+ *   get:
+ *     summary: Get user API keys
+ */
+router.get('/api-keys', async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.findFirst();
+    res.status(200).json({ success: true, data: user?.apiKeys || {} });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch API keys' });
+  }
+});
+
+/**
+ * @openapi
+ * /settings/api-keys:
+ *   patch:
+ *     summary: Update user API keys
+ */
+router.patch('/api-keys', async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.findFirst();
+    if (user) {
+      const currentKeys = typeof user.apiKeys === 'object' && user.apiKeys !== null ? user.apiKeys : {};
+      const updatedKeys = { ...currentKeys, ...req.body };
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { apiKeys: updatedKeys }
+      });
+      res.status(200).json({ success: true, data: updatedKeys, agentFeedback: 'API keys updated securely in database.' });
+    } else {
+      res.status(404).json({ success: false, error: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to update API keys' });
+  }
+});
+
 export default router;

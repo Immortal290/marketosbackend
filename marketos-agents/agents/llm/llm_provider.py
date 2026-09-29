@@ -184,12 +184,13 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
 
     # Build Gemini fallback if key is available
     gemini_fallback = None
-    if os.getenv("GEMINI_API_KEY"):
+    gemini_key = requested_key or os.getenv("GEMINI_API_KEY")
+    if gemini_key:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fallback = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-lite",
-                google_api_key=os.getenv("GEMINI_API_KEY"),
+                model="gemini-3.5-flash-lite",
+                google_api_key=gemini_key,
                 temperature=temperature,
                 max_output_tokens=8192,
                 max_retries=1,
@@ -201,7 +202,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
     fallbacks = [f for f in [gemini_fallback] if f is not None]
 
     if provider == "anthropic":
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = requested_key or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             if gemini_fallback:
                 return gemini_fallback
@@ -216,7 +217,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "openrouter":
-        api_key = os.getenv("OPENROUTER_API_KEY")
+        api_key = requested_key or os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             if gemini_fallback:
                 return gemini_fallback
@@ -234,7 +235,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "nvidia":
-        api_key = os.getenv("NVIDIA_API_KEY")
+        api_key = requested_key or os.getenv("NVIDIA_API_KEY")
         if not api_key:
             if gemini_fallback:
                 return StringContentWrapper(gemini_fallback)
@@ -252,7 +253,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "groq":
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = requested_key or os.getenv("GROQ_API_KEY")
         if not api_key:
             if gemini_fallback:
                 return StringContentWrapper(gemini_fallback)
@@ -319,12 +320,13 @@ def get_glm(temperature: float = 0):
 
     # Build fallback chain: Gemini -> Mock
     gemini_fb = None
-    if os.getenv("GEMINI_API_KEY"):
+    gemini_key = active_llm_api_key.get() or os.getenv("GEMINI_API_KEY")
+    if gemini_key:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fb = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-lite",
-                google_api_key=os.getenv("GEMINI_API_KEY"),
+                model="gemini-3.5-flash-lite",
+                google_api_key=gemini_key,
                 temperature=temperature,
                 max_output_tokens=8192,
                 max_retries=1,

@@ -51,4 +51,11 @@ export const settingsNav: SettingsNavItem[] = [
     icon: "Lock",
     description: "Authentication and access controls",
   },
+  {
+    id: "ai-models",
+    label: "AI Models",
+    href: "/settings/ai-models",
+    icon: "Cpu",
+    description: "Configure API keys for LLM providers",
+  },
 ];

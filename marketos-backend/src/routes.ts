@@ -19,6 +19,7 @@ import auditLogsRoutes from './modules/audit_logs/routes';
 import brandProfileRoutes from './modules/brand_profile/routes';
 import campaignBriefRoutes from './modules/campaign_brief/routes';
 import whatsappRoutes from './modules/whatsapp/routes';
+import historyRoutes from './modules/history/routes';
 
 const router = Router();
 
@@ -41,5 +42,6 @@ router.use('/audit-logs', auditLogsRoutes);
 router.use('/brand-profile', brandProfileRoutes);
 router.use('/campaign', campaignBriefRoutes);
 router.use('/whatsapp', whatsappRoutes);
+router.use('/history', historyRoutes);
 
 export default router;

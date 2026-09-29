@@ -427,13 +427,29 @@ export async function POST(req: NextRequest) {
   let bodyText: string | null = null;
   try { bodyText = await req.text(); } catch (_e) {}
 
-  let bodyPayload: { prompt?: string; query?: string; workspaceId?: string } = {};
+  let bodyPayload: {
+    prompt?: string;
+    query?: string;
+    workspaceId?: string;
+    workspace_id?: string;
+    llm_api_key?: string;
+    llm_model?: string;
+    image_model?: string;
+    image_api_key?: string;
+    recipient_email?: string;
+    recipient_phone?: string;
+    target_audience?: string;
+    sender_name?: string;
+    company_name?: string;
+    channels?: string[];
+    [key: string]: unknown;
+  } = {};
   if (bodyText) {
     try { bodyPayload = JSON.parse(bodyText); } catch (_e) {}
   }
 
   const userQuery = bodyPayload.prompt || bodyPayload.query || "";
-  const workspaceId = bodyPayload.workspaceId || "default";
+  const workspaceId = bodyPayload.workspaceId || bodyPayload.workspace_id || "default";
 
   // Try candidate backend servers
   for (const base of BACKEND_CANDIDATES) {
@@ -448,7 +464,17 @@ export async function POST(req: NextRequest) {
         query: userQuery,
         prompt: userQuery,
         workspace_id: workspaceId,
-        ...bodyPayload,
+        // Pass through all user-provided fields — including API keys and delivery params
+        ...(bodyPayload.llm_api_key   ? { llm_api_key:   bodyPayload.llm_api_key   } : {}),
+        ...(bodyPayload.llm_model     ? { llm_model:     bodyPayload.llm_model     } : {}),
+        ...(bodyPayload.image_model   ? { image_model:   bodyPayload.image_model   } : {}),
+        ...(bodyPayload.image_api_key ? { image_api_key: bodyPayload.image_api_key } : {}),
+        ...(bodyPayload.recipient_email  ? { recipient_email:  bodyPayload.recipient_email  } : {}),
+        ...(bodyPayload.recipient_phone  ? { recipient_phone:  bodyPayload.recipient_phone  } : {}),
+        ...(bodyPayload.target_audience  ? { target_audience:  bodyPayload.target_audience  } : {}),
+        ...(bodyPayload.sender_name      ? { sender_name:      bodyPayload.sender_name      } : {}),
+        ...(bodyPayload.company_name     ? { company_name:     bodyPayload.company_name     } : {}),
+        ...(bodyPayload.channels         ? { channels:         bodyPayload.channels         } : {}),
       };
 
       console.log(`[AI Command Proxy] Trying targetUrl: ${targetUrl}`);

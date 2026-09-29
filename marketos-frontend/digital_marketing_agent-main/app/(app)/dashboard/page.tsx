@@ -622,6 +622,26 @@ export default function MissionControlPage() {
 
       toast.success("Pipeline complete — review agent outputs below");
       setCommandInput("");
+
+      // Auto-save this run to the user's campaign history
+      try {
+        const agentResultsMap: Record<string, any> = {};
+        // agentOutputs state is set asynchronously — capture from local SSE data
+        // We'll save the documentation and prompt; agent outputs are appended via state
+        await fetch("/api/v1/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt,
+            documentation: "", // will be updated by the state effect below
+            channels: audienceData?.channels || [],
+            recipientEmail: audienceData?.recipientEmail || "",
+            recipientPhone: audienceData?.recipientPhone || "",
+            status: "completed",
+          }),
+        }).catch(() => null);
+      } catch (_) { /* best-effort save */ }
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Pipeline error — ${msg}`);
