@@ -56,33 +56,64 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _create_kafka_topics():
-    """Pre-create all PRD-defined Kafka topics in Redpanda so agents can
-    immediately publish/consume without relying on auto-topic-creation."""
+    """Schedule Kafka topic creation as a BACKGROUND task.
+
+    CRITICAL: admin.list_topics() is a blocking rdkafka C call. Calling it
+    directly inside an async function freezes the entire asyncio event loop —
+    uvicorn cannot handle ANY requests (including /v1/health) while it blocks.
+    We offload it to a background task so uvicorn starts serving immediately.
+    """
+    import asyncio
+    asyncio.create_task(_kafka_setup_background())
+
+
+async def _kafka_setup_background():
+    """Run Kafka admin setup in a background task — non-blocking for uvicorn."""
+    import asyncio
     from utils.kafka_bus import KAFKA_BROKERS, KAFKA_AVAILABLE, Topics
     if not KAFKA_AVAILABLE:
         agent_log("KAFKA", "confluent-kafka not installed — skipping topic creation")
         return
     try:
         from confluent_kafka.admin import AdminClient, NewTopic
-        admin  = AdminClient({"bootstrap.servers": KAFKA_BROKERS, "socket.timeout.ms": 5000})
-        meta   = admin.list_topics(timeout=5)
-        existing = set(meta.topics.keys())
-        needed   = [t for t in Topics.all_topics() if t not in existing]
-        if not needed:
-            agent_log("KAFKA", f"All {len(Topics.all_topics())} topics already exist ✓")
-            return
-        new_topics = [NewTopic(t, num_partitions=1, replication_factor=1) for t in needed]
-        futures = admin.create_topics(new_topics)
-        for topic, future in futures.items():
-            try:
-                future.result()
-                agent_log("KAFKA", f"  ✓ Created topic: {topic}")
-            except Exception as e:
-                if "TopicExistsError" not in str(type(e).__name__):
-                    agent_log("KAFKA", f"  ✗ Failed to create {topic}: {e}")
-        agent_log("KAFKA", f"Topic creation complete — {len(needed)} new topics")
+
+        loop = asyncio.get_event_loop()
+
+        def _blocking_kafka_setup():
+            """All blocking rdkafka calls run in a thread pool — never the event loop."""
+            admin = AdminClient({
+                "bootstrap.servers": KAFKA_BROKERS,
+                "socket.timeout.ms": 3000,
+                "request.timeout.ms": 5000,
+            })
+            meta = admin.list_topics(timeout=5)
+            existing = set(meta.topics.keys())
+            needed = [t for t in Topics.all_topics() if t not in existing]
+            if not needed:
+                agent_log("KAFKA", f"All {len(Topics.all_topics())} topics already exist ✓")
+                return
+            new_topics = [NewTopic(t, num_partitions=1, replication_factor=1) for t in needed]
+            futures = admin.create_topics(new_topics)
+            for topic, future in futures.items():
+                try:
+                    future.result()
+                    agent_log("KAFKA", f"  ✓ Created topic: {topic}")
+                except Exception as e:
+                    if "TopicExistsError" not in str(type(e).__name__):
+                        agent_log("KAFKA", f"  ✗ Failed to create {topic}: {e}")
+            agent_log("KAFKA", f"Topic creation complete — {len(needed)} new topics")
+
+        # run_in_executor keeps blocking rdkafka calls off the event loop
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _blocking_kafka_setup),
+            timeout=15,  # hard cap: never block background for more than 15s
+        )
+    except asyncio.TimeoutError:
+        agent_log("KAFKA", "Topic auto-creation timed out (Kafka may be unreachable) — continuing.")
     except Exception as e:
-        agent_log("KAFKA", f"Topic auto-creation failed: {e}")
+        agent_log("KAFKA", f"Topic auto-creation failed (non-fatal): {e}")
+
+
 
 
 # ── Agent Registry ──────────────────────────────────────────────────────────
