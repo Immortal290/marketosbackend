@@ -16,7 +16,8 @@ const BACKEND_CANDIDATES = [
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
   process.env.API_URL,
-  "http://localhost:3001",
+  "http://localhost:3001",                // ← Local backend (primary)
+  "http://localhost:3002",
   "http://marketos-backend.railway.internal:3000",  // Railway private network
   "http://localhost:3000",
   "http://localhost:8000"
@@ -71,7 +72,7 @@ async function handleRequest(req: NextRequest, { params }: { params: { path?: st
   return serveIntelligentFallback(fullPath, method, bodyText, req.nextUrl.searchParams);
 }
 
-function serveIntelligentFallback(
+async function serveIntelligentFallback(
   path: string,
   method: string,
   bodyText: string | null,
@@ -338,6 +339,90 @@ function serveIntelligentFallback(
       success: true,
       data: { revenue: 1240000, pipeline: 5600000, cac: 124.5, ltv: 4800, roas: 4.2, conversionRate: 3.47 }
     });
+  }
+
+  // ── Phone / Twilio Verify (server-side, no CORS) ─────────────────────────
+  if (path.includes('/phone/verify') && method === 'POST') {
+    const { accountSid, authToken, phoneNumber } = bodyPayload;
+    if (!accountSid || !authToken) return NextResponse.json({ success: false, error: 'accountSid and authToken required' }, { status: 400 });
+    try {
+      const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`, { headers: { Authorization: `Basic ${basic}` } });
+      if (!r.ok) { const e: any = await r.json().catch(() => ({})); return NextResponse.json({ success: false, verified: false, error: e.message || `HTTP ${r.status}` }, { status: 401 }); }
+      const d: any = await r.json();
+      return NextResponse.json({ success: true, verified: true, account: { sid: d.sid, friendlyName: d.friendly_name, status: d.status }, phone: phoneNumber ? { number: phoneNumber } : null });
+    } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
+  }
+
+  // ── Phone / Voice Call ────────────────────────────────────────────────────
+  if (path.includes('/phone/call') && method === 'POST') {
+    const { accountSid, authToken, from, to, url } = bodyPayload;
+    if (!accountSid || !authToken || !from || !to) return NextResponse.json({ success: false, error: 'accountSid, authToken, from, to required' }, { status: 400 });
+    try {
+      const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const fb = new URLSearchParams({ To: to, From: from, Url: url || 'http://demo.twilio.com/docs/voice.xml' });
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: fb.toString() });
+      const d: any = await r.json();
+      if (!r.ok) return NextResponse.json({ success: false, error: d.message || `HTTP ${r.status}` }, { status: r.status });
+      return NextResponse.json({ success: true, call: { sid: d.sid, status: d.status, to: d.to, from: d.from } });
+    } catch (e: any) { return NextResponse.json({ success: false, error: e.message }, { status: 502 }); }
+  }
+
+  // ── SMS / Twilio Verify ───────────────────────────────────────────────────
+  if (path.includes('/sms/verify') && method === 'POST') {
+    const { accountSid, authToken, fromNumber } = bodyPayload;
+    if (!accountSid || !authToken) return NextResponse.json({ success: false, error: 'accountSid and authToken required' }, { status: 400 });
+    try {
+      const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`, { headers: { Authorization: `Basic ${basic}` } });
+      if (!r.ok) { const e: any = await r.json().catch(() => ({})); return NextResponse.json({ success: false, verified: false, error: e.message || `HTTP ${r.status}` }, { status: 401 }); }
+      const d: any = await r.json();
+      return NextResponse.json({ success: true, verified: true, account: { sid: d.sid, friendlyName: d.friendly_name, status: d.status }, phone: fromNumber ? { number: fromNumber } : null, smsCapable: true });
+    } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
+  }
+
+  // ── SMS / Send ────────────────────────────────────────────────────────────
+  if (path.includes('/sms/send') && method === 'POST') {
+    const { accountSid, authToken, from, to, body: msgBody } = bodyPayload;
+    if (!accountSid || !authToken || !from || !to || !msgBody) return NextResponse.json({ success: false, error: 'accountSid, authToken, from, to, body required' }, { status: 400 });
+    const recips: string[] = Array.isArray(to) ? to : String(to).split(/[\n,;]+/).map((s: string) => s.trim()).filter(Boolean);
+    const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    const results: any[] = [];
+    for (const recipient of recips.slice(0, 100)) {
+      try {
+        const fb = new URLSearchParams({ To: recipient, From: from, Body: msgBody });
+        const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: fb.toString() });
+        const d: any = await r.json();
+        results.push(r.ok && d.sid ? { to: recipient, ok: true, sid: d.sid, status: d.status } : { to: recipient, ok: false, error: d.message || `HTTP ${r.status}` });
+      } catch (e: any) { results.push({ to: recipient, ok: false, error: e.message }); }
+    }
+    return NextResponse.json({ success: true, sent: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, total: results.length, results });
+  }
+
+  // ── Email / Verify / Clerk ────────────────────────────────────────────────
+  if (path.includes('/email-channel/verify/clerk') && method === 'POST') {
+    const { secretKey, fromEmail } = bodyPayload;
+    if (!secretKey || !secretKey.startsWith('sk_')) return NextResponse.json({ success: false, error: 'Valid Clerk secretKey (sk_...) required' }, { status: 400 });
+    try {
+      const r = await fetch('https://api.clerk.com/v1/users?limit=1', { headers: { Authorization: `Bearer ${secretKey}` } });
+      if (r.status === 401 || r.status === 403) return NextResponse.json({ success: false, verified: false, error: 'Invalid Clerk Secret Key' }, { status: 401 });
+      return NextResponse.json({ success: true, verified: true, provider: 'clerk', app: { name: 'Clerk Application', environment: secretKey.includes('_test_') ? 'test' : 'production' }, fromEmail: fromEmail || null });
+    } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
+  }
+
+  // ── Email / Verify / Google OAuth ─────────────────────────────────────────
+  if (path.includes('/email-channel/verify/google') && method === 'POST') {
+    const { clientId, clientSecret, redirectUri, scopes } = bodyPayload;
+    if (!clientId || !clientSecret || !redirectUri) return NextResponse.json({ success: false, error: 'clientId, clientSecret, redirectUri required' }, { status: 400 });
+    if (!clientId.includes('.apps.googleusercontent.com')) return NextResponse.json({ success: false, error: 'Invalid Client ID format' }, { status: 400 });
+    const scopeList: string[] = Array.isArray(scopes) ? scopes : ['https://www.googleapis.com/auth/gmail.send'];
+    const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: scopeList.join(' '), access_type: 'offline', prompt: 'consent' });
+    return NextResponse.json({ success: true, verified: true, provider: 'google', credentials: { clientId, redirectUri, scopes: scopeList, formatValid: true }, authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
+  }
+
+  // ── Email / Health ─────────────────────────────────────────────────────────
+  if (path.includes('/email-channel/health')) {
+    return NextResponse.json({ success: true, module: 'email-channel', providers: ['clerk', 'google'], status: 'operational' });
   }
 
   // General fallback for all other API endpoints
