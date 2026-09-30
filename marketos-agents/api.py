@@ -190,7 +190,22 @@ async def serve_dashboard():
             "docs": "/docs"
         }
 
-# ── GET /v1/agents — List all agents ─────────────────────────────────────────
+
+# ── GET /v1/health — Railway Healthcheck ─────────────────────────────────────
+
+@app.get("/v1/health")
+@app.get("/health")  # alias for compatibility
+async def health_check():
+    """Railway / load-balancer liveness probe. Always returns 200 OK."""
+    from datetime import datetime, timezone
+    return {
+        "ok": True,
+        "status": "healthy",
+        "service": "marketos-agents",
+        "version": "1.0.0",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
 
 @app.get("/v1/agents")
 async def list_agents():
