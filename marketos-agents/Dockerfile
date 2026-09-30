@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies if required (e.g. build-essential for compiling custom packages)
+# Install system dependencies
 ENV PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -23,9 +23,15 @@ COPY api.py ./
 COPY main.py ./
 COPY worker.py ./
 
-# Expose the API server port for FastAPI and agent pipeline
-EXPOSE 8000
-EXPOSE 8765
+# Copy startup script and make it executable
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
-# Command to run FastAPI server on 0.0.0.0 and persistent Kafka worker concurrently
-CMD ["sh", "-c", "python -m uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000} & python worker.py"]
+# Expose the API server port
+EXPOSE 8000
+
+# Use shell script so ${PORT} is properly expanded at runtime.
+# CMD ["sh", "-c", "... ${PORT} ..."] with array syntax does NOT expand
+# environment variables — the script form is required.
+CMD ["sh", "./start.sh"]
+
