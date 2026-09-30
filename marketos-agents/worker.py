@@ -201,8 +201,9 @@ def _create_consumer_with_retry(max_retries: int = 30, base_delay: float = 2.0) 
         agent_log("WORKER", f"Kafka not ready (attempt {attempt}/{max_retries}). Retrying in {delay:.0f}s...")
         time.sleep(delay)
 
-    agent_log("WORKER", f"Kafka consumer failed after {max_retries} attempts — exiting.")
-    sys.exit(1)
+    agent_log("WORKER", f"Kafka consumer failed after {max_retries} attempts — running in no-op standby mode.")
+    return None  # Caller must handle None — do NOT sys.exit() as it kills the uvicorn process
+
 
 
 def main():
@@ -220,6 +221,17 @@ def main():
     divider()
 
     consumer = _create_consumer_with_retry()
+
+    # If Kafka is unavailable, stay alive in standby — do NOT exit.
+    # Exiting would kill the entire container (including the background uvicorn
+    # process that serves /v1/health), causing Railway's healthcheck to fail.
+    if consumer is None:
+        agent_log("WORKER", "Kafka unavailable — running in standby mode. Worker will not process jobs.")
+        agent_log("WORKER", "The FastAPI server is still running and /v1/health will respond normally.")
+        while _running:
+            time.sleep(30)
+            agent_log("WORKER", "[Standby] Kafka still unavailable. Waiting...")
+        return
 
     agent_log("WORKER", "Waiting for campaign intents on Kafka... (persistent loop)")
 
