@@ -87,18 +87,24 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Strict Image Generation via FLUX.1 (No Fallbacks) ────────────────────
-    image_api_key = state.get("image_api_key") or os.getenv("HF_TOKEN")
-    if not image_api_key:
-        raise ValueError("Image API Key (Black Forest Labs / HF) is missing. No fallback allowed.")
-
+    # ── Strict Image Generation (No Fallbacks) ───────────────────────────────
     image_model = state.get("image_model") or "black-forest-labs/FLUX.1-schnell"
-
-    if "dall-e" in image_model.lower():
+    
+    if "gemini" in image_model.lower():
+        agent_log("IMAGE", f"Generating with Gemini ({image_model}) strictly...")
+        img_b64, total_token_usage = _generate_gemini_image(full_prompt, model=image_model)
+        source = "gemini"
+    elif "dall-e" in image_model.lower():
+        image_api_key = state.get("image_api_key") or os.getenv("OPENAI_API_KEY")
+        if not image_api_key:
+             raise ValueError(f"OpenAI API Key is missing for {image_model}. No fallback allowed.")
         agent_log("IMAGE", f"Generating with OpenAI ({image_model}) strictly...")
         img_b64 = _generate_openai_image(full_prompt, api_key=image_api_key, model=image_model)
         source = "openai"
     else:
+        image_api_key = state.get("image_api_key") or os.getenv("HF_TOKEN")
+        if not image_api_key:
+             raise ValueError(f"Image API Key (HF_TOKEN) is missing for {image_model}. No fallback allowed.")
         agent_log("IMAGE", f"Generating with {image_model} strictly...")
         img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
         source = "flux-schnell"
@@ -446,7 +452,7 @@ def _build_generation_prompt(concept_prompt: str, plan_data: dict, user_intent: 
 
 # ── Provider 1: Gemini Imagen ─────────────────────────────────────────────────
 
-def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
+def _generate_gemini_image(full_prompt: str, model: str = "gemini-3.1-flash-image") -> tuple[str | None, int]:
     """
     Call Gemini's image generation endpoint.
     Returns (base64_string | None, token_count).
@@ -458,9 +464,11 @@ def _generate_gemini_image(full_prompt: str) -> tuple[str | None, int]:
     if not api_key:
         return None, 0
 
+    clean_model = model.replace("google/", "")
+
     url = (
         "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+        f"models/{clean_model}:generateContent?key={api_key}"
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
