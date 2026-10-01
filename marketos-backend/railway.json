@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "sh -c 'node dist/server.js'",
-    "healthcheckPath": "/health",
+    "healthcheckPath": "/v1/health",
     "healthcheckTimeout": 300,
     "healthcheckInterval": 10,
     "restartPolicyType": "ON_FAILURE",

@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { errorHandler } from './middlewares/error.middleware';
 import { setupSwagger } from './lib/swagger';
 import routes from './routes';
+import workflowEngineRoutes from './modules/workflow_engine/routes';
 
 const app: Express = express();
 
@@ -38,6 +39,7 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization', 'x-workspace-id', 'Accept', 'X-Requested-With'],
   })
 );
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,7 +53,6 @@ setupSwagger(app);
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://digitalmarketingagent-production.up.railway.app').replace(/\/$/, '');
 
 app.get('/', (_req, res) => res.redirect(302, FRONTEND_URL));
-
 
 /**
  * @openapi
@@ -72,11 +73,14 @@ app.get('/', (_req, res) => res.redirect(302, FRONTEND_URL));
  *                 timestamp:
  *                   type: string
  */
-app.get('/health', (_req, res) => {
+// Health check — registered at BOTH paths:
+// • /health        (used by railway.json healthcheckPath)
+// • /v1/health     (Railway dashboard override — takes precedence over railway.json)
+const healthHandler = (_req: Request, res: Response) =>
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
-import workflowEngineRoutes from './modules/workflow_engine/routes';
+app.get('/health', healthHandler);
+app.get('/v1/health', healthHandler);
 
 // API Routes
 app.use('/api/v1', routes);
