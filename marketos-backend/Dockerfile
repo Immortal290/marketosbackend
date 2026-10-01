@@ -53,6 +53,7 @@ COPY --from=builder /app/node_modules/.prisma  ./node_modules/.prisma/
 COPY --from=builder /app/node_modules/@prisma  ./node_modules/@prisma/
 COPY --from=builder /app/dist                  ./dist/
 
-EXPOSE 3000
+# Railway injects $PORT dynamically — use shell form so the variable expands
+EXPOSE ${PORT:-3000}
 
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "node dist/server.js"]
