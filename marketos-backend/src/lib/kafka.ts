@@ -10,10 +10,19 @@ const clientId = process.env.KAFKA_CLIENT_ID || 'marketos-backend';
 export const kafka = new Kafka({
   clientId,
   brokers: [kafkaBroker],
+  // ── Railway fix ────────────────────────────────────────────────────────────
+  // The Railway Kafka broker returns its internal container IP in metadata
+  // after the bootstrap handshake. That IP is unreachable from other services.
+  // enforceRequestTimeout makes stuck connections fail fast so KafkaJS
+  // re-resolves the hostname via DNS on the next retry instead of spinning.
+  enforceRequestTimeout: true,
+  requestTimeout: 15000,
   retry: {
     retries: 5,
-    initialRetryTime: 1000,
-    maxRetryTime: 10000,
+    initialRetryTime: 2000,
+    maxRetryTime: 15000,
+    factor: 2,
+    restartOnFailure: async () => true,
   },
 });
 

@@ -95,13 +95,20 @@ class KafkaProducer:
         if KAFKA_AVAILABLE:
             try:
                 self._producer = Producer({
-                    "bootstrap.servers": KAFKA_BROKERS,
-                    "acks":              "all",
-                    "retries":           3,
-                    "linger.ms":         5,
-                    "compression.type":  "snappy",
-                    "socket.timeout.ms": 3000,
-                    "message.timeout.ms": 5000,
+                    "bootstrap.servers":          KAFKA_BROKERS,
+                    "acks":                       "all",
+                    "retries":                    3,
+                    "linger.ms":                  5,
+                    "compression.type":           "snappy",
+                    "socket.timeout.ms":          10000,
+                    "message.timeout.ms":         15000,
+                    # ── Railway fix: force IPv4 so the client always resolves
+                    # kafka.railway.internal via DNS instead of caching the
+                    # broker-advertised internal container IP (which is unreachable).
+                    "broker.address.family":      "v4",
+                    "socket.keepalive.enable":    True,
+                    "reconnect.backoff.ms":       500,
+                    "reconnect.backoff.max.ms":   10000,
                 })
                 self._connected = True
                 agent_log("KAFKA", f"Producer connected to {KAFKA_BROKERS}")
@@ -184,11 +191,20 @@ class KafkaConsumer:
         if KAFKA_AVAILABLE:
             try:
                 self._consumer = Consumer({
-                    "bootstrap.servers":   KAFKA_BROKERS,
-                    "group.id":            group_id or KAFKA_GROUP_ID,
-                    "auto.offset.reset":   "earliest",
-                    "enable.auto.commit":  False,
-                    "max.poll.interval.ms": 300000,
+                    "bootstrap.servers":       KAFKA_BROKERS,
+                    "group.id":                group_id or KAFKA_GROUP_ID,
+                    "auto.offset.reset":       "earliest",
+                    "enable.auto.commit":      False,
+                    "max.poll.interval.ms":    300000,
+                    "session.timeout.ms":      30000,
+                    "heartbeat.interval.ms":   10000,
+                    # ── Railway fix: force IPv4 so the client always resolves
+                    # kafka.railway.internal via DNS instead of caching the
+                    # broker-advertised internal container IP (which is unreachable).
+                    "broker.address.family":   "v4",
+                    "socket.keepalive.enable": True,
+                    "reconnect.backoff.ms":    500,
+                    "reconnect.backoff.max.ms": 10000,
                 })
                 self._consumer.subscribe(topics)
                 agent_log("KAFKA", f"Consumer subscribed to: {', '.join(topics)}")

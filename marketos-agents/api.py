@@ -82,11 +82,14 @@ async def _kafka_setup_background():
         def _blocking_kafka_setup():
             """All blocking rdkafka calls run in a thread pool — never the event loop."""
             admin = AdminClient({
-                "bootstrap.servers": KAFKA_BROKERS,
-                "socket.timeout.ms": 3000,
-                "request.timeout.ms": 5000,
+                "bootstrap.servers":    KAFKA_BROKERS,
+                "socket.timeout.ms":    10000,
+                "request.timeout.ms":   15000,
+                # Railway fix: force IPv4 DNS resolution on every connect
+                "broker.address.family": "v4",
+                "socket.keepalive.enable": True,
             })
-            meta = admin.list_topics(timeout=5)
+            meta = admin.list_topics(timeout=10)
             existing = set(meta.topics.keys())
             needed = [t for t in Topics.all_topics() if t not in existing]
             if not needed:
@@ -708,8 +711,14 @@ async def kafka_health():
     if KAFKA_AVAILABLE:
         try:
             from confluent_kafka.admin import AdminClient
-            admin      = AdminClient({"bootstrap.servers": KAFKA_BROKERS, "socket.timeout.ms": 3000})
-            meta       = admin.list_topics(timeout=4)
+            admin      = AdminClient({
+                "bootstrap.servers":     KAFKA_BROKERS,
+                "socket.timeout.ms":     10000,
+                # Railway fix: force IPv4 DNS resolution on every connect
+                "broker.address.family": "v4",
+                "socket.keepalive.enable": True,
+            })
+            meta       = admin.list_topics(timeout=8)
             topic_list = [t for t in meta.topics.keys() if not t.startswith("_")]
             broker_ok  = True
             for t in Topics.all_topics():
