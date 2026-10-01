@@ -437,10 +437,12 @@ CAMPAIGN BRIEF:
 
         try:
             data = extract_json(response.content.strip())
-        except ValueError as e:
-            err = f"SMS Agent JSON parse failed: {e}"
-            agent_log("SMS", f"ERROR — {err}")
-            return {**state, "errors": state.get("errors", []) + [err]}
+            if not data.get("variants"):
+                raise ValueError("LLM returned no SMS variants")
+        except Exception as e:
+            err = f"SMS Agent generation failed: {e}"
+            agent_log("SMS", f"FATAL — {err}")
+            return {**state, "errors": state.get("errors", []) + [err], "current_step": "failed"}
 
         recipient_raw = state.get("recipient_phone") or state.get("recipient_email")
         recipient = _normalize_phone(str(recipient_raw)) if recipient_raw else None

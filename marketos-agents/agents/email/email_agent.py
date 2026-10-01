@@ -114,12 +114,6 @@ REQUIRED JSON SCHEMA:
   ]
 }"""
 
-DEFAULT_DRIP_SEQUENCE = [
-    "Day 3 — Re-engagement: resend to non-openers with a refreshed subject line.",
-    "Day 7 — Social proof: send testimonials to openers who did not click.",
-    "Day 14 — Final urgency: send offer-expiry email to remaining non-converters.",
-]
-
 
 # Delivery function replaced by utils.sendgrid_mailer.send_email
 
@@ -254,14 +248,16 @@ def email_agent_node(state: dict) -> dict:
 
     try:
         data = extract_json(response.content.strip())
-    except ValueError as e:
-        err = f"Email Agent JSON parse failed: {e}"
-        agent_log("EMAIL", f"ERROR — {err}")
+        if not data.get("drip_sequence_preview"):
+            raise ValueError("LLM returned no drip sequence")
+    except Exception as e:
+        err = f"Email Agent generation failed: {e}"
+        agent_log("EMAIL", f"FATAL — {err}")
         return {**state, "errors": state.get("errors", []) + [err], "current_step": "failed"}
 
     message_id = f"MSG-{str(uuid.uuid4())[:12].upper()}"
 
-    drip_raw = data.get("drip_sequence_preview") or DEFAULT_DRIP_SEQUENCE
+    drip_raw = data.get("drip_sequence_preview")
     clean_drip = [
         f"Day {item.get('day', i+1)}: {item.get('angle', item.get('subject', 'Follow-up'))}" if isinstance(item, dict) else str(item)
         for i, item in enumerate(drip_raw)

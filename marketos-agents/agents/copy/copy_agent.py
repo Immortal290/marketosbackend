@@ -214,66 +214,6 @@ Visual Excellence Requirements:
 """
 
 
-def _fallback_copy_output(plan: CampaignPlan) -> CopyOutput:
-    """Return a safe deterministic fallback when LLM structured output fails."""
-    message = plan.key_messages[0] if plan.key_messages else "Limited-time offer"
-    audience = plan.target_audience or "our community"
-    brand_name = plan.campaign_name or "our brand"
-
-    v1 = CopyVariant(
-        variant_id="V-001",
-        subject_line=f"{plan.campaign_name}: {message[:35]}",
-        preview_text=f"Built for {audience}. Offer ends soon.",
-        body_html=(
-            "<html><body><h1>" + plan.campaign_name + "</h1>"
-            f"<p>{message}</p>"
-            "<p><a href=\"https://example.com/offer\">Claim Offer</a></p>"
-            f"<p><small>This is a promotional email from {brand_name}.</small></p>"
-            "</body></html>"
-        ),
-        body_text=f"{plan.campaign_name}\n\n{message}\n\nClaim Offer: https://example.com/offer\n\nThis is a promotional email from {brand_name}.",
-        cta_text="Claim Offer",
-        cta_url="https://example.com/offer",
-        hero_image_query="product launch",
-        hero_image_prompt="Clean product hero visual, no text, studio lighting",
-        readability_score=80.0,
-        tone_alignment_score=85.0,
-        spam_risk_score=10.0,
-        estimated_open_rate=28.0,
-        estimated_ctr=3.0,
-    )
-
-    v2 = CopyVariant(
-        variant_id="V-002",
-        subject_line=f"Why {plan.campaign_name} wins today",
-        preview_text="A sharper alternative with a stronger value proposition.",
-        body_html=(
-            "<html><body><h1>Choose Better Value</h1>"
-            f"<p>{message}</p>"
-            "<p><a href=\"https://example.com/offer\">See the Deal</a></p>"
-            f"<p><small>This is a promotional email from {brand_name}.</small></p>"
-            "</body></html>"
-        ),
-        body_text=f"Choose Better Value\n\n{message}\n\nSee the Deal: https://example.com/offer\n\nThis is a promotional email from {brand_name}.",
-        cta_text="See the Deal",
-        cta_url="https://example.com/offer",
-        hero_image_query="competitive product",
-        hero_image_prompt="Lifestyle product image, no text, high contrast",
-        readability_score=78.0,
-        tone_alignment_score=83.0,
-        spam_risk_score=12.0,
-        estimated_open_rate=26.0,
-        estimated_ctr=2.8,
-    )
-
-    return CopyOutput(
-        variants=[v1, v2],
-        selected_variant_id=v1.variant_id,
-        selection_reasoning="Fallback selected V-001 for clearer direct value proposition.",
-        brand_voice_notes="Deterministic fallback copy used due to structured output parsing failure.",
-    )
-
-
 def _ensure_campaign_exists(plan: CampaignPlan) -> None:
     if not PG_AVAILABLE:
         return
@@ -448,21 +388,20 @@ KEY MESSAGES TO INCORPORATE:
     try:
         data = extract_json(response.content.strip())
         variants = [CopyVariant(**v) for v in data.get("variants", [])]
+        if not variants:
+            raise ValueError("LLM returned zero variants")
         copy_output = CopyOutput(
             variants=variants,
-            selected_variant_id=data.get("selected_variant_id", variants[0].variant_id if variants else "V-001"),
+            selected_variant_id=data.get("selected_variant_id", variants[0].variant_id),
             selection_reasoning=data.get("selection_reasoning", ""),
             brand_voice_notes=data.get("brand_voice_notes", ""),
         )
     except Exception as e:
         error_msg = f"Copy Agent generation failed: {e}"
-        agent_log("COPY", f"ERROR — {error_msg} — USING FALLBACK")
-        copy_output = _fallback_copy_output(plan)
+        agent_log("COPY", f"FATAL — {error_msg}")
+        return {**state, "errors": state.get("errors", []) + [error_msg], "current_step": "failed"}
 
     variants = copy_output.variants
-    if not variants:
-        error_msg = "Copy Agent produced zero variants"
-        return {**state, "errors": state.get("errors", []) + [error_msg], "current_step": "failed"}
 
     # Determine the selected variant
     selected = next(
