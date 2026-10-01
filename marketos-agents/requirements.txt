@@ -57,6 +57,8 @@ apscheduler>=3.10.0           # 5-min analytics polling + hourly finance checks
 
 # ── ORM & Migrations ─────────────────────────────────────────────────────────
 SQLAlchemy>=2.0.30
+SQLAlchemy[asyncio]>=2.0.30   # asyncio extra pulls in greenlet automatically
+greenlet>=3.0.0               # explicit pin — required by SQLAlchemy asyncio module
 alembic>=1.13.0
 
 # ── Image Generation (FLUX.1-schnell) ────────────────────────────────────────
