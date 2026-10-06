@@ -470,12 +470,6 @@ export default function MissionControlPage() {
   }, []);
 
 
-  const displayKpis = kpisData ? [
-    { label: "Active Campaigns", value: kpisData.activeCampaigns?.toString() || "0", tone: "info" as const },
-    { label: "Revenue Gen",      value: `$${(kpisData.revenueGenerated||0).toLocaleString()}`, tone: "success" as const },
-    { label: "Leads Gen",        value: kpisData.leadsGenerated?.toLocaleString() || "0", tone: "info" as const },
-    { label: "Agents Online",    value: kpisData.activeAgents?.toString() || "0", tone: "success" as const },
-  ] : kpis;
 
   const handleApprove = (key: string) =>
     setAgentOutputs(prev => prev.map(o => o.agentKey === key ? { ...o, status: "approved" } : o));
