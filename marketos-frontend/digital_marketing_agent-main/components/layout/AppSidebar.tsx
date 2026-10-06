@@ -23,7 +23,6 @@ import {
   Mail,
   MessageSquare,
   Phone,
-  History
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -32,7 +31,6 @@ const sidebarGroups = [
     title: "Overview",
     items: [
       { href: "/dashboard", label: "Mission Control", icon: LayoutDashboard },
-      { href: "/history", label: "Command History", icon: History },
     ]
   },
   {
