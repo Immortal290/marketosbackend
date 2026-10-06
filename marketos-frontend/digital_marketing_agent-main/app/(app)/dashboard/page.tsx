@@ -9,7 +9,7 @@ import {
   Sparkles, Zap, Bot, TrendingUp, ArrowRight, Send, Lightbulb,
   Loader2, CheckCircle2, Brain, GitBranch, FileText, Cpu,
   Terminal, Download, ChevronDown, ChevronUp, CheckSquare, XSquare, Users,
-  History, Clock, RefreshCw, ChevronRight, Activity, Radio,
+  History, Clock, RefreshCw, ChevronRight, Activity, Radio, X,
 } from "lucide-react";
 
 const agentCommands = [
@@ -20,7 +20,6 @@ const agentCommands = [
   "Create a campaign performance report",
   "Generate social media posts for product launch",
 ];
-
 
 type StageEvent = {
   stage?: string;
@@ -48,7 +47,7 @@ const STAGE_LABELS: Record<string, string> = {
   AGENT_EXEC: "Agent Processing", SYNTHESIS: "Report Generation", COMPLETE: "Complete",
 };
 
-/* ── Interactive Pipeline Tracker ───────────────────────────────────────── */
+/* ── Interactive Pipeline Tracker ─────────────────────────────────────────── */
 function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecuting: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [events]);
@@ -73,12 +72,12 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
   if (!isExecuting && events.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-4 mt-4">
+    <div className="flex flex-col gap-3 mt-4 w-full">
 
-      {/* ── Live Status Banner ── */}
+      {/* Live Status Banner */}
       <div className="flex items-center justify-between border-[3px] border-black bg-gray-900 px-5 py-3 shadow-[4px_4px_0_0_#000]">
-        <div className="flex items-center gap-3">
-          <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
+        <div className="flex items-center gap-3 flex-wrap">
+          <Radio className="w-4 h-4 text-cyan-400 animate-pulse flex-shrink-0" />
           <span className="font-mono text-xs font-bold uppercase text-cyan-400 tracking-widest">
             {isExecuting ? "Pipeline Running" : "Pipeline Complete"}
           </span>
@@ -90,7 +89,7 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
           <span className="font-mono text-xs text-gray-400">
             {events.length} event{events.length !== 1 ? "s" : ""}
@@ -98,10 +97,9 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
         </div>
       </div>
 
-      {/* ── Intent & Agent Plan ── */}
+      {/* Intent & Agent Plan */}
       {agentPlan.length > 0 && (
         <div className="border-[3px] border-black bg-neo-pink shadow-[4px_4px_0_0_#000] p-4">
-          {/* Intent row */}
           <div className="flex items-center gap-3 mb-3">
             <Brain className="w-5 h-5 text-black flex-shrink-0" />
             <div>
@@ -116,8 +114,6 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
               </p>
             </div>
           </div>
-
-          {/* Agent pipeline chips */}
           <div className="flex flex-wrap gap-2 mb-3">
             {agentPlan.map((agentName, i) => {
               const isDone    = completedAgents.has(agentName);
@@ -128,7 +124,7 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all duration-300 ${
                     isDone    ? "bg-green-400 text-black shadow-[2px_2px_0_0_#000]" :
                     isRunning ? "bg-cyan-400 text-black shadow-[3px_3px_0_0_#000] scale-105 animate-pulse" :
-                                "bg-white/60 text-black/50"
+                               "bg-white/60 text-black/50"
                   }`}
                 >
                   {isDone    ? <CheckCircle2 className="w-3.5 h-3.5" /> :
@@ -140,8 +136,6 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
               );
             })}
           </div>
-
-          {/* Overall progress bar */}
           <div className="space-y-1">
             <div className="h-2 bg-black/20 rounded-full overflow-hidden">
               <div
@@ -161,8 +155,8 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
         </div>
       )}
 
-      {/* ── Terminal Log ── */}
-      <div ref={ref} className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-72 overflow-y-auto shadow-[4px_4px_0_0_#000]">
+      {/* Terminal Log */}
+      <div ref={ref} className="p-4 border-[3px] border-black bg-gray-900 font-mono text-sm h-64 overflow-y-auto shadow-[4px_4px_0_0_#000]">
         <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-gray-900 border-b border-gray-700">
           <div className="flex items-center gap-2">
             <Terminal className="w-4 h-4 text-pink-400" />
@@ -203,7 +197,7 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
   );
 }
 
-/* ── Final Report Panel ──────────────────────────────────────────────────── */
+/* ── Final Report Panel ────────────────────────────────────────────────────── */
 function ReportPanel({ doc, prompt, approvalStats }: { doc: string; prompt: string; approvalStats: { approved: number; rejected: number; total: number } }) {
   const [open, setOpen] = useState(true);
   const download = () => {
@@ -216,10 +210,10 @@ function ReportPanel({ doc, prompt, approvalStats }: { doc: string; prompt: stri
     URL.revokeObjectURL(url);
   };
   return (
-    <div className="border-[3px] border-black bg-white shadow-[4px_4px_0_0_#000] mt-2">
+    <div className="border-[3px] border-black bg-white shadow-[4px_4px_0_0_#000]">
       <div className="flex items-center justify-between px-4 py-3 bg-neo-pink border-b-[3px] border-black">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-black" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <FileText className="w-5 h-5 text-black flex-shrink-0" />
           <span className="font-display font-black text-sm uppercase">AI Structured Report</span>
           <span className="flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded">
             <CheckCircle2 className="w-3 h-3" /> {approvalStats.approved}/{approvalStats.total} Approved
@@ -228,7 +222,7 @@ function ReportPanel({ doc, prompt, approvalStats }: { doc: string; prompt: stri
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded">{approvalStats.rejected} Rejected</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={download} className="flex items-center gap-2 bg-black text-white px-3 py-1.5 text-xs font-bold uppercase hover:bg-black/80 transition-colors">
             <Download className="w-3 h-3" /> Download
           </button>
@@ -246,7 +240,7 @@ function ReportPanel({ doc, prompt, approvalStats }: { doc: string; prompt: stri
   );
 }
 
-/* ── Approval Summary Bar ────────────────────────────────────────────────── */
+/* ── Approval Summary Bar ──────────────────────────────────────────────────── */
 function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
   outputs: AgentOutput[];
   onApproveAll: () => void;
@@ -256,8 +250,8 @@ function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
   const approved = outputs.filter(o => o.status === "approved" || o.status === "edited").length;
   const rejected = outputs.filter(o => o.status === "rejected").length;
   return (
-    <div className="flex items-center justify-between bg-neo-yellow border-[3px] border-black px-4 py-3 shadow-[3px_3px_0_0_#000]">
-      <div className="flex items-center gap-4 font-mono text-sm font-bold">
+    <div className="flex items-center justify-between bg-neo-yellow border-[3px] border-black px-4 py-3 shadow-[3px_3px_0_0_#000] flex-wrap gap-3">
+      <div className="flex items-center gap-4 font-mono text-sm font-bold flex-wrap">
         <span className="text-gray-700">{outputs.length} Agents</span>
         <span className="text-green-700">✓ {approved} Approved</span>
         {rejected > 0 && <span className="text-red-700">✗ {rejected} Rejected</span>}
@@ -275,112 +269,12 @@ function ApprovalBar({ outputs, onApproveAll, onRejectAll }: {
   );
 }
 
-/* ── Real-Time Command History ───────────────────────────────────────────── */
-type HistoryRun = {
-  id: string;
-  command: string;
-  status: string;
-  startedAt: string;
-  updatedAt: string;
-  steps: { agentName: string; status: string }[];
-  duration: number;
-};
-
-function CommandHistory({ refreshKey }: { refreshKey: number }) {
-  const [runs, setRuns]       = useState<HistoryRun[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [open, setOpen]       = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const r = await fetch("/api/v1/ai-command-center/tasks?limit=10");
-      if (r.ok) {
-        const j = await r.json();
-        setRuns(j.data || []);
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
-
-  if (!loading && runs.length === 0) return null;
-
-  const statusColor = (s: string) =>
-    s === "completed"         ? "bg-green-400 text-black" :
-    s === "failed"            ? "bg-red-400 text-white" :
-    s === "running"           ? "bg-cyan-400 text-black animate-pulse" :
-    s === "awaiting_approval" ? "bg-yellow-400 text-black" :
-    "bg-gray-200 text-black";
-
-  return (
-    <div className="border-[3px] border-black bg-white shadow-[4px_4px_0_0_#000]">
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b-[3px] border-black">
-        <div className="flex items-center gap-2">
-          <History className="w-4 h-4 text-cyan-400" />
-          <span className="font-display font-black text-sm uppercase text-white">AI Command History</span>
-          <span className="font-mono text-xs text-gray-400">(live)</span>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button onClick={() => setOpen(!open)} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
-            {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-      {open && (
-        <div className="divide-y-[2px] divide-black/10">
-          {loading ? (
-            <div className="flex items-center gap-2 px-4 py-6 text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading history...
-            </div>
-          ) : runs.map(run => (
-            <div key={run.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-bold text-black truncate">{run.command}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${statusColor(run.status)}`}>{run.status}</span>
-                    <span className="flex items-center gap-1 font-mono text-[10px] text-gray-500">
-                      <Clock className="w-3 h-3" />
-                      {new Date(run.startedAt).toLocaleString()}
-                    </span>
-                    {run.duration > 0 && (
-                      <span className="font-mono text-[10px] text-gray-400">{(run.duration / 1000).toFixed(1)}s</span>
-                    )}
-                  </div>
-                  {run.steps?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {run.steps.map((s, i) => (
-                        <span key={i} className={`text-[9px] font-bold px-1.5 py-0.5 border border-black rounded ${
-                          s.status === "done" || s.status === "approved" ? "bg-green-100 text-green-800" :
-                          s.status === "running" ? "bg-blue-100 text-blue-800" :
-                          s.status === "failed" || s.status === "rejected" ? "bg-red-100 text-red-800" :
-                          "bg-gray-100 text-gray-600"
-                        }`}>{s.agentName}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 import { AgentApprovalModal, PendingApprovalData } from "@/components/ui/AgentApprovalModal";
 import { TargetAudienceModal, AudienceData } from "@/components/ui/TargetAudienceModal";
 import { io as socketIOClient } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 
-/* ══ MAIN PAGE ══════════════════════════════════════════════════════════════ */
+/* ══ MAIN PAGE ═══════════════════════════════════════════════════════════════ */
 export default function MissionControlPage() {
   const searchParams = useSearchParams();
   const [commandInput, setCommandInput]   = useState(searchParams?.get("cmd") ? decodeURIComponent(searchParams.get("cmd")!) : "");
@@ -392,18 +286,14 @@ export default function MissionControlPage() {
   const [documentation, setDocumentation] = useState("");
   const [lastPrompt, setLastPrompt]       = useState("");
 
-  // Target Audience & Live Dispatch Modal State
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
-
-  // Workflow & Approval Modal States
   const [pendingApproval, setPendingApproval] = useState<PendingApprovalData | null>(null);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [liveActivities, setLiveActivities] = useState<string[]>([]);
   const [agentStatusMap, setAgentStatusMap] = useState<Record<string, { status: string; task: string }>>({});
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-
-  // Setup Socket.io real-time listener for workflows & agent events
+  // Socket.io real-time listener
   useEffect(() => {
     const socketUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
     const socket = socketIOClient(socketUrl, {
@@ -412,8 +302,6 @@ export default function MissionControlPage() {
 
     socket.on("workflow:step_update", (data: any) => {
       const { runId, agentName, status, output, requiresApproval } = data;
-
-      // Update Live Agent Status Map
       setAgentStatusMap((prev) => ({
         ...prev,
         [agentName]: {
@@ -421,12 +309,8 @@ export default function MissionControlPage() {
           task: status === "running" ? `Executing task for workflow run ${runId.slice(0, 8)}...` : `Completed workflow step`,
         },
       }));
-
-      // Append to Recent Activity
       const activityMsg = `[${agentName}] ${status.toUpperCase()} — Workflow run ${runId.slice(0, 8)}`;
       setLiveActivities((prev) => [activityMsg, ...prev.slice(0, 15)]);
-
-      // If awaiting approval, pop up approval modal
       if (status === "awaiting_approval" || requiresApproval) {
         setPendingApproval({
           runId,
@@ -453,7 +337,6 @@ export default function MissionControlPage() {
       }
     });
 
-    // Refresh history panel whenever a workflow completes or is created
     socket.on("workflow:update", (data: any) => {
       if (data?.event === "COMPLETED" || data?.event === "FAILED" || data?.event === "CREATED") {
         setHistoryRefreshKey(k => k + 1);
@@ -464,12 +347,8 @@ export default function MissionControlPage() {
       }
     });
 
-    return () => {
-      socket.disconnect();
-    };
+    return () => { socket.disconnect(); };
   }, []);
-
-
 
   const handleApprove = (key: string) =>
     setAgentOutputs(prev => prev.map(o => o.agentKey === key ? { ...o, status: "approved" } : o));
@@ -486,8 +365,6 @@ export default function MissionControlPage() {
       toast.error("Please enter a campaign prompt in the command bar.");
       return;
     }
-
-    // Interactively pop up the Target Audience & Delivery Details modal first if not forced
     if (!forceExecute && !audienceData) {
       setIsAudienceModalOpen(true);
       return;
@@ -497,9 +374,9 @@ export default function MissionControlPage() {
     setAgentOutputs([]);
     setDocumentation("");
     setLastPrompt(prompt);
+    setIsExecuting(true);
 
     try {
-      // ── Step 1: Start Workflow Engine Run (PostgreSQL + Socket.io) ──
       fetch("/api/v1/workflows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -514,7 +391,6 @@ export default function MissionControlPage() {
         }),
       }).catch((err) => console.warn("[WorkflowEngine] Start workflow fetch warning:", err));
 
-      // ── Step 2: Stream GLM Query Events (SSE) ──
       let res = await fetch("/api/v1/ai-command-center/query/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -557,8 +433,8 @@ export default function MissionControlPage() {
         });
       }
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status} — ${await res.text().catch(() => "")}`);
+      if (!res || !res.ok || !res.body) {
+        throw new Error(`HTTP ${res?.status} — ${await res?.text().catch(() => "")}`);
       }
 
       const reader  = res.body.getReader();
@@ -574,14 +450,12 @@ export default function MissionControlPage() {
 
         for (const line of lines) {
           if (line.startsWith("event:") && line.includes("end")) continue;
-
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
           if (!jsonStr || jsonStr === '{"status":"done"}') continue;
 
           try {
             const ev: StageEvent = JSON.parse(jsonStr);
-
             setSseEvents(prev => [...prev, ev]);
 
             if (ev.stage === "AB_TEST" && ev.status === "completed" && ev.data?.ab_result) {
@@ -606,9 +480,7 @@ export default function MissionControlPage() {
                     .replace(/ agent$/i, "")
                     .replace(/\s+/g, "_")
                 || "unknown";
-
               const result = ev.data?.result ?? { status: "completed", detail: ev.detail };
-
               const output: AgentOutput = {
                 agentKey,
                 agentName:  ev.agent || agentKey,
@@ -616,7 +488,6 @@ export default function MissionControlPage() {
                 result,
                 status:     "pending",
               };
-
               setAgentOutputs(prev => {
                 const exists = prev.find(o => o.agentKey === agentKey);
                 return exists ? prev : [...prev, output];
@@ -637,7 +508,7 @@ export default function MissionControlPage() {
               return;
             }
           } catch (_) {
-            // Silently skip malformed SSE lines
+            // Skip malformed SSE lines
           }
         }
       }
@@ -645,17 +516,14 @@ export default function MissionControlPage() {
       toast.success("Pipeline complete — review agent outputs below");
       setCommandInput("");
 
-      // Auto-save this run to the user's campaign history
+      // Auto-save run to campaign history
       try {
-        const agentResultsMap: Record<string, any> = {};
-        // agentOutputs state is set asynchronously — capture from local SSE data
-        // We'll save the documentation and prompt; agent outputs are appended via state
         await fetch("/api/v1/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt,
-            documentation: "", // will be updated by the state effect below
+            documentation: "",
             channels: audienceData?.channels || [],
             recipientEmail: audienceData?.recipientEmail || "",
             recipientPhone: audienceData?.recipientPhone || "",
@@ -679,9 +547,10 @@ export default function MissionControlPage() {
   };
 
   return (
-    <div className="theme-pastel flex flex-col gap-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="theme-pastel flex flex-col gap-6 p-6">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-tight">Mission Control</h1>
           <p className="mt-1 font-mono text-xs text-black/60">Command centre for AI-powered marketing operations</p>
@@ -689,7 +558,7 @@ export default function MissionControlPage() {
         <NeoBadge tone="success"><span className="mr-2">●</span>All Systems Operational</NeoBadge>
       </div>
 
-      {/* Checkpoint Banner */}
+      {/* ── Checkpoint Banner ── */}
       {checkpointId && commandInput && (
         <div className="flex items-center gap-3 border-[3px] border-black bg-neo-yellow shadow-[4px_4px_0_0_#000] px-4 py-3">
           <History className="w-4 h-4 text-black flex-shrink-0" />
@@ -699,20 +568,22 @@ export default function MissionControlPage() {
           </div>
           <button
             onClick={() => setCheckpointId(null)}
-            className="font-mono text-[10px] font-bold uppercase border-2 border-black bg-black text-white px-2 py-1 hover:bg-black/80 transition-colors"
+            className="font-mono text-[10px] font-bold uppercase border-2 border-black bg-black text-white px-2 py-1 hover:bg-black/80 transition-colors flex-shrink-0"
           >
             ✕ Dismiss
           </button>
         </div>
       )}
 
-      {/* AI Command Bar */}
-      <section>
+      {/* ── AI Command Bar ── */}
+      <section className="flex flex-col gap-0">
         <NeoCard title="AI Command Bar" accent="yellow">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <p className="font-medium text-black/70">Tell MarketOS what you want to accomplish in natural language</p>
+
+            {/* Input row */}
             <div className="relative">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap">
                 <input
                   type="text"
                   value={commandInput}
@@ -722,28 +593,30 @@ export default function MissionControlPage() {
                   onKeyDown={e => { if (e.key === "Enter") handleExecute(); }}
                   placeholder='Try: "Create a campaign targeting enterprise CMOs on LinkedIn"'
                   disabled={isExecuting}
-                  className="flex-1 border-neo border-neo-ink bg-neo-surface px-4 py-3 font-mono text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo disabled:opacity-60"
+                  className="flex-1 min-w-0 border-neo border-neo-ink bg-neo-surface px-4 py-3 font-mono text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={() => setIsAudienceModalOpen(true)}
                   disabled={isExecuting}
-                  className="flex items-center gap-2 border-neo border-neo-ink bg-neo-yellow px-4 py-3 font-display font-black text-xs uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50"
+                  className="flex items-center gap-2 border-neo border-neo-ink bg-neo-yellow px-4 py-3 font-display font-black text-xs uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50 whitespace-nowrap"
                   title="Configure target audience and brand parameters"
                 >
-                  <Users className="h-4 w-4" /> Target Audience
+                  <Users className="h-4 w-4 flex-shrink-0" /> Target Audience
                 </button>
                 <button
                   onClick={() => handleExecute()}
                   disabled={isExecuting}
-                  className="flex items-center gap-2 border-neo border-neo-ink bg-neo-cyan px-6 py-3 font-display font-black uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 border-neo border-neo-ink bg-neo-cyan px-6 py-3 font-display font-black uppercase shadow-neo-sm transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo active:translate-x-px active:translate-y-px active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   {isExecuting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                   {isExecuting ? "Running..." : "Execute"}
                 </button>
               </div>
+
+              {/* Autocomplete suggestions dropdown */}
               {showSuggestions && !isExecuting && (
-                <div className="absolute top-full z-10 mt-2 w-full border-neo border-neo-ink bg-neo-surface shadow-neo-sm">
+                <div className="absolute top-full z-20 mt-1 w-full border-neo border-neo-ink bg-neo-surface shadow-neo-sm">
                   <div className="border-b-neo border-neo-ink bg-neo-pink px-4 py-2">
                     <p className="font-mono text-xs font-bold uppercase">Suggested Commands</p>
                   </div>
@@ -759,6 +632,8 @@ export default function MissionControlPage() {
                 </div>
               )}
             </div>
+
+            {/* Quick example tags */}
             <div className="flex flex-wrap gap-2">
               <p className="w-full font-mono text-[10px] uppercase text-black/60">Quick examples:</p>
               {["Campaign Creation","Agent Commands","Content Generation","Performance Analysis"].map(tag => (
@@ -771,18 +646,45 @@ export default function MissionControlPage() {
           </div>
         </NeoCard>
 
-        {/* Pipeline Log */}
+        {/* ── Live Pipeline Log (renders directly below command bar, no overlap) ── */}
         {(isExecuting || sseEvents.length > 0) && (
-          <div className="mt-4">
+          <div className="w-full mt-0">
             <PipelineLog events={sseEvents} isExecuting={isExecuting} />
           </div>
         )}
       </section>
 
-      {/* Agent Approval Section */}
-      {agentOutputs.length > 0 && (
+      {/* ── Live Activity Feed (only shown when socket events arrive) ── */}
+      {liveActivities.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="border-[3px] border-black bg-gray-900 shadow-[4px_4px_0_0_#000]">
+            <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-black">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-lime-400 animate-pulse" />
+                <span className="font-display font-black text-sm uppercase text-white">Live Activity</span>
+              </div>
+              <button
+                onClick={() => setLiveActivities([])}
+                className="text-gray-400 hover:text-white transition-colors p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-40 overflow-y-auto divide-y divide-white/5">
+              {liveActivities.map((msg, i) => (
+                <div key={i} className="px-4 py-2 font-mono text-xs text-gray-300">
+                  {msg}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Agent Outputs — Review & Approve ── */}
+      {agentOutputs.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="font-display text-xl font-black uppercase flex items-center gap-2">
                 <Bot className="w-6 h-6" /> Agent Outputs — Review &amp; Approve
@@ -795,7 +697,7 @@ export default function MissionControlPage() {
 
           <ApprovalBar outputs={agentOutputs} onApproveAll={approveAll} onRejectAll={rejectAll} />
 
-          <div className="flex flex-col gap-4 mt-4">
+          <div className="flex flex-col gap-4">
             {agentOutputs.map(output => (
               <AgentApprovalCard
                 key={output.agentKey}
@@ -809,7 +711,7 @@ export default function MissionControlPage() {
 
           {/* Finalise Button */}
           {agentOutputs.length > 0 && !isExecuting && (
-            <div className="mt-6 flex items-center gap-4 p-4 border-[3px] border-black bg-neo-lime shadow-[4px_4px_0_0_#000]">
+            <div className="flex items-center gap-4 p-4 border-[3px] border-black bg-neo-lime shadow-[4px_4px_0_0_#000] flex-wrap">
               <div className="flex-1">
                 <p className="font-display font-black text-sm uppercase">Ready to Finalise?</p>
                 <p className="font-mono text-xs text-black/70">
@@ -831,14 +733,14 @@ export default function MissionControlPage() {
         </section>
       )}
 
-      {/* Structured Report */}
+      {/* ── Structured Report ── */}
       {documentation && (
         <section>
           <ReportPanel doc={documentation} prompt={lastPrompt} approvalStats={approvalStats} />
         </section>
       )}
 
-      {/* Agent Approval Modal */}
+      {/* ── Agent Approval Modal ── */}
       <AgentApprovalModal
         data={pendingApproval}
         isOpen={isApprovalModalOpen}
@@ -848,7 +750,7 @@ export default function MissionControlPage() {
         }}
       />
 
-      {/* Target Audience & Live Send Pop-up */}
+      {/* ── Target Audience & Live Send Pop-up ── */}
       <TargetAudienceModal
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
@@ -861,4 +763,3 @@ export default function MissionControlPage() {
     </div>
   );
 }
-
