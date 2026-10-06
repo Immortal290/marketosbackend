@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import {
   History, Search, Bot, FileText, Send, Trash2, RefreshCw,
   ChevronDown, ChevronUp, ChevronRight, Loader2, CheckCircle2,
   Mail, MessageSquare, Share2, Download, Clock, Eye, Zap,
-  XCircle, AlertCircle, Play, Archive,
+  XCircle, AlertCircle, Play, Archive, RotateCcw, Flag,
 } from "lucide-react";
+
 
 interface DispatchEntry {
   channel: string;
@@ -194,7 +196,19 @@ function HistoryDetailPanel({
   onArchive: () => void;
   onDispatch: () => void;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"report" | "outputs" | "dispatch">("report");
+
+  const handleResumeCheckpoint = () => {
+    // Pre-fill the Mission Control command bar with this prompt via URL param
+    const encoded = encodeURIComponent(item.prompt);
+    onClose();
+    toast.success("Resuming from checkpoint...", {
+      description: item.prompt.slice(0, 80),
+    });
+    router.push(`/dashboard?cmd=${encoded}&checkpoint=${item.id}`);
+  };
+
 
   const downloadReport = () => {
     if (!item.documentation) return;
@@ -318,6 +332,14 @@ function HistoryDetailPanel({
             className="flex items-center gap-1.5 border-2 border-black bg-white px-3 py-2 font-mono text-xs font-bold uppercase shadow-[2px_2px_0_0_#000] hover:bg-red-50 transition-colors"
           >
             <Archive className="w-3.5 h-3.5" /> Archive
+          </button>
+          {/* ── Checkpoint / Resume Button ── */}
+          <button
+            onClick={handleResumeCheckpoint}
+            className="flex items-center gap-1.5 border-2 border-black bg-neo-yellow px-3 py-2 font-display font-black text-xs uppercase shadow-[2px_2px_0_0_#000] hover:-translate-y-px hover:shadow-[3px_3px_0_0_#000] transition-all"
+            title="Resume from this command checkpoint in Mission Control"
+          >
+            <Flag className="w-3.5 h-3.5" /> Resume Checkpoint
           </button>
           <div className="flex-1" />
           <button

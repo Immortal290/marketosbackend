@@ -5,31 +5,13 @@ import { toast } from "sonner";
 import { NeoCard } from "@/components/ui/NeoCard";
 import { NeoBadge } from "@/components/ui/NeoBadge";
 import { AgentApprovalCard, AgentOutput } from "@/components/ui/AgentApprovalPanel";
-import useSWR from "swr";
-import { fetcher } from "@/lib/api";
 import {
   Sparkles, Zap, Bot, TrendingUp, ArrowRight, Send, Lightbulb,
   Loader2, CheckCircle2, Brain, GitBranch, FileText, Cpu,
   Terminal, Download, ChevronDown, ChevronUp, CheckSquare, XSquare, Users,
-  History, Clock, RefreshCw, ChevronRight,
+  History, Clock, RefreshCw, ChevronRight, Activity, Radio,
 } from "lucide-react";
 
-const kpis = [
-  { label: "Active Campaigns", value: "12", tone: "info" as const },
-  { label: "Signups (24h)", value: "487", tone: "success" as const },
-  { label: "Spend (24h)", value: "$3,240", tone: "info" as const },
-  { label: "Agents Online", value: "17", tone: "success" as const },
-];
-const agents = [
-  { name: "Supervisor Agent", status: "Running", task: "Monitoring all operations" },
-  { name: "Content Agent",    status: "Running", task: "Generating blog posts" },
-  { name: "Analytics Agent",  status: "Running", task: "Analysing performance" },
-];
-const activity = [
-  "Optimisation Agent reallocated $200 from Ad Set A to Ad Set C.",
-  "Content Agent published 3 new variants for the landing page.",
-  "Analytics Agent flagged a 12% CTR drop on LinkedIn.",
-];
 const agentCommands = [
   "Create a LinkedIn campaign targeting enterprise CMOs",
   "Generate 10 email subject line variants",
@@ -38,6 +20,7 @@ const agentCommands = [
   "Create a campaign performance report",
   "Generate social media posts for product launch",
 ];
+
 
 type StageEvent = {
   stage?: string;
@@ -65,18 +48,16 @@ const STAGE_LABELS: Record<string, string> = {
   AGENT_EXEC: "Agent Processing", SYNTHESIS: "Report Generation", COMPLETE: "Complete",
 };
 
-/* ── Small terminal log ──────────────────────────────────────────────────── */
+/* ── Interactive Pipeline Tracker ───────────────────────────────────────── */
 function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecuting: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [events]);
 
-  // Extract the agent plan from the GLM_REASONING completed event
   const planEvent = events.find(e => e.stage === "GLM_REASONING" && e.status === "completed");
   const agentPlan: string[] = (planEvent?.data?.agents as string[]) || [];
   const intentLabel: string = (planEvent?.data?.intent as string) || "";
   const intentConfidence: number = (planEvent?.data?.confidence as number) || 0;
 
-  // Track which agents are done
   const completedAgents = new Set(
     events
       .filter(e => e.stage === "AGENT_EXEC" && e.status === "completed")
@@ -86,58 +67,106 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
     ? events.findLast(e => e.stage === "AGENT_EXEC" && e.status === "running")?.agent || null
     : [...events].reverse().find(e => e.stage === "AGENT_EXEC" && e.status === "running")?.agent || null;
 
+  const currentStage = events.length > 0 ? events[events.length - 1].stage : null;
+  const overallProgress = agentPlan.length > 0 ? (completedAgents.size / agentPlan.length) * 100 : 0;
+
   if (!isExecuting && events.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Agent plan strip — shown once GLM classifies the intent */}
-      {agentPlan.length > 0 && (
-        <div className="border-[3px] border-black bg-neo-pink shadow-[4px_4px_0_0_#000] p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Brain className="w-4 h-4 text-black" />
-            <span className="font-mono text-xs font-black uppercase">
-              Intent: {intentLabel}
-              {intentConfidence > 0 && <span className="ml-2 text-black/60">({Math.round(intentConfidence * 100)}% confidence)</span>}
+    <div className="flex flex-col gap-4 mt-4">
+
+      {/* ── Live Status Banner ── */}
+      <div className="flex items-center justify-between border-[3px] border-black bg-gray-900 px-5 py-3 shadow-[4px_4px_0_0_#000]">
+        <div className="flex items-center gap-3">
+          <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
+          <span className="font-mono text-xs font-bold uppercase text-cyan-400 tracking-widest">
+            {isExecuting ? "Pipeline Running" : "Pipeline Complete"}
+          </span>
+          {currentStage && (
+            <span className={`font-mono text-xs px-2 py-0.5 rounded font-bold uppercase ${
+              STAGE_COLORS[currentStage] || "text-white"
+            } bg-white/10`}>
+              {STAGE_LABELS[currentStage] || currentStage}
             </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
+          <span className="font-mono text-xs text-gray-400">
+            {events.length} event{events.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Intent & Agent Plan ── */}
+      {agentPlan.length > 0 && (
+        <div className="border-[3px] border-black bg-neo-pink shadow-[4px_4px_0_0_#000] p-4">
+          {/* Intent row */}
+          <div className="flex items-center gap-3 mb-3">
+            <Brain className="w-5 h-5 text-black flex-shrink-0" />
+            <div>
+              <span className="font-mono text-[10px] font-bold uppercase text-black/60">Detected Intent</span>
+              <p className="font-display font-black text-sm uppercase">
+                {intentLabel}
+                {intentConfidence > 0 && (
+                  <span className="ml-2 font-mono text-xs font-normal text-black/60 normal-case">
+                    ({Math.round(intentConfidence * 100)}% confidence)
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          {/* Agent pipeline chips */}
+          <div className="flex flex-wrap gap-2 mb-3">
             {agentPlan.map((agentName, i) => {
               const isDone    = completedAgents.has(agentName);
               const isRunning = runningAgent === agentName;
               return (
                 <span
                   key={i}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs font-bold border-2 border-black transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all duration-300 ${
                     isDone    ? "bg-green-400 text-black shadow-[2px_2px_0_0_#000]" :
-                    isRunning ? "bg-cyan-400 text-black shadow-[2px_2px_0_0_#000] animate-pulse" :
-                                "bg-white text-black/60"
+                    isRunning ? "bg-cyan-400 text-black shadow-[3px_3px_0_0_#000] scale-105 animate-pulse" :
+                                "bg-white/60 text-black/50"
                   }`}
                 >
-                  {isDone ? <CheckCircle2 className="w-3 h-3" /> : isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
+                  {isDone    ? <CheckCircle2 className="w-3.5 h-3.5" /> :
+                   isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+                               <Bot className="w-3.5 h-3.5" />}
                   {agentName}
+                  {isRunning && <span className="text-[9px] uppercase tracking-wider">· working</span>}
                 </span>
               );
             })}
           </div>
-          {/* Progress bar */}
-          <div className="mt-2 h-1.5 bg-black/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-black transition-all duration-500"
-              style={{ width: `${agentPlan.length > 0 ? (completedAgents.size / agentPlan.length) * 100 : 0}%` }}
-            />
+
+          {/* Overall progress bar */}
+          <div className="space-y-1">
+            <div className="h-2 bg-black/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-black transition-all duration-700 ease-out rounded-full"
+                style={{ width: `${overallProgress}%` }}
+              />
+            </div>
+            <div className="flex justify-between">
+              <p className="font-mono text-[10px] text-black/60">
+                {completedAgents.size} / {agentPlan.length} agents complete
+              </p>
+              <p className="font-mono text-[10px] font-bold text-black/80">
+                {Math.round(overallProgress)}%
+              </p>
+            </div>
           </div>
-          <p className="font-mono text-[10px] text-black/60 mt-1">
-            {completedAgents.size} / {agentPlan.length} agents complete
-          </p>
         </div>
       )}
 
-      {/* Terminal log */}
-      <div ref={ref} className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-64 overflow-y-auto shadow-[4px_4px_0_0_#000]">
+      {/* ── Terminal Log ── */}
+      <div ref={ref} className="p-4 rounded-none border-[3px] border-black bg-gray-900 font-mono text-sm h-72 overflow-y-auto shadow-[4px_4px_0_0_#000]">
         <div className="sticky top-0 flex justify-between items-center mb-3 pb-2 bg-gray-900 border-b border-gray-700">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-pink-400 animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">AI Agent Pipeline</span>
+            <Terminal className="w-4 h-4 text-pink-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">AI Agent Pipeline Log</span>
           </div>
           {isExecuting && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
         </div>
@@ -159,7 +188,6 @@ function PipelineLog({ events, isExecuting }: { events: StageEvent[]; isExecutin
                     "bg-yellow-500/20 text-yellow-400"}`}>{ev.status}</span>
                 </div>
                 <span className="text-xs text-gray-300 break-all">{ev.error || ev.detail}</span>
-                {/* Show result preview for completed AGENT_EXEC events */}
                 {ev.stage === "AGENT_EXEC" && ev.status === "completed" && ev.data?.result_preview && (
                   <span className="text-[10px] text-lime-400 font-mono mt-0.5 break-all">
                     ↳ {String(ev.data.result_preview).slice(0, 150)}
@@ -350,10 +378,13 @@ function CommandHistory({ refreshKey }: { refreshKey: number }) {
 import { AgentApprovalModal, PendingApprovalData } from "@/components/ui/AgentApprovalModal";
 import { TargetAudienceModal, AudienceData } from "@/components/ui/TargetAudienceModal";
 import { io as socketIOClient } from "socket.io-client";
+import { useSearchParams } from "next/navigation";
 
 /* ══ MAIN PAGE ══════════════════════════════════════════════════════════════ */
 export default function MissionControlPage() {
-  const [commandInput, setCommandInput]   = useState("");
+  const searchParams = useSearchParams();
+  const [commandInput, setCommandInput]   = useState(searchParams?.get("cmd") ? decodeURIComponent(searchParams.get("cmd")!) : "");
+  const [checkpointId, setCheckpointId]   = useState<string | null>(searchParams?.get("checkpoint") || null);
   const [showSuggestions, setShowSugg]    = useState(false);
   const [isExecuting, setIsExecuting]     = useState(false);
   const [sseEvents, setSseEvents]         = useState<StageEvent[]>([]);
@@ -371,9 +402,6 @@ export default function MissionControlPage() {
   const [agentStatusMap, setAgentStatusMap] = useState<Record<string, { status: string; task: string }>>({});
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-  const { data: kpisData }    = useSWR("/dashboard/kpis?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
-  const { data: agentsData }  = useSWR("/dashboard/agents?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
-  const { data: activityData }= useSWR("/dashboard/activity?workspaceId=00000000-0000-0000-0000-000000000000", fetcher);
 
   // Setup Socket.io real-time listener for workflows & agent events
   useEffect(() => {
@@ -667,6 +695,23 @@ export default function MissionControlPage() {
         <NeoBadge tone="success"><span className="mr-2">●</span>All Systems Operational</NeoBadge>
       </div>
 
+      {/* Checkpoint Banner */}
+      {checkpointId && commandInput && (
+        <div className="flex items-center gap-3 border-[3px] border-black bg-neo-yellow shadow-[4px_4px_0_0_#000] px-4 py-3">
+          <History className="w-4 h-4 text-black flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-black text-xs uppercase">Resumed from Checkpoint</p>
+            <p className="font-mono text-[11px] text-black/70 truncate">Command pre-loaded from history ID: {checkpointId.slice(0, 8)}…</p>
+          </div>
+          <button
+            onClick={() => setCheckpointId(null)}
+            className="font-mono text-[10px] font-bold uppercase border-2 border-black bg-black text-white px-2 py-1 hover:bg-black/80 transition-colors"
+          >
+            ✕ Dismiss
+          </button>
+        </div>
+      )}
+
       {/* AI Command Bar */}
       <section>
         <NeoCard title="AI Command Bar" accent="yellow">
@@ -798,76 +843,6 @@ export default function MissionControlPage() {
           <ReportPanel doc={documentation} prompt={lastPrompt} approvalStats={approvalStats} />
         </section>
       )}
-
-      {/* KPIs */}
-      <section className="grid gap-4 md:grid-cols-4">
-        {displayKpis.map((kpi: any) => (
-          <NeoCard key={kpi.label} title={kpi.label} accent="cyan">
-            <div className="flex items-center justify-between">
-              <span className="font-display text-3xl font-black">{kpi.value}</span>
-              <NeoBadge tone={kpi.tone}>Live</NeoBadge>
-            </div>
-          </NeoCard>
-        ))}
-      </section>
-
-      {/* Agents & Activity */}
-      <section className="grid gap-4 md:grid-cols-2">
-        <NeoCard title="Autonomous Agents" accent="pink">
-          <ul className="flex flex-col gap-2">
-            {(agentsData || agents).map((agent: any) => {
-              const liveState = agentStatusMap[agent.name];
-              const currentStatus = liveState ? liveState.status : agent.status;
-              const currentTask = liveState ? liveState.task : (agent.currentTask || agent.task);
-              const tone = currentStatus === "RUNNING" ? "info" : currentStatus === "AWAITING APPROVAL" ? "warning" : currentStatus === "DONE" ? "success" : agent.status === "ERROR" ? "danger" : "success";
-
-              return (
-                <li key={agent.name} className="flex flex-col gap-1 border-b-neo border-neo-ink pb-2 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">{agent.name}</span>
-                    <NeoBadge tone={tone}>{currentStatus}</NeoBadge>
-                  </div>
-                  <p className="font-mono text-xs text-black/60">{currentTask}</p>
-                </li>
-              );
-            })}
-          </ul>
-        </NeoCard>
-        <NeoCard title="Recent Activity" accent="lime">
-          <ul className="flex list-disc flex-col gap-2 pl-5">
-            {[
-              ...liveActivities,
-              ...(activityData ? activityData.map((a: any) => a.message) : activity)
-            ].slice(0, 8).map((item: any, i: number) => (
-              <li key={i} className="font-medium text-xs font-mono">{item}</li>
-            ))}
-          </ul>
-        </NeoCard>
-      </section>
-
-      {/* Prompt Examples */}
-      <section>
-        <NeoCard title="Natural Language Prompt Examples" accent="cyan">
-          <div className="flex items-start gap-3 mb-4">
-            <Lightbulb className="h-6 w-6 flex-shrink-0 text-black" />
-            <p className="font-medium text-black/70">Examples of what you can ask the AI Command Bar:</p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {agentCommands.map((cmd, i) => (
-              <button key={i} onClick={() => setCommandInput(cmd)}
-                className="flex items-start gap-3 border-neo border-neo-ink bg-neo-surface p-3 text-left transition-all hover:-translate-x-px hover:-translate-y-px hover:bg-neo-lime hover:shadow-neo-sm">
-                <Sparkles className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span className="font-medium">{cmd}</span>
-              </button>
-            ))}
-          </div>
-        </NeoCard>
-      </section>
-
-      {/* Real-time Command History */}
-      <section>
-        <CommandHistory refreshKey={historyRefreshKey} />
-      </section>
 
       {/* Agent Approval Modal */}
       <AgentApprovalModal
