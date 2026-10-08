@@ -29,9 +29,11 @@ var import_adapter_pg = require("@prisma/adapter-pg");
 var import_pg = require("pg");
 var DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+  console.error(
+    "[Prisma] WARNING: DATABASE_URL environment variable is not set. Database queries will fail. Ensure DATABASE_URL is configured in Railway Variables."
+  );
 }
-var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL || "postgresql://localhost/marketos_placeholder" });
 var adapter = new import_adapter_pg.PrismaPg(pool);
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({

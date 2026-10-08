@@ -30,10 +30,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/routes.ts
 var routes_exports = {};
 __export(routes_exports, {
-  default: () => routes_default19
+  default: () => routes_default25
 });
 module.exports = __toCommonJS(routes_exports);
-var import_express19 = require("express");
+var import_express26 = require("express");
 
 // src/modules/auth/routes.ts
 var import_express = require("express");
@@ -49,9 +49,11 @@ var import_adapter_pg = require("@prisma/adapter-pg");
 var import_pg = require("pg");
 var DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+  console.error(
+    "[Prisma] WARNING: DATABASE_URL environment variable is not set. Database queries will fail. Ensure DATABASE_URL is configured in Railway Variables."
+  );
 }
-var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL || "postgresql://localhost/marketos_placeholder" });
 var adapter = new import_adapter_pg.PrismaPg(pool);
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
@@ -464,6 +466,32 @@ router2.patch("/security", (req, res) => {
     agentFeedback: `SupervisorAgent enforced new security posture (Session timeout: ${securitySettings.sessionTimeoutMinutes} min, MFA: ${securitySettings.policies.find((p) => p.id === "s1")?.enabled ? "Mandated" : "Optional"}).`
   });
 });
+router2.get("/api-keys", async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst();
+    res.status(200).json({ success: true, data: user?.apiKeys || {} });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to fetch API keys" });
+  }
+});
+router2.patch("/api-keys", async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst();
+    if (user) {
+      const currentKeys = typeof user.apiKeys === "object" && user.apiKeys !== null ? user.apiKeys : {};
+      const updatedKeys = { ...currentKeys, ...req.body };
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { apiKeys: updatedKeys }
+      });
+      res.status(200).json({ success: true, data: updatedKeys, agentFeedback: "API keys updated securely in database." });
+    } else {
+      res.status(404).json({ success: false, error: "User not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to update API keys" });
+  }
+});
 var routes_default2 = router2;
 
 // src/modules/dashboard/routes.ts
@@ -644,13 +672,22 @@ var import_ioredis = __toESM(require("ioredis"));
 var redisClient = new import_ioredis.default({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: null
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+  // Limit reconnect attempts so a missing Redis doesn't spam logs forever
+  retryStrategy: (times) => {
+    if (times > 5) {
+      logger.warn("[Redis] Max reconnect attempts reached. Redis features will be unavailable.");
+      return null;
+    }
+    return Math.min(times * 500, 3e3);
+  }
 });
 redisClient.on("connect", () => {
-  logger.info("Connected to Redis");
+  logger.info("[Redis] Connected");
 });
 redisClient.on("error", (err) => {
-  logger.error("Redis connection error:", err);
+  logger.error("[Redis] Connection error (non-fatal):", err.message);
 });
 
 // src/lib/kafka.ts
@@ -659,10 +696,19 @@ var clientId = process.env.KAFKA_CLIENT_ID || "marketos-backend";
 var kafka = new import_kafkajs.Kafka({
   clientId,
   brokers: [kafkaBroker],
+  // ── Railway fix ────────────────────────────────────────────────────────────
+  // The Railway Kafka broker returns its internal container IP in metadata
+  // after the bootstrap handshake. That IP is unreachable from other services.
+  // enforceRequestTimeout makes stuck connections fail fast so KafkaJS
+  // re-resolves the hostname via DNS on the next retry instead of spinning.
+  enforceRequestTimeout: true,
+  requestTimeout: 15e3,
   retry: {
     retries: 5,
-    initialRetryTime: 1e3,
-    maxRetryTime: 1e4
+    initialRetryTime: 2e3,
+    maxRetryTime: 15e3,
+    factor: 2,
+    restartOnFailure: async () => true
   }
 });
 var producer = kafka.producer();
@@ -1269,20 +1315,103 @@ router8.get("/suggestions", (req, res) => {
     { id: "s2", label: "Re-engage cold leads", description: "4,200 leads haven't opened an email in 30 days", impact: "MEDIUM", prompt: "Create a re-engagement sequence for cold leads" }
   ] });
 });
-router8.get("/agents", (req, res) => {
-  const agents = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
-  res.status(200).json({ success: true, data: agents.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: i < 3 ? "RUNNING" : "IDLE", queueLength: i < 3 ? 2 : 0, successRate: 97 + Math.random() * 2 })) });
+router8.get("/agents", async (req, res) => {
+  try {
+    const health = await agentClient_default.getHealth();
+    const infra = health?.data || {};
+    const agentNames = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
+    const agents = agentNames.map((type, i) => ({
+      id: `agent-${i}`,
+      name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`,
+      type,
+      status: infra.status === "healthy" ? i < 3 ? "RUNNING" : "IDLE" : "OFFLINE",
+      queueLength: i < 3 ? 2 : 0,
+      successRate: 97 + Math.random() * 2
+    }));
+    res.status(200).json({ success: true, data: agents });
+  } catch {
+    const agentNames = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
+    res.status(200).json({ success: true, data: agentNames.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: "OFFLINE", queueLength: 0, successRate: 0 })) });
+  }
 });
-router8.get("/tasks", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router8.get("/tasks", async (req, res) => {
+  const page = parseInt(String(req.query.page || "1"));
+  const limit = parseInt(String(req.query.limit || "20"));
+  const skip = (page - 1) * limit;
+  const where = req.query.status ? { steps: { some: { status: req.query.status } } } : {};
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: { steps: { orderBy: { createdAt: "asc" } } }
+    }),
+    prisma.workflowRun.count({ where })
+  ]);
+  const data = runs.map((r) => ({
+    id: r.id,
+    command: r.command,
+    status: r.status,
+    agentType: "PIPELINE",
+    task: r.command,
+    startedAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    steps: r.steps,
+    duration: r.updatedAt.getTime() - r.createdAt.getTime()
+  }));
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) }
+  });
 });
-router8.get("/decisions", (req, res) => {
-  res.status(200).json({ success: true, data: [
-    { id: "d1", decision: "Pause underperforming ad set B", reasoning: "CTR dropped 40% over 3 days with no conversions", confidence: 0.91, outcome: "EXECUTED", timestamp: (/* @__PURE__ */ new Date()).toISOString() }
-  ] });
+router8.get("/decisions", async (req, res) => {
+  const limit = parseInt(String(req.query.limit || "20"));
+  const runs = await prisma.workflowRun.findMany({
+    take: limit,
+    orderBy: { updatedAt: "desc" },
+    include: { steps: { orderBy: { createdAt: "asc" }, take: 1 } }
+  });
+  const data = runs.map((r) => ({
+    id: r.id,
+    decision: r.command,
+    reasoning: `Workflow executed ${r.steps.length} agent step(s). Status: ${r.status}.`,
+    confidence: 0.91,
+    outcome: r.status === "completed" ? "EXECUTED" : r.status === "failed" ? "REJECTED" : r.status === "awaiting_approval" ? "PENDING" : "PENDING",
+    timestamp: r.updatedAt.toISOString(),
+    steps: r.steps
+  }));
+  res.status(200).json({ success: true, data });
 });
-router8.get("/memory", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router8.get("/memory", async (req, res) => {
+  const page = parseInt(String(req.query.page || "1"));
+  const limit = parseInt(String(req.query.limit || "20"));
+  const skip = (page - 1) * limit;
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: { steps: { where: { output: { not: null } }, take: 3 } }
+    }),
+    prisma.workflowRun.count()
+  ]);
+  const data = runs.flatMap(
+    (r) => r.steps.map((s) => ({
+      id: s.id,
+      agentType: s.agentName.toUpperCase().replace("AGENT", ""),
+      memType: "EPISODIC",
+      key: `run:${r.id}:${s.agentName}`,
+      value: s.output,
+      createdAt: s.createdAt
+    }))
+  );
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) }
+  });
 });
 router8.get("/automation-rules", (req, res) => {
   res.status(200).json({ success: true, data: [
@@ -1298,6 +1427,8 @@ router8.delete("/automation-rules/:id", (req, res) => {
 });
 router8.post("/pipeline/campaign", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const result = await agentClient_default.runCampaignSync(req.body);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -1308,6 +1439,8 @@ router8.post("/pipeline/campaign", async (req, res) => {
 });
 router8.post("/pipeline/campaign/async", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const result = await agentClient_default.runCampaignAsync(req.body);
     res.status(202).json({ success: true, data: result });
   } catch (err) {
@@ -1368,6 +1501,8 @@ router8.get("/status/:jobId", async (req, res) => {
 });
 router8.post("/pipeline/campaign/stream", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const stream = await agentClient_default.streamCampaign(req.body);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -1404,6 +1539,8 @@ data: ${JSON.stringify({ error: message })}
 });
 router8.post("/query/stream", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const stream = await agentClient_default.streamQuery(req.body);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -2419,6 +2556,9 @@ var CampaignBriefService = class {
       where: { id: data.brandProfileId }
     });
     if (!brandProfile) throw new Error("BrandProfile not found");
+    const user = await prisma.user.findFirst();
+    const apiKeys = user?.apiKeys;
+    const llmApiKey = apiKeys?.gemini;
     const brief = await prisma.campaignBrief.create({
       data: {
         workspaceId: data.workspaceId,
@@ -2484,7 +2624,8 @@ var CampaignBriefService = class {
       sender_name: data.senderName ?? brandProfile.businessName,
       company_name: data.companyName ?? brandProfile.businessName,
       company_address: data.companyAddress ?? "",
-      unsubscribe_url: data.unsubscribeUrl ?? "https://example.com/unsubscribe"
+      unsubscribe_url: data.unsubscribeUrl ?? "https://example.com/unsubscribe",
+      llm_api_key: llmApiKey
     };
     return { brief, campaign, agentPayload };
   }
@@ -2570,24 +2711,1449 @@ router18.post(
 );
 var routes_default18 = router18;
 
-// src/routes.ts
-var router19 = (0, import_express19.Router)();
-router19.use("/auth", routes_default);
-router19.use("/settings", routes_default2);
-router19.use("/dashboard", routes_default3);
-router19.use("/campaigns", routes_default4);
-router19.use("/campaign-detail", routes_default5);
-router19.use("/analytics", routes_default6);
-router19.use("/audience", routes_default7);
-router19.use("/ai-command-center", routes_default8);
-router19.use("/agents", routes_default9);
-router19.use("/workflow-engine", routes_default10);
-router19.use("/creative-studio", routes_default11);
-router19.use("/competitive-intelligence", routes_default12);
-router19.use("/finance", routes_default13);
-router19.use("/reports", routes_default14);
-router19.use("/monitoring", routes_default15);
-router19.use("/audit-logs", routes_default16);
-router19.use("/brand-profile", routes_default17);
-router19.use("/campaign", routes_default18);
+// src/modules/whatsapp/routes.ts
+var import_express20 = require("express");
+
+// src/middlewares/auth.middleware.ts
+var import_express19 = require("@clerk/express");
+var import_bcryptjs2 = __toESM(require("bcryptjs"));
+var requireClerkAuth = async (req, res, next) => {
+  const auth = (0, import_express19.getAuth)(req);
+  if (!auth.userId) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized - No active Clerk session",
+      code: "UNAUTHORIZED"
+    });
+  }
+  try {
+    const clerkUser = await import_express19.clerkClient.users.getUser(auth.userId);
+    const email = clerkUser.emailAddresses[0]?.emailAddress;
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: "No email address associated with Clerk user",
+        code: "BAD_REQUEST"
+      });
+    }
+    let user = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (!user) {
+      const randomPassword = Math.random().toString(36).slice(-10);
+      const hashedPassword = await import_bcryptjs2.default.hash(randomPassword, 10);
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          firstName: clerkUser.firstName || "",
+          lastName: clerkUser.lastName || ""
+        }
+      });
+      const workspaceName = clerkUser.firstName ? `${clerkUser.firstName}'s Workspace` : "Default Workspace";
+      const workspace = await prisma.workspace.create({
+        data: {
+          name: workspaceName
+        }
+      });
+      await prisma.workspaceMember.create({
+        data: {
+          userId: user.id,
+          workspaceId: workspace.id,
+          role: "OWNER"
+        }
+      });
+    }
+    req.user = {
+      userId: user.id,
+      email: user.email,
+      clerkId: auth.userId
+    };
+    next();
+  } catch (error) {
+    console.error("Clerk Authentication Middleware Error:", error);
+    next(error);
+  }
+};
+
+// src/modules/whatsapp/core.ts
+var {
+  GEMINI_API_KEY,
+  GEMINI_MODEL = "gemini-2.5-flash",
+  ZERNIO_API_KEY,
+  ZERNIO_ACCOUNT_ID,
+  DEFAULT_COUNTRY_CODE = "",
+  MAX_RECIPIENTS = "500"
+} = process.env;
+var ZERNIO_BASE = "https://zernio.com/api";
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function normalizeNumbers(input) {
+  const raw = Array.isArray(input) ? input : String(input ?? "").split(/[\n,;]+/);
+  const valid = [];
+  const invalid = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of raw) {
+    const text = String(item).trim();
+    if (!text) continue;
+    let digits = text.replace(/\D/g, "");
+    if (DEFAULT_COUNTRY_CODE && digits.length === 10) {
+      digits = DEFAULT_COUNTRY_CODE + digits;
+    }
+    if (digits.length < 8 || digits.length > 15) {
+      invalid.push(text);
+      continue;
+    }
+    if (!seen.has(digits)) {
+      seen.add(digits);
+      valid.push(digits);
+    }
+  }
+  return { valid, invalid };
+}
+var SYSTEM_PROMPT = `You are a WhatsApp marketing copywriter for brand managers.
+Turn the brief into ONE WhatsApp promotional message.
+Rules:
+- Under 600 characters. Short lines, easy to read on a phone.
+- First line is the hook. One clear call to action at the end.
+- At most two emojis. No ALL CAPS shouting, no fake urgency, no invented discounts, prices, dates or claims that are not in the brief.
+- If the brief lacks a detail (link, offer, date), use a clear placeholder in [square brackets].
+- End with: Reply STOP to opt out.
+- Write in the requested language and tone.
+Return only the message text. No preamble, no quotes, no markdown.`;
+async function generateMessage({
+  prompt,
+  brand = "",
+  tone = "friendly",
+  language = "English"
+}) {
+  if (!GEMINI_API_KEY) {
+    throw new Error(
+      "GEMINI_API_KEY is not set on the server. Add it to marketos-backend/.env"
+    );
+  }
+  if (!prompt || !prompt.trim()) {
+    throw new Error("Prompt is empty.");
+  }
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Brand: ${brand || "(not given)"}
+Tone: ${tone}
+Language: ${language}
+Brief: ${prompt}`
+              }
+            ]
+          }
+        ],
+        generationConfig: { maxOutputTokens: 600 }
+      })
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(
+      data?.error?.message ?? `Gemini API request failed (${res.status})`
+    );
+  }
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((p) => p.text ?? "").join("\n").trim();
+  if (!text) {
+    throw new Error(
+      "The AI returned an empty message (it may have been blocked by a safety filter)."
+    );
+  }
+  return text;
+}
+function requireZernioConfig() {
+  if (!ZERNIO_API_KEY) {
+    throw new Error(
+      "ZERNIO_API_KEY must be set on the server. Get it from the Zernio dashboard (zernio.com)."
+    );
+  }
+}
+function zernioHeaders() {
+  return {
+    Authorization: `Bearer ${ZERNIO_API_KEY}`,
+    "content-type": "application/json"
+  };
+}
+async function verifyBusinessNumber(businessNumber) {
+  requireZernioConfig();
+  const typed = normalizeNumbers([businessNumber]).valid[0];
+  if (!typed) {
+    throw new Error(
+      "The business number you entered is not a valid phone number. Include the country code, e.g. +14155550100."
+    );
+  }
+  const pnRes = await fetch(`${ZERNIO_BASE}/v1/whatsapp/phone-numbers`, {
+    headers: zernioHeaders()
+  });
+  const pnData = await pnRes.json();
+  if (!pnRes.ok) {
+    throw new Error(
+      pnData?.error?.message ?? pnData?.message ?? `Zernio error fetching WhatsApp phone numbers (HTTP ${pnRes.status}).`
+    );
+  }
+  const connected = pnData.connected ?? [];
+  const sandbox = pnData.sandbox ?? null;
+  for (const entry of connected) {
+    const entryDigits = String(entry.phoneNumber).replace(/\D/g, "");
+    if (entryDigits.endsWith(typed.slice(-10))) {
+      const resolvedId = ZERNIO_ACCOUNT_ID || entry.accountId;
+      return {
+        accountId: resolvedId,
+        number: entry.phoneNumber,
+        name: entry.displayName ?? ""
+      };
+    }
+  }
+  if (sandbox) {
+    const sandboxDigits = String(sandbox.phoneNumber).replace(/\D/g, "");
+    if (sandboxDigits.endsWith(typed.slice(-10))) {
+      return {
+        accountId: sandbox.accountId,
+        number: sandbox.phoneNumber,
+        name: "Sandbox"
+      };
+    }
+  }
+  if (ZERNIO_ACCOUNT_ID) {
+    const accRes = await fetch(`${ZERNIO_BASE}/v1/accounts`, {
+      headers: zernioHeaders()
+    });
+    const accData = await accRes.json();
+    const accounts = accData.accounts ?? [];
+    const waAccount = accounts.find((a) => {
+      if (a.platform !== "whatsapp") return false;
+      const num = String(a.username ?? a.phoneNumber ?? "").replace(/\D/g, "");
+      return num.endsWith(typed.slice(-10));
+    });
+    if (waAccount) {
+      return {
+        accountId: ZERNIO_ACCOUNT_ID,
+        number: waAccount.username ?? waAccount.phoneNumber ?? typed,
+        name: ""
+      };
+    }
+  }
+  const connectedNums = connected.map((e) => e.phoneNumber).join(", ") || "none";
+  const sandboxNum = sandbox ? ` | Sandbox: ${sandbox.phoneNumber}` : "";
+  throw new Error(
+    `The business number +${typed} is not connected to your Zernio account.
+Connected numbers: ${connectedNums}${sandboxNum}.
+Connect your WhatsApp Business number in the Zernio dashboard first.`
+  );
+}
+function buildPayload(to, { accountId, mode, message, templateName, languageCode }) {
+  const base = { accountId, participantId: to };
+  if (mode === "template") {
+    const flat = message.replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
+    return {
+      ...base,
+      templateName,
+      templateLanguage: languageCode ?? "en",
+      templateParams: [flat]
+    };
+  }
+  return { ...base, message };
+}
+async function sendOne(to, opts) {
+  const res = await fetch(`${ZERNIO_BASE}/v1/inbox/conversations`, {
+    method: "POST",
+    headers: zernioHeaders(),
+    body: JSON.stringify(buildPayload(to, opts))
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    return {
+      to,
+      ok: false,
+      error: data?.error?.message ?? data?.message ?? data?.error ?? `HTTP ${res.status}`
+    };
+  }
+  return {
+    to,
+    ok: true,
+    messageId: data?.data?.id ?? data?.id ?? data?._id
+  };
+}
+async function sendBulk({
+  businessNumber,
+  recipients,
+  message,
+  mode = "text",
+  templateName,
+  languageCode = "en",
+  optInConfirmed = false
+}) {
+  if (!optInConfirmed) {
+    throw new Error(
+      "You must confirm that every recipient has opted in to receive WhatsApp messages from your business before sending."
+    );
+  }
+  if (!message || !message.trim()) {
+    throw new Error("Message is empty.");
+  }
+  if (mode === "template" && !templateName) {
+    throw new Error("Template name is required when using template send mode.");
+  }
+  const { accountId } = await verifyBusinessNumber(businessNumber);
+  const { valid, invalid } = normalizeNumbers(recipients);
+  if (!valid.length) {
+    throw new Error(
+      "No valid recipient numbers found. Use international format, e.g. +14155550123."
+    );
+  }
+  const cap = Number(MAX_RECIPIENTS);
+  if (valid.length > cap) {
+    throw new Error(
+      `Too many recipients (${valid.length}). Maximum allowed per send is ${cap}.`
+    );
+  }
+  const opts = { accountId, mode, message, templateName, languageCode };
+  const results = [];
+  for (let i = 0; i < valid.length; i += 5) {
+    const batch = valid.slice(i, i + 5);
+    results.push(...await Promise.all(batch.map((n) => sendOne(n, opts))));
+    if (i + 5 < valid.length) await sleep(300);
+  }
+  return {
+    sent: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    invalidNumbers: invalid,
+    results
+  };
+}
+
+// src/modules/whatsapp/routes.ts
+var router19 = (0, import_express20.Router)();
+router19.post(
+  "/generate",
+  requireClerkAuth,
+  async (req, res) => {
+    try {
+      const message = await generateMessage(req.body);
+      res.json({ message });
+    } catch (e) {
+      res.status(400).json({ error: e.message ?? "Unknown error" });
+    }
+  }
+);
+router19.post(
+  "/send",
+  requireClerkAuth,
+  async (req, res) => {
+    try {
+      const result = await sendBulk(req.body);
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ error: e.message ?? "Unknown error" });
+    }
+  }
+);
 var routes_default19 = router19;
+
+// src/modules/phone/routes.ts
+var import_express21 = require("express");
+var router20 = (0, import_express21.Router)();
+router20.post("/verify", async (req, res) => {
+  const { accountSid, authToken, phoneNumber } = req.body;
+  if (!accountSid || !authToken) {
+    return res.status(400).json({
+      success: false,
+      error: "accountSid and authToken are required"
+    });
+  }
+  if (!accountSid.startsWith("AC") || accountSid.length < 34) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid Account SID format. Must start with AC and be 34 characters."
+    });
+  }
+  try {
+    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const accountRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
+      {
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    if (!accountRes.ok) {
+      const errData = await accountRes.json().catch(() => ({}));
+      return res.status(401).json({
+        success: false,
+        verified: false,
+        error: errData.message || `Twilio authentication failed (HTTP ${accountRes.status})`,
+        code: accountRes.status
+      });
+    }
+    const accountData = await accountRes.json();
+    let phoneVerified = false;
+    let phoneFriendlyName = phoneNumber;
+    if (phoneNumber) {
+      try {
+        const phoneRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(phoneNumber)}`,
+          { headers: { Authorization: `Basic ${basicAuth}` } }
+        );
+        if (phoneRes.ok) {
+          const phoneData = await phoneRes.json();
+          const numbers = phoneData.incoming_phone_numbers || [];
+          phoneVerified = numbers.length > 0;
+          if (phoneVerified) {
+            phoneFriendlyName = numbers[0].friendly_name || phoneNumber;
+          }
+        }
+      } catch (_) {
+      }
+    }
+    return res.json({
+      success: true,
+      verified: true,
+      account: {
+        sid: accountData.sid,
+        friendlyName: accountData.friendly_name,
+        status: accountData.status,
+        type: accountData.type,
+        dateCreated: accountData.date_created
+      },
+      phone: phoneNumber ? {
+        number: phoneNumber,
+        friendlyName: phoneFriendlyName,
+        verifiedOnAccount: phoneVerified
+      } : null
+    });
+  } catch (err) {
+    console.error("[Phone/Verify] Error:", err);
+    return res.status(502).json({
+      success: false,
+      verified: false,
+      error: `Could not reach Twilio API: ${err.message}`
+    });
+  }
+});
+router20.post("/call", async (req, res) => {
+  const { accountSid, authToken, from, to, url } = req.body;
+  if (!accountSid || !authToken || !from || !to) {
+    return res.status(400).json({
+      success: false,
+      error: "accountSid, authToken, from, and to are required"
+    });
+  }
+  try {
+    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const twimlUrl = url || "http://demo.twilio.com/docs/voice.xml";
+    const body = new URLSearchParams({ To: to, From: from, Url: twimlUrl });
+    const callRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString()
+      }
+    );
+    const callData = await callRes.json();
+    if (!callRes.ok) {
+      return res.status(callRes.status).json({
+        success: false,
+        error: callData.message || `Twilio call failed (HTTP ${callRes.status})`,
+        twilioCode: callData.code
+      });
+    }
+    return res.json({
+      success: true,
+      call: {
+        sid: callData.sid,
+        status: callData.status,
+        to: callData.to,
+        from: callData.from,
+        direction: callData.direction,
+        dateCreated: callData.date_created
+      }
+    });
+  } catch (err) {
+    console.error("[Phone/Call] Error:", err);
+    return res.status(502).json({
+      success: false,
+      error: `Could not reach Twilio API: ${err.message}`
+    });
+  }
+});
+router20.get("/status", async (req, res) => {
+  const { accountSid, authToken } = req.query;
+  if (!accountSid || !authToken) {
+    return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
+  }
+  try {
+    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const accountRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
+      { headers: { Authorization: `Basic ${basicAuth}` } }
+    );
+    if (!accountRes.ok) {
+      return res.status(401).json({ success: false, connected: false, error: "Invalid credentials" });
+    }
+    const data = await accountRes.json();
+    return res.json({
+      success: true,
+      connected: true,
+      account: {
+        sid: data.sid,
+        friendlyName: data.friendly_name,
+        status: data.status
+      }
+    });
+  } catch (err) {
+    return res.status(502).json({ success: false, connected: false, error: err.message });
+  }
+});
+var routes_default20 = router20;
+
+// src/modules/sms/routes.ts
+var import_express22 = require("express");
+var router21 = (0, import_express22.Router)();
+router21.post("/verify", async (req, res) => {
+  const { accountSid, authToken, fromNumber } = req.body;
+  if (!accountSid || !authToken) {
+    return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
+  }
+  if (!accountSid.startsWith("AC") || accountSid.length < 34) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid Account SID format. Must start with AC and be 34 characters."
+    });
+  }
+  try {
+    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const accountRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
+      { headers: { Authorization: `Basic ${basicAuth}` } }
+    );
+    if (!accountRes.ok) {
+      const errData = await accountRes.json().catch(() => ({}));
+      return res.status(401).json({
+        success: false,
+        verified: false,
+        error: errData.message || `Authentication failed (HTTP ${accountRes.status})`
+      });
+    }
+    const accountData = await accountRes.json();
+    let smsCapable = false;
+    let phoneDetails = null;
+    if (fromNumber) {
+      try {
+        const phoneRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(fromNumber)}`,
+          { headers: { Authorization: `Basic ${basicAuth}` } }
+        );
+        if (phoneRes.ok) {
+          const phoneData = await phoneRes.json();
+          const numbers = phoneData.incoming_phone_numbers || [];
+          if (numbers.length > 0) {
+            const num = numbers[0];
+            smsCapable = num.capabilities?.sms === true;
+            phoneDetails = {
+              sid: num.sid,
+              friendlyName: num.friendly_name,
+              phoneNumber: num.phone_number,
+              smsCapable: num.capabilities?.sms,
+              voiceCapable: num.capabilities?.voice,
+              mmsCapable: num.capabilities?.mms
+            };
+          }
+        }
+      } catch (_) {
+      }
+    }
+    return res.json({
+      success: true,
+      verified: true,
+      account: {
+        sid: accountData.sid,
+        friendlyName: accountData.friendly_name,
+        status: accountData.status,
+        type: accountData.type
+      },
+      phone: phoneDetails,
+      smsCapable
+    });
+  } catch (err) {
+    console.error("[SMS/Verify] Error:", err);
+    return res.status(502).json({
+      success: false,
+      verified: false,
+      error: `Could not reach Twilio API: ${err.message}`
+    });
+  }
+});
+router21.post("/send", async (req, res) => {
+  const { accountSid, authToken, from, to, body: messageBody } = req.body;
+  if (!accountSid || !authToken || !from || !to || !messageBody) {
+    return res.status(400).json({
+      success: false,
+      error: "accountSid, authToken, from, to, and body are required"
+    });
+  }
+  const recipients = Array.isArray(to) ? to : String(to).split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+  if (recipients.length === 0) {
+    return res.status(400).json({ success: false, error: "No valid recipient numbers provided" });
+  }
+  const maxRecipients = parseInt(process.env.MAX_RECIPIENTS || "100", 10);
+  if (recipients.length > maxRecipients) {
+    return res.status(400).json({
+      success: false,
+      error: `Too many recipients. Maximum is ${maxRecipients}.`
+    });
+  }
+  const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+  const results = [];
+  for (const recipient of recipients) {
+    try {
+      const formBody = new URLSearchParams({
+        To: recipient,
+        From: from,
+        Body: messageBody
+      });
+      const smsRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: formBody.toString()
+        }
+      );
+      const smsData = await smsRes.json();
+      if (smsRes.ok && smsData.sid) {
+        results.push({
+          to: recipient,
+          ok: true,
+          sid: smsData.sid,
+          status: smsData.status
+        });
+      } else {
+        results.push({
+          to: recipient,
+          ok: false,
+          error: smsData.message || `HTTP ${smsRes.status}`
+        });
+      }
+    } catch (err) {
+      results.push({ to: recipient, ok: false, error: err.message });
+    }
+  }
+  const sent = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok).length;
+  return res.json({
+    success: true,
+    sent,
+    failed,
+    total: recipients.length,
+    results
+  });
+});
+router21.get("/messages", async (req, res) => {
+  const { accountSid, authToken, limit = "20" } = req.query;
+  if (!accountSid || !authToken) {
+    return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
+  }
+  try {
+    const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const msgRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json?PageSize=${Math.min(parseInt(limit, 10), 50)}`,
+      { headers: { Authorization: `Basic ${basicAuth}` } }
+    );
+    if (!msgRes.ok) {
+      return res.status(msgRes.status).json({ success: false, error: "Failed to fetch messages" });
+    }
+    const msgData = await msgRes.json();
+    const messages = (msgData.messages || []).map((m) => ({
+      sid: m.sid,
+      to: m.to,
+      from: m.from,
+      body: m.body,
+      status: m.status,
+      direction: m.direction,
+      dateCreated: m.date_created,
+      numSegments: m.num_segments
+    }));
+    return res.json({ success: true, total: messages.length, messages });
+  } catch (err) {
+    return res.status(502).json({ success: false, error: err.message });
+  }
+});
+var routes_default21 = router21;
+
+// src/modules/email_channel/routes.ts
+var import_express23 = require("express");
+var router22 = (0, import_express23.Router)();
+router22.post("/verify/clerk", async (req, res) => {
+  const { secretKey, publishableKey, fromEmail } = req.body;
+  if (!secretKey) {
+    return res.status(400).json({ success: false, error: "secretKey is required" });
+  }
+  if (!secretKey.startsWith("sk_")) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid Clerk Secret Key format. Must start with sk_test_ or sk_live_."
+    });
+  }
+  if (publishableKey && !publishableKey.startsWith("pk_")) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid Clerk Publishable Key format. Must start with pk_test_ or pk_live_."
+    });
+  }
+  try {
+    const clerkRes = await fetch("https://api.clerk.com/v1/users?limit=1", {
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json"
+      }
+    });
+    if (clerkRes.status === 401 || clerkRes.status === 403) {
+      return res.status(401).json({
+        success: false,
+        verified: false,
+        error: "Invalid Clerk Secret Key. Authentication failed."
+      });
+    }
+    let appName = "Clerk Application";
+    try {
+      const jwtRes = await fetch("https://api.clerk.com/v1/jwks", {
+        headers: { Authorization: `Bearer ${secretKey}` }
+      });
+      if (jwtRes.ok) {
+        appName = "Clerk Application (Verified)";
+      }
+    } catch (_) {
+    }
+    if (!clerkRes.ok && clerkRes.status !== 200) {
+      return res.json({
+        success: true,
+        verified: true,
+        provider: "clerk",
+        app: {
+          name: appName,
+          environment: secretKey.includes("_test_") ? "test" : "production"
+        },
+        fromEmail: fromEmail || null,
+        note: "Key format verified. Full Clerk API access confirmed."
+      });
+    }
+    const userData = await clerkRes.json();
+    return res.json({
+      success: true,
+      verified: true,
+      provider: "clerk",
+      app: {
+        name: appName,
+        environment: secretKey.includes("_test_") ? "test" : "production",
+        totalUsers: userData.total_count ?? 0
+      },
+      fromEmail: fromEmail || null
+    });
+  } catch (err) {
+    console.error("[Email/Verify/Clerk] Error:", err);
+    return res.status(502).json({
+      success: false,
+      verified: false,
+      error: `Could not reach Clerk API: ${err.message}`
+    });
+  }
+});
+router22.post("/verify/google", async (req, res) => {
+  const {
+    clientId: clientId2,
+    clientSecret,
+    redirectUri,
+    scopes = ["https://www.googleapis.com/auth/gmail.send"]
+  } = req.body;
+  if (!clientId2 || !clientSecret || !redirectUri) {
+    return res.status(400).json({
+      success: false,
+      error: "clientId, clientSecret, and redirectUri are required"
+    });
+  }
+  if (!clientId2.includes(".apps.googleusercontent.com")) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid Client ID format. Must end with .apps.googleusercontent.com"
+    });
+  }
+  if (clientSecret.length < 10) {
+    return res.status(400).json({
+      success: false,
+      error: "Client Secret appears too short."
+    });
+  }
+  try {
+    const scopeList = Array.isArray(scopes) ? scopes : [scopes];
+    const params = new URLSearchParams({
+      client_id: clientId2,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: scopeList.join(" "),
+      access_type: "offline",
+      prompt: "consent"
+    });
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    let credentialsValid = false;
+    try {
+      const discoveryRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?client_id=${encodeURIComponent(clientId2)}`
+      );
+      credentialsValid = discoveryRes.status !== 500;
+    } catch (_) {
+      credentialsValid = true;
+    }
+    return res.json({
+      success: true,
+      verified: true,
+      provider: "google",
+      credentials: {
+        clientId: clientId2,
+        redirectUri,
+        scopes: scopeList,
+        formatValid: true,
+        credentialsValid
+      },
+      authUrl,
+      instructions: [
+        "1. Open the authUrl in a browser to get the authorization code",
+        "2. User approves Gmail access",
+        "3. Google redirects to your redirectUri with ?code=...",
+        "4. Exchange the code for tokens via POST /api/v1/email-channel/google/token"
+      ]
+    });
+  } catch (err) {
+    console.error("[Email/Verify/Google] Error:", err);
+    return res.status(502).json({
+      success: false,
+      verified: false,
+      error: `Verification error: ${err.message}`
+    });
+  }
+});
+router22.post("/google/token", async (req, res) => {
+  const { clientId: clientId2, clientSecret, redirectUri, code } = req.body;
+  if (!clientId2 || !clientSecret || !redirectUri || !code) {
+    return res.status(400).json({
+      success: false,
+      error: "clientId, clientSecret, redirectUri, and code are required"
+    });
+  }
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId2,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        code,
+        grant_type: "authorization_code"
+      }).toString()
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      return res.status(tokenRes.status).json({
+        success: false,
+        error: tokenData.error_description || tokenData.error || "Token exchange failed"
+      });
+    }
+    return res.json({
+      success: true,
+      tokens: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        expiresIn: tokenData.expires_in,
+        tokenType: tokenData.token_type,
+        scope: tokenData.scope
+      }
+    });
+  } catch (err) {
+    console.error("[Email/Google/Token] Error:", err);
+    return res.status(502).json({ success: false, error: err.message });
+  }
+});
+router22.post("/send/clerk", async (req, res) => {
+  const { secretKey, fromEmail, fromName, toEmail, subject, body: emailBody } = req.body;
+  if (!secretKey || !toEmail || !subject || !emailBody) {
+    return res.status(400).json({
+      success: false,
+      error: "secretKey, toEmail, subject, and body are required"
+    });
+  }
+  try {
+    const emailRes = await fetch("https://api.clerk.com/v1/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from_email_name: fromName || "MarketOS",
+        email_address_id: toEmail,
+        subject,
+        body: emailBody
+      })
+    });
+    const emailData = await emailRes.json();
+    if (!emailRes.ok) {
+      return res.status(emailRes.status).json({
+        success: false,
+        error: emailData.errors?.[0]?.message || emailData.message || `Clerk email failed (HTTP ${emailRes.status})`
+      });
+    }
+    return res.json({
+      success: true,
+      messageId: emailData.id,
+      status: emailData.status,
+      toEmail,
+      fromEmail
+    });
+  } catch (err) {
+    console.error("[Email/Send/Clerk] Error:", err);
+    return res.status(502).json({ success: false, error: err.message });
+  }
+});
+router22.post("/send/gmail", async (req, res) => {
+  const { accessToken, from, to, subject, body: emailBody } = req.body;
+  if (!accessToken || !from || !to || !subject || !emailBody) {
+    return res.status(400).json({
+      success: false,
+      error: "accessToken, from, to, subject, and body are required"
+    });
+  }
+  try {
+    const rawMessage = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      `Content-Type: text/html; charset=utf-8`,
+      `MIME-Version: 1.0`,
+      "",
+      emailBody
+    ].join("\r\n");
+    const encodedMessage = Buffer.from(rawMessage).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const gmailRes = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ raw: encodedMessage })
+      }
+    );
+    const gmailData = await gmailRes.json();
+    if (!gmailRes.ok) {
+      return res.status(gmailRes.status).json({
+        success: false,
+        error: gmailData.error?.message || `Gmail send failed (HTTP ${gmailRes.status})`
+      });
+    }
+    return res.json({
+      success: true,
+      messageId: gmailData.id,
+      threadId: gmailData.threadId,
+      labelIds: gmailData.labelIds,
+      to,
+      from
+    });
+  } catch (err) {
+    console.error("[Email/Send/Gmail] Error:", err);
+    return res.status(502).json({ success: false, error: err.message });
+  }
+});
+router22.get("/health", (_req, res) => {
+  res.json({
+    success: true,
+    module: "email-channel",
+    providers: ["clerk", "google-oauth-gmail"],
+    status: "operational",
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+var routes_default22 = router22;
+
+// src/modules/history/routes.ts
+var import_express24 = require("express");
+var router23 = (0, import_express24.Router)();
+async function getUserId(req) {
+  const userId = req.user?.userId;
+  if (userId) return userId;
+  const user = await prisma.user.findFirst().catch(() => null);
+  return user?.id ?? null;
+}
+router23.get("/", async (req, res) => {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "User not found" });
+    }
+    const page = parseInt(String(req.query.page || "1"));
+    const limit = parseInt(String(req.query.limit || "20"));
+    const skip = (page - 1) * limit;
+    const search = String(req.query.search || "");
+    const where = {
+      userId,
+      ...search ? { prompt: { contains: search, mode: "insensitive" } } : {}
+    };
+    const [items, total] = await Promise.all([
+      prisma.campaignHistory.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.campaignHistory.count({ where })
+    ]);
+    res.status(200).json({
+      success: true,
+      data: items,
+      meta: { total, page, limit, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    logger.error("[History] List error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router23.get("/:id", async (req, res) => {
+  try {
+    const userId = await getUserId(req);
+    const item = await prisma.campaignHistory.findFirst({
+      where: { id: req.params.id, userId }
+    });
+    if (!item) {
+      return res.status(404).json({ success: false, error: "History item not found" });
+    }
+    res.status(200).json({ success: true, data: item });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router23.post("/", async (req, res) => {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "User not found" });
+    }
+    const {
+      prompt,
+      agentOutputs,
+      documentation,
+      channels = [],
+      runId,
+      recipientEmail,
+      recipientPhone,
+      status = "completed"
+    } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: "prompt is required" });
+    }
+    const item = await prisma.campaignHistory.create({
+      data: {
+        userId,
+        runId: runId || null,
+        prompt,
+        agentOutputs: agentOutputs || {},
+        documentation: documentation || null,
+        channels: Array.isArray(channels) ? channels : [],
+        recipientEmail: recipientEmail || null,
+        recipientPhone: recipientPhone || null,
+        status,
+        dispatchLog: []
+      }
+    });
+    res.status(201).json({ success: true, data: item });
+  } catch (err) {
+    logger.error("[History] Save error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router23.delete("/:id", async (req, res) => {
+  try {
+    const userId = await getUserId(req);
+    const existing = await prisma.campaignHistory.findFirst({
+      where: { id: req.params.id, userId }
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: "History item not found" });
+    }
+    await prisma.campaignHistory.update({
+      where: { id: req.params.id },
+      data: { status: "archived" }
+    });
+    res.status(200).json({ success: true, data: null });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router23.post("/:id/dispatch", async (req, res) => {
+  try {
+    const userId = await getUserId(req);
+    const item = await prisma.campaignHistory.findFirst({
+      where: { id: req.params.id, userId }
+    });
+    if (!item) {
+      return res.status(404).json({ success: false, error: "History item not found" });
+    }
+    const {
+      channels = item.channels,
+      recipientEmail = item.recipientEmail,
+      recipientPhone = item.recipientPhone,
+      customMessage
+    } = req.body;
+    const outputs = item.agentOutputs;
+    const dispatchLog = Array.isArray(item.dispatchLog) ? item.dispatchLog : [];
+    const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://marketos_agents:8000";
+    for (const channel of channels) {
+      const sentAt = (/* @__PURE__ */ new Date()).toISOString();
+      let status = "failed";
+      let messageId = "";
+      let detail = "";
+      try {
+        if (channel === "email" && (outputs.email || outputs.Email || outputs["Email Agent"])) {
+          const emailOutput = outputs.email || outputs.Email || outputs["Email Agent"] || {};
+          const emailBody = emailOutput?.email_draft_1 || emailOutput;
+          const payload = {
+            user_intent: `Dispatch saved campaign: ${item.prompt}`,
+            channels: ["email"],
+            recipient_email: recipientEmail,
+            sender_name: emailBody?.sender_name || "MarketOS"
+          };
+          const agentResp = await fetch(`${agentServiceUrl}/v1/pipeline/campaign`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }).catch(() => null);
+          status = agentResp?.ok ? "sent" : "failed";
+          messageId = `email-${Date.now()}`;
+          detail = agentResp?.ok ? "Email dispatched via agent service" : "Agent service unavailable";
+        } else if (channel === "sms" && (outputs.sms || outputs.SMS || outputs["SMS Agent"])) {
+          const smsOutput = outputs.sms || outputs.SMS || outputs["SMS Agent"] || {};
+          const message = customMessage || smsOutput?.selected_message || smsOutput?.variants?.[0]?.message || "";
+          const payload = {
+            user_intent: `Send SMS: ${message}`,
+            channels: ["sms"],
+            recipient_phone: recipientPhone
+          };
+          const agentResp = await fetch(`${agentServiceUrl}/v1/pipeline/campaign`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }).catch(() => null);
+          status = agentResp?.ok ? "sent" : "failed";
+          messageId = `sms-${Date.now()}`;
+          detail = agentResp?.ok ? "SMS dispatched via agent service" : "Agent service unavailable";
+        } else if (channel === "social") {
+          status = "scheduled";
+          messageId = `social-${Date.now()}`;
+          detail = "Social post queued for publishing";
+        } else {
+          status = "skipped";
+          detail = `No output available for channel: ${channel}`;
+        }
+      } catch (dispatchErr) {
+        detail = dispatchErr.message;
+      }
+      dispatchLog.push({ channel, status, sentAt, messageId, detail });
+    }
+    const updated = await prisma.campaignHistory.update({
+      where: { id: item.id },
+      data: {
+        status: "dispatched",
+        dispatchLog
+      }
+    });
+    res.status(200).json({
+      success: true,
+      data: { dispatchLog, status: "dispatched", id: updated.id }
+    });
+  } catch (err) {
+    logger.error("[History] Dispatch error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+var routes_default23 = router23;
+
+// src/modules/telegram/routes.ts
+var import_express25 = require("express");
+
+// src/modules/telegram/core.ts
+var {
+  GEMINI_API_KEY: GEMINI_API_KEY2,
+  GEMINI_MODEL: GEMINI_MODEL2 = "gemini-2.5-flash",
+  COMPOSIO_API_KEY = "",
+  TELEGRAM_BOT_TOKEN = "",
+  TELEGRAM_CHANNEL_ID = ""
+} = process.env;
+var TELEGRAM_BOT_API = "https://api.telegram.org";
+var SYSTEM_PROMPT2 = `You are a Telegram channel advertising specialist.
+
+Write ONE short Telegram advertisement message for a brand's product/service.
+
+STRICT RULES:
+- For image posts (caption): max 280 characters.
+- For text-only posts: max 1024 characters.
+- Start with a punchy one-line hook. Max 2 emojis total.
+- Include exactly ONE call-to-action with the provided URL or [LINK] placeholder.
+- No invented discounts, prices, or facts not in the brief.
+- End with 2\u20134 relevant hashtags on their own line.
+- Write in the requested language and tone.
+- Also provide a short IMAGE PROMPT (\u226450 words) for a product/lifestyle visual.
+
+Return ONLY valid JSON:
+{
+  "message": "<telegram ad text with hashtags>",
+  "image_prompt": "<50-word FLUX/DALL-E image prompt>",
+  "hashtags": ["#tag1", "#tag2"],
+  "char_count": <integer>
+}`;
+async function generateTelegramMessage(input) {
+  if (!GEMINI_API_KEY2) {
+    throw new Error(
+      "GEMINI_API_KEY is not set. Add it to marketos-backend/.env"
+    );
+  }
+  if (!input.prompt?.trim()) {
+    throw new Error("Prompt is required.");
+  }
+  const userText = [
+    `Brand: ${input.brand || "(not provided)"}`,
+    `Tone: ${input.tone || "Friendly"}`,
+    `Language: ${input.language || "English"}`,
+    `CTA URL: ${input.ctaUrl || "[LINK]"}`,
+    `Brief: ${input.prompt}`
+  ].join("\n");
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL2}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY2
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT2 }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { maxOutputTokens: 800, responseMimeType: "application/json" }
+      })
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(
+      data?.error?.message ?? `Gemini API error (${res.status})`
+    );
+  }
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+  if (!rawText) {
+    throw new Error("Gemini returned an empty response (possible safety filter).");
+  }
+  let parsed;
+  try {
+    const clean = rawText.replace(/^```json\s*/i, "").replace(/```\s*$/, "");
+    parsed = JSON.parse(clean);
+  } catch {
+    parsed = {
+      message: rawText.slice(0, 1024),
+      image_prompt: "",
+      hashtags: [],
+      char_count: rawText.length
+    };
+  }
+  return {
+    message: parsed.message ?? rawText.slice(0, 1024),
+    imagePrompt: parsed.image_prompt ?? "",
+    hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+    charCount: parsed.char_count ?? (parsed.message ?? rawText).length
+  };
+}
+async function sendViaComposio(channelId, text) {
+  if (!COMPOSIO_API_KEY) {
+    return { sent: false, provider: "composio", error: "COMPOSIO_API_KEY not set" };
+  }
+  try {
+    const res = await fetch("https://backend.composio.dev/api/v1/actions/TELEGRAM_SEND_MESSAGE/execute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": COMPOSIO_API_KEY
+      },
+      body: JSON.stringify({
+        connectedAccountId: "ca_WpoPDvF0cbTz",
+        input: {
+          chat_id: channelId,
+          text,
+          parse_mode: "HTML"
+        }
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      return {
+        sent: false,
+        provider: "composio",
+        error: data?.message ?? data?.error ?? `Composio error (${res.status})`
+      };
+    }
+    return {
+      sent: true,
+      provider: "composio",
+      messageId: data?.data?.result?.message_id
+    };
+  } catch (err) {
+    return { sent: false, provider: "composio", error: err.message };
+  }
+}
+async function sendViaBotApi(botToken, channelId, text) {
+  try {
+    const res = await fetch(`${TELEGRAM_BOT_API}/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: channelId,
+        text: text.slice(0, 4096),
+        parse_mode: "HTML"
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      return {
+        sent: false,
+        provider: "telegram_bot_api",
+        error: data.description ?? "Unknown Telegram error"
+      };
+    }
+    return {
+      sent: true,
+      provider: "telegram_bot_api",
+      messageId: data.result?.message_id
+    };
+  } catch (err) {
+    return { sent: false, provider: "telegram_bot_api", error: err.message };
+  }
+}
+async function sendTelegramMessage(input) {
+  const phones = input.phones.map((p) => p.trim()).filter(Boolean);
+  const botToken = input.botToken || TELEGRAM_BOT_TOKEN;
+  if (phones.length === 0) {
+    throw new Error(
+      "At least one phone number or chat ID is required."
+    );
+  }
+  if (!botToken && !COMPOSIO_API_KEY) {
+    throw new Error(
+      "Neither TELEGRAM_BOT_TOKEN nor COMPOSIO_API_KEY is configured on the server."
+    );
+  }
+  const results = [];
+  for (const phone of phones) {
+    let recipientResult;
+    const chatId = phone.startsWith("+") || phone.startsWith("-") || /^\d+$/.test(phone) ? phone : `+${phone}`;
+    if (botToken) {
+      const r = await sendViaBotApi(botToken, chatId, input.message);
+      recipientResult = { phone, ...r };
+    } else if (COMPOSIO_API_KEY) {
+      const r = await sendViaComposio(chatId, input.message);
+      recipientResult = { phone, ...r };
+    } else {
+      recipientResult = {
+        phone,
+        sent: false,
+        provider: "none",
+        error: "No send provider configured"
+      };
+    }
+    results.push(recipientResult);
+    if (phones.length > 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  const sentCount = results.filter((r) => r.sent).length;
+  return {
+    sentCount,
+    total: phones.length,
+    results
+  };
+}
+
+// src/modules/telegram/routes.ts
+var router24 = (0, import_express25.Router)();
+router24.post(
+  "/generate",
+  requireClerkAuth,
+  async (req, res) => {
+    try {
+      const result = await generateTelegramMessage(req.body);
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ error: e.message ?? "Unknown error" });
+    }
+  }
+);
+router24.post(
+  "/send",
+  requireClerkAuth,
+  async (req, res) => {
+    try {
+      const result = await sendTelegramMessage(req.body);
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ error: e.message ?? "Unknown error" });
+    }
+  }
+);
+var routes_default24 = router24;
+
+// src/routes.ts
+var router25 = (0, import_express26.Router)();
+router25.use("/auth", routes_default);
+router25.use("/settings", routes_default2);
+router25.use("/dashboard", routes_default3);
+router25.use("/campaigns", routes_default4);
+router25.use("/campaign-detail", routes_default5);
+router25.use("/analytics", routes_default6);
+router25.use("/audience", routes_default7);
+router25.use("/ai-command-center", routes_default8);
+router25.use("/agents", routes_default9);
+router25.use("/workflow-engine", routes_default10);
+router25.use("/creative-studio", routes_default11);
+router25.use("/competitive-intelligence", routes_default12);
+router25.use("/finance", routes_default13);
+router25.use("/reports", routes_default14);
+router25.use("/monitoring", routes_default15);
+router25.use("/audit-logs", routes_default16);
+router25.use("/brand-profile", routes_default17);
+router25.use("/campaign", routes_default18);
+router25.use("/whatsapp", routes_default19);
+router25.use("/phone", routes_default20);
+router25.use("/sms", routes_default21);
+router25.use("/email-channel", routes_default22);
+router25.use("/history", routes_default23);
+router25.use("/telegram", routes_default24);
+var routes_default25 = router25;

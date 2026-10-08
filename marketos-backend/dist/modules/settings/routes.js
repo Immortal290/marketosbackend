@@ -32,9 +32,11 @@ var import_adapter_pg = require("@prisma/adapter-pg");
 var import_pg = require("pg");
 var DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+  console.error(
+    "[Prisma] WARNING: DATABASE_URL environment variable is not set. Database queries will fail. Ensure DATABASE_URL is configured in Railway Variables."
+  );
 }
-var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL || "postgresql://localhost/marketos_placeholder" });
 var adapter = new import_adapter_pg.PrismaPg(pool);
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
@@ -257,5 +259,31 @@ router.patch("/security", (req, res) => {
     data: securitySettings,
     agentFeedback: `SupervisorAgent enforced new security posture (Session timeout: ${securitySettings.sessionTimeoutMinutes} min, MFA: ${securitySettings.policies.find((p) => p.id === "s1")?.enabled ? "Mandated" : "Optional"}).`
   });
+});
+router.get("/api-keys", async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst();
+    res.status(200).json({ success: true, data: user?.apiKeys || {} });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to fetch API keys" });
+  }
+});
+router.patch("/api-keys", async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst();
+    if (user) {
+      const currentKeys = typeof user.apiKeys === "object" && user.apiKeys !== null ? user.apiKeys : {};
+      const updatedKeys = { ...currentKeys, ...req.body };
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { apiKeys: updatedKeys }
+      });
+      res.status(200).json({ success: true, data: updatedKeys, agentFeedback: "API keys updated securely in database." });
+    } else {
+      res.status(404).json({ success: false, error: "User not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to update API keys" });
+  }
 });
 var routes_default = router;

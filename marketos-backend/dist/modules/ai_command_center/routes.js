@@ -188,14 +188,45 @@ var import_ioredis = __toESM(require("ioredis"));
 var redisClient = new import_ioredis.default({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: null
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+  // Limit reconnect attempts so a missing Redis doesn't spam logs forever
+  retryStrategy: (times) => {
+    if (times > 5) {
+      logger.warn("[Redis] Max reconnect attempts reached. Redis features will be unavailable.");
+      return null;
+    }
+    return Math.min(times * 500, 3e3);
+  }
 });
 redisClient.on("connect", () => {
-  logger.info("Connected to Redis");
+  logger.info("[Redis] Connected");
 });
 redisClient.on("error", (err) => {
-  logger.error("Redis connection error:", err);
+  logger.error("[Redis] Connection error (non-fatal):", err.message);
 });
+
+// src/lib/prisma.ts
+var import_config = require("dotenv/config");
+var import_client = require("@prisma/client");
+var import_adapter_pg = require("@prisma/adapter-pg");
+var import_pg = require("pg");
+var DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error(
+    "[Prisma] WARNING: DATABASE_URL environment variable is not set. Database queries will fail. Ensure DATABASE_URL is configured in Railway Variables."
+  );
+}
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL || "postgresql://localhost/marketos_placeholder" });
+var adapter = new import_adapter_pg.PrismaPg(pool);
+var globalForPrisma = globalThis;
+var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
+  adapter,
+  log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
+});
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 // src/modules/ai_command_center/routes.ts
 var router = (0, import_express.Router)();
@@ -237,20 +268,103 @@ router.get("/suggestions", (req, res) => {
     { id: "s2", label: "Re-engage cold leads", description: "4,200 leads haven't opened an email in 30 days", impact: "MEDIUM", prompt: "Create a re-engagement sequence for cold leads" }
   ] });
 });
-router.get("/agents", (req, res) => {
-  const agents = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
-  res.status(200).json({ success: true, data: agents.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: i < 3 ? "RUNNING" : "IDLE", queueLength: i < 3 ? 2 : 0, successRate: 97 + Math.random() * 2 })) });
+router.get("/agents", async (req, res) => {
+  try {
+    const health = await agentClient_default.getHealth();
+    const infra = health?.data || {};
+    const agentNames = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
+    const agents = agentNames.map((type, i) => ({
+      id: `agent-${i}`,
+      name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`,
+      type,
+      status: infra.status === "healthy" ? i < 3 ? "RUNNING" : "IDLE" : "OFFLINE",
+      queueLength: i < 3 ? 2 : 0,
+      successRate: 97 + Math.random() * 2
+    }));
+    res.status(200).json({ success: true, data: agents });
+  } catch {
+    const agentNames = ["SUPERVISOR", "COPY", "CREATIVE", "ANALYTICS", "COMPLIANCE", "EMAIL", "SMS", "SOCIAL", "SEO", "COMPETITOR", "FINANCE"];
+    res.status(200).json({ success: true, data: agentNames.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: "OFFLINE", queueLength: 0, successRate: 0 })) });
+  }
 });
-router.get("/tasks", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router.get("/tasks", async (req, res) => {
+  const page = parseInt(String(req.query.page || "1"));
+  const limit = parseInt(String(req.query.limit || "20"));
+  const skip = (page - 1) * limit;
+  const where = req.query.status ? { steps: { some: { status: req.query.status } } } : {};
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: { steps: { orderBy: { createdAt: "asc" } } }
+    }),
+    prisma.workflowRun.count({ where })
+  ]);
+  const data = runs.map((r) => ({
+    id: r.id,
+    command: r.command,
+    status: r.status,
+    agentType: "PIPELINE",
+    task: r.command,
+    startedAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    steps: r.steps,
+    duration: r.updatedAt.getTime() - r.createdAt.getTime()
+  }));
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) }
+  });
 });
-router.get("/decisions", (req, res) => {
-  res.status(200).json({ success: true, data: [
-    { id: "d1", decision: "Pause underperforming ad set B", reasoning: "CTR dropped 40% over 3 days with no conversions", confidence: 0.91, outcome: "EXECUTED", timestamp: (/* @__PURE__ */ new Date()).toISOString() }
-  ] });
+router.get("/decisions", async (req, res) => {
+  const limit = parseInt(String(req.query.limit || "20"));
+  const runs = await prisma.workflowRun.findMany({
+    take: limit,
+    orderBy: { updatedAt: "desc" },
+    include: { steps: { orderBy: { createdAt: "asc" }, take: 1 } }
+  });
+  const data = runs.map((r) => ({
+    id: r.id,
+    decision: r.command,
+    reasoning: `Workflow executed ${r.steps.length} agent step(s). Status: ${r.status}.`,
+    confidence: 0.91,
+    outcome: r.status === "completed" ? "EXECUTED" : r.status === "failed" ? "REJECTED" : r.status === "awaiting_approval" ? "PENDING" : "PENDING",
+    timestamp: r.updatedAt.toISOString(),
+    steps: r.steps
+  }));
+  res.status(200).json({ success: true, data });
 });
-router.get("/memory", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+router.get("/memory", async (req, res) => {
+  const page = parseInt(String(req.query.page || "1"));
+  const limit = parseInt(String(req.query.limit || "20"));
+  const skip = (page - 1) * limit;
+  const [runs, total] = await Promise.all([
+    prisma.workflowRun.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: { steps: { where: { output: { not: null } }, take: 3 } }
+    }),
+    prisma.workflowRun.count()
+  ]);
+  const data = runs.flatMap(
+    (r) => r.steps.map((s) => ({
+      id: s.id,
+      agentType: s.agentName.toUpperCase().replace("AGENT", ""),
+      memType: "EPISODIC",
+      key: `run:${r.id}:${s.agentName}`,
+      value: s.output,
+      createdAt: s.createdAt
+    }))
+  );
+  res.status(200).json({
+    success: true,
+    data,
+    meta: { total, page, limit, pages: Math.ceil(total / limit) }
+  });
 });
 router.get("/automation-rules", (req, res) => {
   res.status(200).json({ success: true, data: [
@@ -266,6 +380,8 @@ router.delete("/automation-rules/:id", (req, res) => {
 });
 router.post("/pipeline/campaign", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const result = await agentClient_default.runCampaignSync(req.body);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -276,6 +392,8 @@ router.post("/pipeline/campaign", async (req, res) => {
 });
 router.post("/pipeline/campaign/async", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const result = await agentClient_default.runCampaignAsync(req.body);
     res.status(202).json({ success: true, data: result });
   } catch (err) {
@@ -336,6 +454,8 @@ router.get("/status/:jobId", async (req, res) => {
 });
 router.post("/pipeline/campaign/stream", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const stream = await agentClient_default.streamCampaign(req.body);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -372,6 +492,8 @@ data: ${JSON.stringify({ error: message })}
 });
 router.post("/query/stream", async (req, res) => {
   try {
+    const user = await prisma.user.findFirst();
+    req.body.llm_api_key = user?.apiKeys?.gemini;
     const stream = await agentClient_default.streamQuery(req.body);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");

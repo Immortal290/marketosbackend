@@ -23,6 +23,7 @@ import phoneRoutes from './modules/phone/routes';
 import smsRoutes from './modules/sms/routes';
 import emailChannelRoutes from './modules/email_channel/routes';
 import historyRoutes from './modules/history/routes';
+import telegramRoutes from './modules/telegram/routes';
 
 const router = Router();
 
@@ -49,5 +50,6 @@ router.use('/phone', phoneRoutes);
 router.use('/sms', smsRoutes);
 router.use('/email-channel', emailChannelRoutes);
 router.use('/history', historyRoutes);
+router.use('/telegram', telegramRoutes);
 
 export default router;

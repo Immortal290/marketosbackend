@@ -189,7 +189,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fallback = ChatGoogleGenerativeAI(
-                model="gemini-3.5-flash-lite",
+                model="gemini-2.5-flash",
                 google_api_key=gemini_key,
                 temperature=temperature,
                 max_output_tokens=8192,
@@ -270,9 +270,25 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         return StringContentWrapper(model.with_fallbacks(fallbacks))
 
     elif provider == "gemini":
-        if gemini_fallback:
-            return StringContentWrapper(gemini_fallback)
-        raise ValueError("GEMINI_API_KEY not set")
+        api_key = requested_key or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not set")
+        
+        # Strip google/ prefix if present
+        clean_model = requested_model.replace("google/", "") if requested_model else "gemini-2.5-flash"
+        if not clean_model.startswith("gemini-"):
+            clean_model = "gemini-2.5-flash" # Default if the name is weird
+            
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        model = ChatGoogleGenerativeAI(
+            model=clean_model,
+            google_api_key=api_key,
+            temperature=temperature,
+            max_output_tokens=8192,
+            max_retries=1,
+            timeout=30.0,
+        )
+        return StringContentWrapper(model)
 
     elif provider == "glm":
         return get_glm(temperature=temperature)
@@ -325,7 +341,7 @@ def get_glm(temperature: float = 0):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             gemini_fb = ChatGoogleGenerativeAI(
-                model="gemini-3.5-flash-lite",
+                model="gemini-2.5-flash",
                 google_api_key=gemini_key,
                 temperature=temperature,
                 max_output_tokens=8192,

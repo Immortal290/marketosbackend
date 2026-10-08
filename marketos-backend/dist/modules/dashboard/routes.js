@@ -42,9 +42,11 @@ var import_adapter_pg = require("@prisma/adapter-pg");
 var import_pg = require("pg");
 var DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set. Check your .env file.");
+  console.error(
+    "[Prisma] WARNING: DATABASE_URL environment variable is not set. Database queries will fail. Ensure DATABASE_URL is configured in Railway Variables."
+  );
 }
-var pool = new import_pg.Pool({ connectionString: DATABASE_URL });
+var pool = new import_pg.Pool({ connectionString: DATABASE_URL || "postgresql://localhost/marketos_placeholder" });
 var adapter = new import_adapter_pg.PrismaPg(pool);
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
@@ -229,13 +231,22 @@ var import_ioredis = __toESM(require("ioredis"));
 var redisClient = new import_ioredis.default({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: null
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+  // Limit reconnect attempts so a missing Redis doesn't spam logs forever
+  retryStrategy: (times) => {
+    if (times > 5) {
+      logger.warn("[Redis] Max reconnect attempts reached. Redis features will be unavailable.");
+      return null;
+    }
+    return Math.min(times * 500, 3e3);
+  }
 });
 redisClient.on("connect", () => {
-  logger.info("Connected to Redis");
+  logger.info("[Redis] Connected");
 });
 redisClient.on("error", (err) => {
-  logger.error("Redis connection error:", err);
+  logger.error("[Redis] Connection error (non-fatal):", err.message);
 });
 
 // src/lib/kafka.ts
@@ -244,10 +255,19 @@ var clientId = process.env.KAFKA_CLIENT_ID || "marketos-backend";
 var kafka = new import_kafkajs.Kafka({
   clientId,
   brokers: [kafkaBroker],
+  // ── Railway fix ────────────────────────────────────────────────────────────
+  // The Railway Kafka broker returns its internal container IP in metadata
+  // after the bootstrap handshake. That IP is unreachable from other services.
+  // enforceRequestTimeout makes stuck connections fail fast so KafkaJS
+  // re-resolves the hostname via DNS on the next retry instead of spinning.
+  enforceRequestTimeout: true,
+  requestTimeout: 15e3,
   retry: {
     retries: 5,
-    initialRetryTime: 1e3,
-    maxRetryTime: 1e4
+    initialRetryTime: 2e3,
+    maxRetryTime: 15e3,
+    factor: 2,
+    restartOnFailure: async () => true
   }
 });
 var producer = kafka.producer();

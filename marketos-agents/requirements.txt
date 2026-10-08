@@ -63,3 +63,6 @@ alembic>=1.13.0
 
 # ── Image Generation (FLUX.1-schnell) ────────────────────────────────────────
 huggingface_hub>=0.25.0
+
+# ── Composio (Telegram channel posting) ──────────────────────────────────────
+composio-langchain>=0.5.0      # Composio LangChain integration for TELEGRAM_SEND_MESSAGE

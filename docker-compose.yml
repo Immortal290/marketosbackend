@@ -77,6 +77,10 @@ services:
       ZERNIO_ACCOUNT_ID:      ${ZERNIO_ACCOUNT_ID:-}
       DEFAULT_COUNTRY_CODE:   ${DEFAULT_COUNTRY_CODE:-}
       MAX_RECIPIENTS:         ${MAX_RECIPIENTS:-500}
+      # ── Telegram Campaign Feature ───────────────────────────────────────────
+      COMPOSIO_API_KEY:       ${COMPOSIO_API_KEY:-}
+      TELEGRAM_BOT_TOKEN:     ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHANNEL_ID:    ${TELEGRAM_CHANNEL_ID:-}
     depends_on:
       db:
         condition: service_healthy
@@ -164,6 +168,9 @@ services:
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
       - SERPER_API_KEY=${SERPER_API_KEY:-}
+      - COMPOSIO_API_KEY=${COMPOSIO_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID:-}
       # ClickHouse — use Docker service hostname, not localhost
       - CLICKHOUSE_HOST=marketos_clickhouse
       - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-9000}

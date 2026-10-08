@@ -20,7 +20,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -140,6 +140,7 @@ AGENT_REGISTRY: dict[str, dict] = {
     "lead_scoring":     {"module": "agents.lead_scoring.lead_scoring_agent",  "func": "lead_scoring_agent_node",  "skills": ["revops","sales-enablement","customer-research"],                                          "temperature": 0.0, "sla": "<2s"},
     "reporting":        {"module": "agents.reporting.reporting_agent",        "func": "reporting_agent_node",     "skills": ["analytics-tracking","revops","copy-editing"],                                             "temperature": 0.3, "sla": "<60s"},
     "onboarding":       {"module": "agents.onboarding.onboarding_agent",     "func": "onboarding_agent_node",    "skills": ["onboarding-cro","churn-prevention","lead-magnets","email-sequence"],                      "temperature": 0.5, "sla": "event-driven"},
+    "telegram":         {"module": "agents.telegram.telegram_agent",          "func": "telegram_agent_node",      "skills": ["copywriting","social-content","marketing-psychology"],                                    "temperature": 0.8, "sla": "real-time"},
 }
 
 
@@ -869,6 +870,126 @@ def _store_campaign(campaign_id: str, workspace_id: str, intent: str):
     finally:
         if db is not None:
             db.close()
+
+
+# ── Telegram Endpoints ───────────────────────────────────────────────────────
+
+class TelegramGenerateRequest(BaseModel):
+    prompt:         str   = Field(..., description="What the campaign is about")
+    brand:          Optional[str] = ""
+    tone:           Optional[str] = "Friendly"
+    language:       Optional[str] = "English"
+    channel_id:     Optional[str] = None
+    cta_url:        Optional[str] = "[LINK]"
+
+class TelegramSendRequest(BaseModel):
+    message:        str         = Field(..., description="The Telegram ad message to send")
+    phones:         List[str]   = Field(..., description="Customer phone numbers (E.164) or Telegram chat IDs")
+    image_prompt:   Optional[str] = None
+    bot_token:      Optional[str] = None  # override env if needed
+
+
+@app.post("/v1/telegram/generate")
+async def telegram_generate(request: TelegramGenerateRequest):
+    """
+    Generate a short Telegram advertisement message + image prompt using the Telegram Agent.
+    Does NOT post to any channel — use /v1/telegram/send for that.
+    """
+    trace_id = str(uuid.uuid4())[:8]
+    start = time.monotonic()
+
+    state = {
+        "user_intent": request.prompt,
+        "current_step": "telegram_agent",
+        "errors": [],
+        "trace": [],
+        "campaign_plan": {
+            "campaign_name": "Telegram Ad Campaign",
+            "goal": request.prompt,
+            "tone": request.tone or "Friendly",
+            "target_audience": "general",
+        },
+        "language": request.language,
+        "cta_url": request.cta_url,
+        "telegram_channel_id": request.channel_id or "",
+        # Don't actually send during generate — blank the token
+        "telegram_bot_token": "",
+    }
+
+    import importlib
+    mod = importlib.import_module("agents.telegram.telegram_agent")
+    fn = getattr(mod, "telegram_agent_node")
+
+    try:
+        result = fn(state)
+        elapsed = (time.monotonic() - start) * 1000
+        return _envelope(
+            {
+                "message":      result.get("telegram_result", {}).get("telegram_message", ""),
+                "image_prompt": result.get("telegram_result", {}).get("telegram_image_prompt", ""),
+                "hashtags":     result.get("telegram_result", {}).get("telegram_hashtags", []),
+            },
+            "telegram_agent",
+            elapsed,
+            trace_id,
+        )
+    except Exception as exc:
+        elapsed = (time.monotonic() - start) * 1000
+        raise HTTPException(
+            status_code=500,
+            detail=_envelope({}, "telegram_agent", elapsed, trace_id, ok=False, error=str(exc)),
+        )
+
+
+@app.post("/v1/telegram/send")
+async def telegram_send(request: TelegramSendRequest):
+    """
+    Post an already-generated Telegram ad message to each customer phone number.
+    Uses Telegram Bot API (primary) or Composio (fallback).
+    Each number in `phones` is treated as a Telegram chat_id (E.164 phone or numeric ID).
+    """
+    from agents.telegram.telegram_agent import _send_via_composio, _send_via_bot_api, COMPOSIO_API_KEY, TELEGRAM_BOT_TOKEN
+    import asyncio
+
+    trace_id  = str(uuid.uuid4())[:8]
+    start     = time.monotonic()
+    bot_token = request.bot_token or TELEGRAM_BOT_TOKEN
+    phones    = [p.strip() for p in request.phones if p.strip()]
+
+    if not phones:
+        raise HTTPException(status_code=400, detail={"error": "phones list is required and cannot be empty"})
+
+    if not bot_token and not COMPOSIO_API_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Neither TELEGRAM_BOT_TOKEN nor COMPOSIO_API_KEY is configured on the server."},
+        )
+
+    results = []
+    for phone in phones:
+        # Normalise: ensure + prefix for international format
+        chat_id = phone if (phone.startswith("+") or phone.startswith("-") or phone.isdigit()) else f"+{phone}"
+
+        if bot_token:
+            r = _send_via_bot_api(bot_token, chat_id, request.message)
+        else:
+            r = _send_via_composio(chat_id, request.message)
+
+        results.append({"phone": phone, **r})
+
+        # Respect Telegram rate limit (~30 msg/s)
+        if len(phones) > 1:
+            time.sleep(0.05)
+
+    sent_count = sum(1 for r in results if r.get("sent"))
+    elapsed = (time.monotonic() - start) * 1000
+    return _envelope(
+        {"sentCount": sent_count, "total": len(phones), "results": results},
+        "telegram_agent",
+        elapsed,
+        trace_id,
+        ok=sent_count > 0,
+    )
 
 
 # ── Run ──────────────────────────────────────────────────────────────────────

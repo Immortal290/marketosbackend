@@ -31,7 +31,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var bullmq_exports = {};
 __export(bullmq_exports, {
   defaultQueue: () => defaultQueue,
-  defaultWorker: () => defaultWorker
+  defaultWorker: () => defaultWorker,
+  getDefaultQueue: () => getDefaultQueue,
+  getDefaultWorker: () => getDefaultWorker
 });
 module.exports = __toCommonJS(bullmq_exports);
 var import_bullmq = require("bullmq");
@@ -77,24 +79,43 @@ var logger = import_winston.default.createLogger({
 // src/lib/bullmq.ts
 var connection = {
   host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379")
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  // lazyConnect prevents connection attempts at module load time
+  enableOfflineQueue: false
 };
-var defaultQueue = new import_bullmq.Queue("default", { connection });
-var defaultWorker = new import_bullmq.Worker(
-  "default",
-  async (job) => {
-    logger.info(`Processing job ${job.id} of type ${job.name}`);
-  },
-  { connection }
-);
-defaultWorker.on("completed", (job) => {
-  logger.info(`Job ${job.id} has completed!`);
-});
-defaultWorker.on("failed", (job, err) => {
-  logger.error(`Job ${job?.id} has failed with ${err.message}`);
-});
+var _defaultQueue = null;
+var _defaultWorker = null;
+function getDefaultQueue() {
+  if (!_defaultQueue) {
+    _defaultQueue = new import_bullmq.Queue("default", { connection });
+  }
+  return _defaultQueue;
+}
+function getDefaultWorker() {
+  if (!_defaultWorker) {
+    _defaultWorker = new import_bullmq.Worker(
+      "default",
+      async (job) => {
+        logger.info(`Processing job ${job.id} of type ${job.name}`);
+      },
+      { connection }
+    );
+    _defaultWorker.on("completed", (job) => {
+      logger.info(`Job ${job.id} has completed!`);
+    });
+    _defaultWorker.on("failed", (job, err) => {
+      logger.error(`Job ${job?.id} has failed with ${err.message}`);
+    });
+  }
+  return _defaultWorker;
+}
+var defaultQueue = { add: (...args) => getDefaultQueue().add(...args) };
+var defaultWorker = { on: () => {
+} };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   defaultQueue,
-  defaultWorker
+  defaultWorker,
+  getDefaultQueue,
+  getDefaultWorker
 });

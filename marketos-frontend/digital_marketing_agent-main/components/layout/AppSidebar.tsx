@@ -23,6 +23,7 @@ import {
   Mail,
   MessageSquare,
   Phone,
+  Send
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -41,6 +42,7 @@ const sidebarGroups = [
       { href: "/channels/meta-ads", label: "Meta Ads", icon: Facebook },
       { href: "/channels/twitter", label: "Twitter / X", icon: Twitter },
       { href: "/channels/whatsapp", label: "WhatsApp", icon: MessageCircle },
+      { href: "/channels/telegram", label: "Telegram", icon: Send },
       { href: "/channels/email", label: "Email", icon: Mail },
       { href: "/channels/sms", label: "SMS", icon: MessageSquare },
       { href: "/channels/phone", label: "Phone", icon: Phone },

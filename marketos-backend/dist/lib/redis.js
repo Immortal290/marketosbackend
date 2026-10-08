@@ -77,13 +77,22 @@ var logger = import_winston.default.createLogger({
 var redisClient = new import_ioredis.default({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: null
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+  // Limit reconnect attempts so a missing Redis doesn't spam logs forever
+  retryStrategy: (times) => {
+    if (times > 5) {
+      logger.warn("[Redis] Max reconnect attempts reached. Redis features will be unavailable.");
+      return null;
+    }
+    return Math.min(times * 500, 3e3);
+  }
 });
 redisClient.on("connect", () => {
-  logger.info("Connected to Redis");
+  logger.info("[Redis] Connected");
 });
 redisClient.on("error", (err) => {
-  logger.error("Redis connection error:", err);
+  logger.error("[Redis] Connection error (non-fatal):", err.message);
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
