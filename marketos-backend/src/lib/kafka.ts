@@ -51,7 +51,8 @@ const RESULT_TOPICS = [
  */
 export const connectKafka = async (): Promise<void> => {
   if (!process.env.KAFKA_BROKER) {
-    logger.warn('[Kafka] KAFKA_BROKER env not set — skipping Kafka connection. Real-time agent events disabled.');
+    logger.info('[Kafka] KAFKA_BROKER not configured — Kafka disabled for this environment. ' +
+      'Set KAFKA_BROKER in .env to enable real-time agent events.');
     return;
   }
 

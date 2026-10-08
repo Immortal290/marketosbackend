@@ -12,7 +12,9 @@
     "test": "jest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "mcp": "tsx src/modules/whatsapp/mcp-server.ts"
+    "mcp": "tsx src/modules/whatsapp/mcp-server.ts",
+    "mcp:master": "tsx src/mcp/marketos-mcp-server.ts",
+    "mcp:validate": "tsx src/mcp/marketos-mcp-server.ts --validate"
   },
   "keywords": [],
   "author": "",
