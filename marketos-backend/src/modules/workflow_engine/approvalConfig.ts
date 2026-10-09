@@ -32,6 +32,10 @@ export const AGENT_APPROVAL_CONFIG: Record<string, AgentApprovalRule> = {
     requiresApproval: true,
     reason: "Outbound WhatsApp messaging requires manual authorization",
   },
+  TelegramAgent: {
+    requiresApproval: true,
+    reason: "Outbound Telegram messages require manual authorization",
+  },
   // Auto-run agents (no approval required)
   SupervisorAgent: { requiresApproval: false },
   CopyAgent: { requiresApproval: false },

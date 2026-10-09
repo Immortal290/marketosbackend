@@ -190,6 +190,8 @@ class CampaignRequest(BaseModel):
     workspace_id:    str = "default"
     llm_model:       Optional[str] = None
     llm_api_key:     Optional[str] = None
+    image_model:     Optional[str] = None
+    image_api_key:   Optional[str] = None
 
 class StructuredCampaignRequest(BaseModel):
     brand_profile:   dict = Field(..., description="Full BrandProfile JSON")
@@ -205,6 +207,8 @@ class StructuredCampaignRequest(BaseModel):
     workspace_id:    str = "default"
     llm_model:       Optional[str] = None
     llm_api_key:     Optional[str] = None
+    image_model:     Optional[str] = None
+    image_api_key:   Optional[str] = None
 
 
 # ── GET / — Serve Dashboard ──────────────────────────────────────────────────
@@ -311,6 +315,8 @@ async def run_pipeline_stream(request: CampaignRequest):
         "unsubscribe_url": request.unsubscribe_url,
         "llm_model":       request.llm_model,
         "llm_api_key":     request.llm_api_key,
+        "image_model":     request.image_model,
+        "image_api_key":   request.image_api_key,
         "current_step":    "supervisor",
         "errors":          [],
         "trace":           [],
@@ -362,6 +368,8 @@ async def run_pipeline_structured_stream(request: StructuredCampaignRequest):
         "company_name":    request.company_name,
         "company_address": request.company_address,
         "unsubscribe_url": request.unsubscribe_url,
+        "image_model":     request.image_model,
+        "image_api_key":   request.image_api_key,
         "current_step":    "supervisor",
         "errors":          [],
         "trace":           [],
@@ -473,6 +481,8 @@ async def run_pipeline_sync(request: CampaignRequest):
         "company_name":    request.company_name,
         "company_address": request.company_address,
         "unsubscribe_url": request.unsubscribe_url,
+        "image_model":     request.image_model,
+        "image_api_key":   request.image_api_key,
         "current_step":    "supervisor",
         "errors":          [],
         "trace":           [],

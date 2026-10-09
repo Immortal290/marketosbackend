@@ -118,7 +118,7 @@ export function TargetAudienceModal({
   const [senderName, setSenderName]         = useState("");
   const [companyName, setCompanyName]       = useState("");
   const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);
-  const [llmModel, setLlmModel]             = useState("gemini-2.0-flash");
+  const [llmModel, setLlmModel]             = useState("gemini-2.5-flash");
   const [customModel, setCustomModel]       = useState("");
   const [llmApiKey, setLlmApiKey]           = useState("");
   const [savedKeyLoaded, setSavedKeyLoaded] = useState(false);
@@ -155,9 +155,22 @@ export function TargetAudienceModal({
     // Strip digits-only that aren't phone-length (avoid matching zip codes)
     const rawPhone = phoneMatch ? phoneMatch[0].replace(/[\s()\-]/g, "") : "";
     const isValidPhone = rawPhone.replace(/\D/g, "").length >= 10;
-    // Only override defaults if explicit email/phone found in prompt
+    // Extract api key if provided in the prompt
+    const apiKeyMatch = initialPrompt.match(/(?:api_key|apikey|key)\s*[:=]\s*([A-Za-z0-9_-]{20,})/i) || initialPrompt.match(/(AIza[0-9A-Za-z-_]{35}|sk-[a-zA-Z0-9]{32,}|gsk_[a-zA-Z0-9]{20,})/);
+    // Only override defaults if explicit email/phone/key found in prompt
     if (emailMatch) setRecipientEmail(emailMatch[0]);
     if (isValidPhone) setRecipientPhone(rawPhone);
+    if (apiKeyMatch) {
+      const extractedKey = apiKeyMatch[1] || apiKeyMatch[0];
+      setLlmApiKey(extractedKey);
+      if (extractedKey.startsWith("gsk_")) {
+        setLlmModel("groq-llama-3.3-70b");
+      } else if (extractedKey.startsWith("sk-")) {
+        setLlmModel("gpt-4o-mini");
+      } else if (extractedKey.startsWith("AIza")) {
+        setLlmModel("gemini-2.5-flash");
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPrompt]);
 
@@ -388,14 +401,14 @@ export function TargetAudienceModal({
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
                   <optgroup label="Google Gemini">
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recommended / Default)</option>
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended / Default)</option>
                     <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                   </optgroup>
-                  <optgroup label="Groq AI (Ultra-fast)">
-                    <option value="groq-llama-3.3-70b">Groq — Llama 3.3 70B Versatile</option>
-                    <option value="groq-llama3-8b">Groq — Llama 3 8B Instant</option>
-                    <option value="groq-mixtral-8x7b">Groq — Mixtral 8x7B</option>
+                  <optgroup label="🚀 Groq (Free Tier — Ultra-fast)">
+                    <option value="groq-llama-3.3-70b">Groq — Llama 3.3 70B Versatile (Free ✓)</option>
+                    <option value="groq-llama-3.1-8b">Groq — Llama 3.1 8B Instant (Free ✓)</option>
+                    <option value="groq-llama-4-scout">Groq — Llama 4 Scout 17B (Free ✓)</option>
+                    <option value="groq-mixtral-8x7b">Groq — Mixtral 8x7B 32K (Free ✓)</option>
                   </optgroup>
                   <optgroup label="OpenAI">
                     <option value="gpt-4o">OpenAI GPT-4o (Omni)</option>
@@ -409,7 +422,6 @@ export function TargetAudienceModal({
                   <optgroup label="OpenRouter / Open Source">
                     <option value="deepseek/deepseek-chat">DeepSeek V3 (via OpenRouter)</option>
                     <option value="deepseek/deepseek-r1">DeepSeek R1 (via OpenRouter)</option>
-                    <option value="meta-llama/llama-3.1-405b-instruct">Llama 3.1 405B (via OpenRouter)</option>
                   </optgroup>
                   <optgroup label="Custom / Specialized Agent">
                     <option value="custom">✨ Enter Custom Model ID...</option>
@@ -441,7 +453,14 @@ export function TargetAudienceModal({
                   <input
                     type="password"
                     value={llmApiKey}
-                    onChange={(e) => { setLlmApiKey(e.target.value); setSavedKeyLoaded(false); }}
+                    onChange={(e) => { 
+                      const val = e.target.value;
+                      setLlmApiKey(val); 
+                      setSavedKeyLoaded(false); 
+                      if (val.startsWith("gsk_")) setLlmModel("groq-llama-3.3-70b");
+                      else if (val.startsWith("sk-")) setLlmModel("gpt-4o-mini");
+                      else if (val.startsWith("AIza")) setLlmModel("gemini-2.5-flash");
+                    }}
                     placeholder={savedKeyLoaded ? "••••••••••••••••••• (saved)" : "Paste your Gemini/OpenAI/Groq key..."}
                     className="w-full bg-white border-[3px] border-black rounded-none pl-7 pr-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                   />

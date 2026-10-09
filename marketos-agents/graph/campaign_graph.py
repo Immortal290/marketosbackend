@@ -44,13 +44,14 @@ from agents.reporting.reporting_agent               import reporting_agent_node
 from agents.onboarding.onboarding_agent             import onboarding_agent_node
 from agents.voice.voice_agent                       import voice_agent_node
 from agents.whatsapp.whatsapp_agent                 import whatsapp_agent_node
+from agents.telegram.telegram_agent                 import telegram_agent_node
 
 
 from schemas.campaign import (
     CampaignPlan, CopyOutput, ComplianceResult, BudgetCheck, SendResult, 
     ABTestResult, LeadScore, CompetitorResult, SEOResult, AnalyticsResult, 
     MonitorResult, ReportingResult, OnboardingResult, VoiceResult, 
-    WhatsappResult, SocialResult, ImageResult
+    WhatsappResult, SocialResult, ImageResult, TelegramResult
 )
 
 # ── Graph State ────────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ class CampaignState(TypedDict):
     onboarding_result:       Optional[OnboardingResult]
     voice_result:            Optional[VoiceResult]
     whatsapp_result:         Optional[WhatsappResult]
+    telegram_result:         Optional[TelegramResult]
 
     # ── Advisory Compliance State ──────────────────────────────────────────────
     compliance_retry_count:        Optional[int]
@@ -164,6 +166,9 @@ def voice_parallel_node(state: dict) -> dict:
 def whatsapp_parallel_node(state: dict) -> dict:
     return _parallel_branch_delta(state, whatsapp_agent_node(state), "whatsapp_result")
 
+def telegram_parallel_node(state: dict) -> dict:
+    return _parallel_branch_delta(state, telegram_agent_node(state), "telegram_result")
+
 def social_parallel_node(state: dict) -> dict:
     return _parallel_branch_delta(state, social_media_agent_node(state), "social_result")
 
@@ -182,6 +187,7 @@ def channel_router(state: dict) -> list[str]:
     if "sms" in channels: next_nodes.append("sms_agent")
     if "voice" in channels: next_nodes.append("voice_agent")
     if "whatsapp" in channels: next_nodes.append("whatsapp_agent")
+    if "telegram" in channels: next_nodes.append("telegram_agent")
     if "social" in channels: next_nodes.append("social_media_agent")
         
     if not next_nodes:
@@ -214,6 +220,7 @@ def build_campaign_graph() -> StateGraph:
     g.add_node("onboarding_agent",    onboarding_agent_node)
     g.add_node("voice_agent",         voice_parallel_node)
     g.add_node("whatsapp_agent",      whatsapp_parallel_node)
+    g.add_node("telegram_agent",      telegram_parallel_node)
 
     # Entry: dual pipeline
     g.add_conditional_edges(START, pipeline_router,
@@ -236,6 +243,7 @@ def build_campaign_graph() -> StateGraph:
             "sms_agent": "sms_agent",
             "voice_agent": "voice_agent",
             "whatsapp_agent": "whatsapp_agent",
+            "telegram_agent": "telegram_agent",
             "social_media_agent": "social_media_agent",
             "analytics_agent": "analytics_agent",
             "end": END
@@ -245,6 +253,7 @@ def build_campaign_graph() -> StateGraph:
     g.add_edge("sms_agent",          "analytics_agent")
     g.add_edge("voice_agent",        "analytics_agent")
     g.add_edge("whatsapp_agent",     "analytics_agent")
+    g.add_edge("telegram_agent",     "analytics_agent")
     g.add_edge("social_media_agent", "analytics_agent")
     g.add_edge("analytics_agent",    "monitor_agent")
     g.add_edge("monitor_agent",      "ab_test_agent")

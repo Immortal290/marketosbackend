@@ -421,12 +421,28 @@ class VoiceResult(BaseModel):
     voice_name: str
     dispatched_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+# ── Telegram Agent ───────────────────────────────────────────────────────────
+
+class TelegramResult(BaseModel):
+    telegram_message: str
+    telegram_image_prompt: str
+    telegram_hashtags: List[str] = []
+    telegram_channel_id: Optional[str] = None
+    telegram_sent: bool = False
+    telegram_provider: str = "none"
+    telegram_message_id: Optional[int] = None
+    telegram_error: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
 # ── WhatsApp Agent ───────────────────────────────────────────────────────────
 
 class WhatsappResult(BaseModel):
+    whatsapp_message: str
+    whatsapp_image_prompt: str
+    whatsapp_hashtags: List[str] = []
     campaign_id: str
     messages_scheduled: int = 0
-    template_used: str
+    template_used: str = "none"
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 # ── Onboarding Agent ─────────────────────────────────────────────────────────

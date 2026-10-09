@@ -388,6 +388,10 @@ export default function MissionControlPage() {
           sender_name: audienceData?.senderName,
           company_name: audienceData?.companyName,
           channels: audienceData?.channels,
+          llm_model: audienceData?.llmModel,
+          llm_api_key: audienceData?.llmApiKey,
+          image_model: audienceData?.imageModel,
+          image_api_key: audienceData?.imageApiKey,
         }),
       }).catch((err) => console.warn("[WorkflowEngine] Start workflow fetch warning:", err));
 

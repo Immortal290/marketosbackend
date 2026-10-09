@@ -104,10 +104,13 @@ def image_agent_node(state: dict) -> dict:
     else:
         image_api_key = state.get("image_api_key") or os.getenv("HF_TOKEN")
         if not image_api_key:
-             raise ValueError(f"Image API Key (HF_TOKEN) is missing for {image_model}. No fallback allowed.")
-        agent_log("IMAGE", f"Generating with {image_model} strictly...")
-        img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
-        source = "flux-schnell"
+             agent_log("IMAGE", f"No HF_TOKEN found for {image_model}, falling back to free Pollinations.ai...")
+             img_b64 = _generate_pollinations_image(full_prompt)
+             source = "pollinations"
+        else:
+             agent_log("IMAGE", f"Generating with {image_model} strictly...")
+             img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
+             source = "flux-schnell"
     
     if not img_b64:
         raise ValueError(f"{image_model} image generation failed or returned empty. No fallback allowed.")
@@ -237,7 +240,7 @@ def _generate_visual_concept_specs(
         seed = abs(hash(prompt_desc)) % 9999999
         pollinations_url = (
             f"https://image.pollinations.ai/prompt/{q_str}"
-            f"?width={w}&height={h}&model=flux-pro&nologo=true&safe=true"
+            f"?width={w}&height={h}&model=flux&nologo=true&safe=true"
             f"&negative={neg_str}&seed={seed}&enhance=true"
         )
         banner_options.append({
@@ -593,7 +596,7 @@ def _generate_pollinations_image(
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_pollinations"
 
-    # Build high-quality Pollinations URL with flux-pro model and negative prompts
+    # Build high-quality Pollinations URL with flux model (free tier — flux-pro requires payment)
     negative = (
         "text, watermark, logo, words, letters, typography, blurry, low resolution, "
         "pixelated, distorted, deformed, ugly, amateur, overexposed, underexposed, "
@@ -604,8 +607,8 @@ def _generate_pollinations_image(
     seed    = abs(hash(full_prompt[:100])) % 9999999
     url = (
         f"https://image.pollinations.ai/prompt/{q}"
-        f"?width={width}&height={height}&model=flux-pro&nologo=true&safe=true"
-        f"&negative={neg_q}&seed={seed}&enhance=true"
+        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
+        f"&seed={seed}"
     )
 
     try:

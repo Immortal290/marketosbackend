@@ -168,13 +168,13 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
 
     # Determine provider dynamically from requested model string if supplied
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
-    if "groq" in requested_model.lower():
+    if "groq" in requested_model.lower() or "llama" in requested_model.lower() or "mixtral" in requested_model.lower():
         provider = "groq"
     elif "gpt" in requested_model.lower() or "o3" in requested_model.lower() or "openai" in requested_model.lower():
         provider = "openai"
     elif "claude" in requested_model.lower() or "anthropic" in requested_model.lower():
         provider = "anthropic"
-    elif "deepseek" in requested_model.lower() or "/" in requested_model:
+    elif "deepseek" in requested_model.lower():
         provider = "openrouter"
     elif "gemini" in requested_model.lower():
         provider = "gemini"
@@ -258,16 +258,62 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
             if gemini_fallback:
                 return StringContentWrapper(gemini_fallback)
             raise ValueError("GROQ_API_KEY not set and no Gemini fallback available")
+
         from langchain_groq import ChatGroq
-        model = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            groq_api_key=api_key,
-            temperature=temperature,
-            max_tokens=4096,
-            max_retries=1,
-            timeout=15,
-        )
-        return StringContentWrapper(model.with_fallbacks(fallbacks))
+
+        # ── Map UI dropdown values → preferred model ──
+        m = requested_model.lower()
+        if "scout" in m or "llama-4" in m:
+            preferred = "meta-llama/llama-4-scout-17b-16e-instruct"
+        elif "mixtral" in m:
+            preferred = "mixtral-8x7b-32768"
+        elif "8b" in m or "instant" in m:
+            preferred = "llama-3.1-8b-instant"
+        else:
+            preferred = "llama-3.3-70b-versatile"
+
+        # ── Fallback chain: try models until one is accessible on this account ──
+        groq_candidates = [
+            preferred,
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile",
+            "mixtral-8x7b-32768",
+            "openai/gpt-oss-20b",
+        ]
+        # deduplicate while preserving order
+        seen: set = set()
+        ordered_candidates = [x for x in groq_candidates if not (x in seen or seen.add(x))]
+
+        last_err: Exception | None = None
+        for candidate in ordered_candidates:
+            try:
+                chat = ChatGroq(
+                    model=candidate,
+                    groq_api_key=api_key,
+                    temperature=temperature,
+                    max_tokens=4096,
+                    max_retries=0,   # no retry — we handle fallback ourselves
+                    timeout=10,
+                )
+                # quick validation ping — raises immediately if model not found
+                chat.invoke("hi")
+                # success — wrap and return
+                import logging
+                logging.getLogger("LLM_PROVIDER").info(f"Groq: using model '{candidate}'")
+                return StringContentWrapper(chat.with_fallbacks(fallbacks))
+            except Exception as e:
+                last_err = e
+                err_str = str(e)
+                if "model_not_found" in err_str or "decommissioned" in err_str or "404" in err_str or "400" in err_str:
+                    continue   # try next candidate
+                # unexpected error — re-raise immediately
+                raise
+
+        # if all Groq models failed, fall back to Gemini if available
+        if gemini_fallback:
+            return StringContentWrapper(gemini_fallback)
+        raise ValueError(f"No accessible Groq model found for this API key. Last error: {last_err}")
 
     elif provider == "gemini":
         api_key = requested_key or os.getenv("GEMINI_API_KEY")
@@ -278,6 +324,9 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
         clean_model = requested_model.replace("google/", "") if requested_model else "gemini-2.5-flash"
         if not clean_model.startswith("gemini-"):
             clean_model = "gemini-2.5-flash" # Default if the name is weird
+            
+        if clean_model in ["gemini-2.0-flash", "gemini-3.0-flash"]:
+            clean_model = "gemini-2.5-flash"
             
         from langchain_google_genai import ChatGoogleGenerativeAI
         model = ChatGoogleGenerativeAI(

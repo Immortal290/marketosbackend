@@ -10,8 +10,8 @@ import { checkAgentRequiresApproval, normalizeAgentName } from './approvalConfig
 export function determineAgentPlan(command: string): string[] {
   const lower = command.toLowerCase();
 
-  if (lower.includes('campaign') || lower.includes('launch') || lower.includes('target') || lower.includes('cmo')) {
-    return ['SupervisorAgent', 'CopyAgent', 'CreativeAgent', 'ComplianceAgent', 'EmailAgent', 'AnalyticsAgent'];
+  if (lower.includes('campaign') || lower.includes('launch') || lower.includes('target') || lower.includes('cmo') || lower.includes('sale') || lower.includes('whatsapp') || lower.includes('telegram')) {
+    return ['SupervisorAgent', 'CopyAgent', 'CreativeAgent', 'ComplianceAgent', 'EmailAgent', 'WhatsappAgent', 'TelegramAgent', 'AnalyticsAgent'];
   }
   if (lower.includes('content') || lower.includes('post') || lower.includes('social') || lower.includes('blog') || lower.includes('creative')) {
     return ['CopyAgent', 'CreativeAgent', 'ComplianceAgent', 'SocialMediaAgent'];

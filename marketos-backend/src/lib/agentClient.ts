@@ -78,13 +78,19 @@ export interface CampaignRunOptions {
   company_address?: string;
   unsubscribe_url?: string;
   workspace_id?: string;
+  llm_model?: string;
   llm_api_key?: string;
+  image_model?: string;
+  image_api_key?: string;
 }
 
 export interface QueryRunOptions {
   query: string;
   workspace_id?: string;
+  llm_model?: string;
   llm_api_key?: string;
+  image_model?: string;
+  image_api_key?: string;
 }
 
 // ── Internal fetch helper with multi-candidate fallback ─────────────────────
