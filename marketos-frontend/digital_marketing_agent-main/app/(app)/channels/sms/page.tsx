@@ -211,41 +211,29 @@ export default function SMSPage() {
 
     setConnStatus("verifying");
     try {
-      const basicAuth = btoa(`${accountSid}:${authToken}`);
-      const res = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
-        { headers: { Authorization: `Basic ${basicAuth}` } }
-      );
+      const { apiRequest } = await import("@/lib/api");
+      const res: any = await apiRequest("/sms/verify", {
+        method: "POST",
+        body: JSON.stringify({ accountSid, authToken, fromNumber }),
+      });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+      if (!res.success) {
         setConnStatus("error");
-        toast.error("Invalid credentials: " + ((err as any).message || `HTTP ${res.status}`));
+        toast.error("Invalid credentials: " + (res.error || "Verification failed"));
         return;
       }
 
-      const data = await res.json();
       setConnStatus("connected");
-      setAccountName(data.friendly_name);
+      setAccountName(res.account?.friendlyName || "Twilio Account");
       setSetupOpen(false);
-      toast.success(`Connected as: ${data.friendly_name}`, {
+      toast.success(`Connected as: ${res.account?.friendlyName || "Twilio"}`, {
         description: "Your Twilio SMS integration is live.",
       });
     } catch (err: any) {
-      // CORS fallback — format passed
-      if (err instanceof TypeError) {
-        setConnStatus("connected");
-        setAccountName("Twilio Account");
-        setSetupOpen(false);
-        toast.success("Credentials saved (CORS mode — backend will fully verify).");
-      } else {
-        setConnStatus("error");
-        toast.error("Verification error: " + err.message);
-      }
+      setConnStatus("error");
+      toast.error("Verification error: " + err.message);
     }
   }, [accountSid, authToken, fromNumber]);
-
-  /* ── Send Bulk SMS ─────────────────────────────────────────────────────── */
 
   const handleSend = useCallback(async () => {
     setConfirmOpen(false);
@@ -253,42 +241,43 @@ export default function SMSPage() {
     setResults([]);
     setShowResults(false);
 
-    const basicAuth = btoa(`${accountSid}:${authToken}`);
-    const newResults: SendResult[] = [];
+    try {
+      const { apiRequest } = await import("@/lib/api");
+      const res: any = await apiRequest("/sms/send", {
+        method: "POST",
+        body: JSON.stringify({
+          accountSid,
+          authToken,
+          from: fromNumber,
+          to: validNums,
+          body: message
+        }),
+      });
 
-    for (const num of validNums) {
-      try {
-        const body = new URLSearchParams({ To: num, From: fromNumber, Body: message });
-        const res = await fetch(
-          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Basic ${basicAuth}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: body.toString(),
-          }
-        );
-        const data = await res.json();
-        if (res.ok && data.sid) {
-          newResults.push({ to: num, ok: true, sid: data.sid });
-        } else {
-          newResults.push({ to: num, ok: false, error: data.message || "Failed" });
-        }
-      } catch (_) {
-        newResults.push({ to: num, ok: false, error: "CORS — use backend proxy" });
+      let finalResults = [];
+      if (res.success && res.results) {
+        finalResults = res.results;
+        setResults(finalResults);
+      } else {
+        toast.error(res.error || "Failed to send SMS");
+        finalResults = validNums.map(num => ({ to: num, ok: false, error: res.error || "Failed" }));
+        setResults(finalResults);
       }
+
+      setShowResults(true);
+      setSending(false);
+
+      const sent = finalResults.filter((r: any) => r.ok).length;
+      const failed = finalResults.filter((r: any) => !r.ok).length;
+      if (sent > 0 && failed === 0) toast.success(`All ${sent} SMS messages sent!`);
+      else if (sent > 0) toast.warning(`${sent} sent, ${failed} failed.`);
+    } catch (err: any) {
+      toast.error("Failed to send: " + err.message);
+      const finalResults = validNums.map(num => ({ to: num, ok: false, error: err.message }));
+      setResults(finalResults);
+      setShowResults(true);
+      setSending(false);
     }
-
-    setResults(newResults);
-    setShowResults(true);
-    setSending(false);
-
-    const sent = newResults.filter((r) => r.ok).length;
-    const failed = newResults.filter((r) => !r.ok).length;
-    if (failed === 0) toast.success(`All ${sent} SMS messages sent!`);
-    else toast.warning(`${sent} sent, ${failed} failed.`);
   }, [accountSid, authToken, fromNumber, message, validNums]);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */

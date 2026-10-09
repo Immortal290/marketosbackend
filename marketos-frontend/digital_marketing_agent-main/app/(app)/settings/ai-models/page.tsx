@@ -44,11 +44,18 @@ const API_KEY_FIELDS: ApiKeyField[] = [
     hint: "Lightning-fast Llama 3.3 70B for high-throughput tasks.",
     docsUrl: "https://console.groq.com/keys",
   },
+  {
+    name: "OpenRouter",
+    key: "openrouter",
+    placeholder: "sk-or-v1-...",
+    hint: "Unified API for multiple LLMs like Claude, Llama, and GPT.",
+    docsUrl: "https://openrouter.ai/keys",
+  },
 ];
 
 export default function AIModelsSettingsPage() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    gemini: "", openai: "", anthropic: "", groq: "",
+    gemini: "", openai: "", anthropic: "", groq: "", openrouter: "",
   });
   const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});

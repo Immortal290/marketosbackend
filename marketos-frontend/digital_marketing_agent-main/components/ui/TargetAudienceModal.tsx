@@ -127,15 +127,35 @@ export function TargetAudienceModal({
   const [imageApiKey, setImageApiKey]       = useState("");
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
-  // Auto-load the saved Gemini API key from Settings > AI Models
+  const [savedApiKeys, setSavedApiKeys] = useState<Record<string, string>>({});
+
+  // Auto-load saved API keys from Settings > AI Models
   useEffect(() => {
     if (!isOpen) return;
     const loadSavedKey = async () => {
       try {
         const response = await apiRequest<any>("/settings/api-keys");
-        if (response?.data?.gemini) {
-          setLlmApiKey((prev) => prev || response.data.gemini);
-          setSavedKeyLoaded(true);
+        if (response?.data) {
+          setSavedApiKeys(response.data);
+          if (llmModel.includes("gemini") && response.data.gemini) {
+            setLlmApiKey(response.data.gemini);
+            setSavedKeyLoaded(true);
+          } else if ((llmModel.includes("gpt") || llmModel.includes("o3")) && response.data.openai) {
+            setLlmApiKey(response.data.openai);
+            setSavedKeyLoaded(true);
+          } else if (llmModel.includes("claude") && response.data.anthropic) {
+            setLlmApiKey(response.data.anthropic);
+            setSavedKeyLoaded(true);
+          } else if (llmModel.includes("groq") && response.data.groq) {
+            setLlmApiKey(response.data.groq);
+            setSavedKeyLoaded(true);
+          } else if (llmModel.includes("deepseek") && response.data.openrouter) {
+            setLlmApiKey(response.data.openrouter);
+            setSavedKeyLoaded(true);
+          } else if (llmModel.includes("llama-3.1-405b") && response.data.openrouter) {
+            setLlmApiKey(response.data.openrouter);
+            setSavedKeyLoaded(true);
+          }
         }
       } catch (_) {
         // silently ignore — user can still type manually
@@ -143,6 +163,32 @@ export function TargetAudienceModal({
     };
     void loadSavedKey();
   }, [isOpen]);
+
+  // Update API key when model changes
+  useEffect(() => {
+    if (llmModel.includes("gemini") && savedApiKeys.gemini) {
+      setLlmApiKey(savedApiKeys.gemini);
+      setSavedKeyLoaded(true);
+    } else if ((llmModel.includes("gpt") || llmModel.includes("o3")) && savedApiKeys.openai) {
+      setLlmApiKey(savedApiKeys.openai);
+      setSavedKeyLoaded(true);
+    } else if (llmModel.includes("claude") && savedApiKeys.anthropic) {
+      setLlmApiKey(savedApiKeys.anthropic);
+      setSavedKeyLoaded(true);
+    } else if (llmModel.includes("groq") && savedApiKeys.groq) {
+      setLlmApiKey(savedApiKeys.groq);
+      setSavedKeyLoaded(true);
+    } else if (llmModel.includes("deepseek") && savedApiKeys.openrouter) {
+      setLlmApiKey(savedApiKeys.openrouter);
+      setSavedKeyLoaded(true);
+    } else if (llmModel.includes("llama-3.1-405b") && savedApiKeys.openrouter) {
+      setLlmApiKey(savedApiKeys.openrouter);
+      setSavedKeyLoaded(true);
+    } else {
+      setLlmApiKey("");
+      setSavedKeyLoaded(false);
+    }
+  }, [llmModel, savedApiKeys]);
 
   // Auto-extract email / phone whenever the prompt changes
   // Only overwrite if a valid email/phone is found in the prompt
@@ -189,21 +235,67 @@ export function TargetAudienceModal({
       toast.error("Enter a prompt in the command bar first.");
       return;
     }
+    
     setIsSubmitting(true);
-    const payload: AudienceData = {
-      query,
-      targetAudience,
-      recipientEmail: recipientEmail.trim(),
-      recipientPhone: recipientPhone.trim(),
-      senderName,
-      companyName,
-      channels,
-      llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
-      llmApiKey,
-      imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
-      imageApiKey,
-    };
+
     try {
+      // 1. Verify LLM Key
+      let llmProvider = "custom";
+      if (llmModel.includes("gemini")) llmProvider = "gemini";
+      else if (llmModel.includes("gpt") || llmModel.includes("o3")) llmProvider = "openai";
+      else if (llmModel.includes("claude")) llmProvider = "anthropic";
+      else if (llmModel.includes("groq")) llmProvider = "groq";
+      else if (llmModel.includes("deepseek") || llmModel.includes("llama-3.1-405b")) llmProvider = "openrouter";
+
+      if (llmProvider !== "custom" && llmApiKey) {
+        toast.info("Verifying LLM API Key...");
+        const llmVerifyRes = await fetch("/api/v1/verify-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: llmProvider, apiKey: llmApiKey })
+        });
+        const llmVerify = await llmVerifyRes.json();
+        if (!llmVerify.valid) {
+          throw new Error("Invalid LLM API Key: " + (llmVerify.error || "Verification failed"));
+        }
+      } else if (llmProvider !== "custom" && !llmApiKey) {
+          throw new Error("LLM API Key is required for the selected model");
+      }
+
+      // 2. Verify Image Key
+      let imgProvider = "custom";
+      if (imageModel.includes("dall-e")) imgProvider = "dall-e";
+      else if (imageModel.includes("FLUX") || imageModel.includes("black-forest")) imgProvider = "black-forest-labs";
+
+      if (imgProvider !== "custom" && imageApiKey) {
+        toast.info("Verifying Image API Key...");
+        const imgVerifyRes = await fetch("/api/v1/verify-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: imgProvider, apiKey: imageApiKey })
+        });
+        const imgVerify = await imgVerifyRes.json();
+        if (!imgVerify.valid) {
+          throw new Error("Invalid Image API Key: " + (imgVerify.error || "Verification failed"));
+        }
+      } else if (imgProvider !== "custom" && !imageApiKey) {
+          throw new Error("Image API Key is required for the selected image model");
+      }
+
+      const payload: AudienceData = {
+        query,
+        targetAudience,
+        recipientEmail: recipientEmail.trim(),
+        recipientPhone: recipientPhone.trim(),
+        senderName,
+        companyName,
+        channels,
+        llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
+        llmApiKey,
+        imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
+        imageApiKey,
+      };
+
       if (onLaunch) onLaunch(payload);
       toast.success("Campaign parameters set!", {
         description: `${channels.join(", ")} channels${recipientEmail ? ` → ${recipientEmail}` : ""}${recipientPhone ? ` / ${recipientPhone}` : ""}`,
@@ -461,7 +553,15 @@ export function TargetAudienceModal({
                       else if (val.startsWith("sk-")) setLlmModel("gpt-4o-mini");
                       else if (val.startsWith("AIza")) setLlmModel("gemini-2.5-flash");
                     }}
-                    placeholder={savedKeyLoaded ? "••••••••••••••••••• (saved)" : "Paste your Gemini/OpenAI/Groq key..."}
+                    placeholder={
+                      savedKeyLoaded ? "••••••••••••••••••• (saved)" :
+                      llmModel.includes("gemini") ? "Paste Gemini API Key (AIza...)" :
+                      (llmModel.includes("gpt") || llmModel.includes("o3")) ? "Paste OpenAI API Key (sk-...)" :
+                      llmModel.includes("claude") ? "Paste Anthropic API Key (sk-ant-...)" :
+                      llmModel.includes("groq") ? "Paste Groq API Key (gsk_...)" :
+                      (llmModel.includes("deepseek") || llmModel.includes("llama-3.1-405b")) ? "Paste OpenRouter API Key (sk-or-v1-...)" :
+                      "Paste your API key here..."
+                    }
                     className="w-full bg-white border-[3px] border-black rounded-none pl-7 pr-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                   />
                 </div>
@@ -515,7 +615,11 @@ export function TargetAudienceModal({
                   type="password"
                   value={imageApiKey}
                   onChange={(e) => setImageApiKey(e.target.value)}
-                  placeholder="Enter API Key for image generation..."
+                  placeholder={
+                    imageModel.includes("dall-e") ? "Paste OpenAI API Key (sk-...)" :
+                    imageModel.includes("FLUX") ? "Paste HF/BFL Token (hf_...)" :
+                    "Enter API Key for image generation..."
+                  }
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 />
               </div>
