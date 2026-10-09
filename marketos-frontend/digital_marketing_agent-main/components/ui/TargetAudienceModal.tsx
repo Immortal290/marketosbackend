@@ -270,19 +270,19 @@ export function TargetAudienceModal({
       }
 
       const payload: AudienceData = {
-      query,
-      targetAudience,
-      recipientEmail: recipientEmail.trim(),
-      recipientPhone: recipientPhone.trim(),
-      senderName,
-      companyName,
-      channels,
-      llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
-      llmApiKey,
-      imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
-      imageApiKey,
-    };
-    try {
+        query,
+        targetAudience,
+        recipientEmail: recipientEmail.trim(),
+        recipientPhone: recipientPhone.trim(),
+        senderName,
+        companyName,
+        channels,
+        llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
+        llmApiKey,
+        imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
+        imageApiKey,
+      };
+
       if (onLaunch) onLaunch(payload);
       toast.success("Campaign parameters set!", {
         description: `${channels.join(", ")} channels${recipientEmail ? ` → ${recipientEmail}` : ""}${recipientPhone ? ` / ${recipientPhone}` : ""}`,
