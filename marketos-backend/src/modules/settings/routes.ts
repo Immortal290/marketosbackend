@@ -1,5 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
+import { PROVIDERS } from './providers';
+import crypto from 'crypto';
+
+const KEY = Buffer.alloc(32, process.env.CRED_MASTER_KEY || 'default_secret_key_32_bytes_long!');
+
+export function encrypt(text: string) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', KEY, iv);
+  const enc = Buffer.concat([c.update(text, 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
 
 const router = Router();
 
@@ -209,6 +220,42 @@ router.patch('/integrations/:id', (req: Request, res: Response) => {
       ? `AdsAgent & AnalyticsAgent established real-time bidirectional telemetry sync with ${target.name}.`
       : `AnalyticsAgent gracefully unlinked ${target?.name || id} pipeline without data loss.`,
   });
+});
+
+/**
+ * @openapi
+ * /settings/integrations/{provider}/connect:
+ *   post:
+ *     summary: Verify and connect an integration
+ */
+router.post('/integrations/:provider/connect', async (req: Request, res: Response): Promise<any> => {
+  const p = PROVIDERS[req.params.provider];
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown integration' });
+
+  const values: any = {};
+  for (const f of p.fields) {
+    const v = String(req.body[f.key] ?? '').trim();
+    if (!f.regex.test(v)) return res.status(400).json({ success: false, field: f.key, error: `Invalid format` });
+    values[f.key] = v;
+  }
+
+  try {
+    const { accountLabel } = await p.verify(values);
+    
+    // Find or create in-memory integration
+    let target = integrationsList.find((i) => i.id === p.id);
+    if (!target) {
+      target = { id: p.id, name: p.id, category: 'Integration', connected: true, description: '' };
+      integrationsList.push(target);
+    }
+    target.connected = true;
+    (target as any).accountLabel = accountLabel;
+    (target as any).lastVerifiedAt = new Date().toISOString();
+    
+    res.json({ success: true, status: 'active', accountLabel, data: integrationsList });
+  } catch (e: any) {
+    res.status(422).json({ success: false, status: 'error', error: e.message });
+  }
 });
 
 /**
