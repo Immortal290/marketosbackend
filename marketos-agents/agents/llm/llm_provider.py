@@ -223,7 +223,7 @@ def get_llm(temperature: float = 0, model_override: str | None = None, api_key_o
                 return gemini_fallback
             raise ValueError("OPENROUTER_API_KEY not set and no Gemini fallback available")
         from langchain_openai import ChatOpenAI
-        model_name = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
+        model_name = requested_model if requested_model and ("/" in requested_model or "deepseek" in requested_model.lower()) else os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
         model = ChatOpenAI(
             model=model_name,
             openai_api_key=api_key,

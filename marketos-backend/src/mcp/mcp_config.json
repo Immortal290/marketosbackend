@@ -6,6 +6,7 @@
       "cwd": "c:/Users/ASUS/Downloads/market-os/marketosbackend/marketos-backend",
       "env": {
         "GROQ_API_KEY": "",
+        "OPENROUTER_API_KEY": "",
         "BACKEND_URL": "http://localhost:3001",
         "AGENT_SERVICE_URL": "http://localhost:8000",
         "NODE_ENV": "development"
