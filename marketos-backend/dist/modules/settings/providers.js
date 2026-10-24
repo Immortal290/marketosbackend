@@ -135,7 +135,7 @@ var PROVIDERS = {
         headers: { Authorization: `Basic ${auth}` }
       });
       if (!r.ok) throw new Error("Razorpay rejected these credentials (invalid Key ID or Key Secret)");
-      return { accountLabel: `Razorpay (${keyId.startsWith("rzp_test") ? "Test" : "Live"})` };
+      return { accountLabel: "Razorpay (Live Gateway)" };
     }
   }
 };

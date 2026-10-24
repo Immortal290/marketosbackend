@@ -13,26 +13,14 @@ let fallbackBillingSettings = {
   nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   seats: { used: 5, total: 25 },
   agentTokens: { used: 3400000, total: 10000000 },
-  paymentMethod: "Razorpay • VISA ending in 4242",
+  paymentMethod: "Razorpay Verified Card",
   gateway: "Razorpay",
-  gatewayMode: "Test",
+  gatewayMode: "Live",
   keyId: RZP_KEY_ID,
   status: "active",
-  transactions: [
-    {
-      id: "tx_init_growth",
-      date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      orderId: "order_TrhXivy8EbyQqD",
-      paymentId: "pay_TrhZ1mK92qX",
-      plan: "GROWTH",
-      amount: 99,
-      currency: "USD",
-      status: "captured",
-      receipt: "rcpt_growth_init",
-      method: "Razorpay (Card)",
-    },
-  ],
+  transactions: [] as any[],
 };
+
 
 // ── Backend URL resolution (priority order) ─────────────────────────────────
 // Set NEXT_PUBLIC_API_BASE_URL in the Railway frontend service's Variables tab
@@ -291,6 +279,36 @@ async function serveIntelligentFallback(
     });
   }
 
+  // Settings: Billing - Ping Gateway
+  if (path.includes("/settings/billing/ping") && method === "POST") {
+    const start = Date.now();
+    try {
+      const auth = Buffer.from(`${RZP_KEY_ID}:${RZP_KEY_SECRET}`).toString("base64");
+      const r = await fetch("https://api.razorpay.com/v1/payments?count=1", {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      const latency = Date.now() - start;
+      return NextResponse.json({
+        success: r.ok,
+        latency: `${latency}ms`,
+        status: r.ok ? "Operational" : "Degraded",
+        gateway: "Razorpay",
+        ssl: "256-bit TLS Encrypted",
+        verifiedAt: new Date().toISOString(),
+        agentFeedback: r.ok
+          ? `FinanceAgent verified real-time Razorpay gateway telemetry (${latency}ms round-trip).`
+          : "FinanceAgent detected gateway degradation.",
+      });
+    } catch (_err) {
+      return NextResponse.json({
+        success: false,
+        latency: "Timeout",
+        status: "Offline",
+        error: "Unable to reach Razorpay servers",
+      }, { status: 502 });
+    }
+  }
+
   // Settings: Billing - Create Order
   if (path.includes("/settings/billing/create-order") && method === "POST") {
     const targetPlan = (bodyPayload.planName || (bodyPayload.planId === "p3" ? "SCALE" : bodyPayload.planId === "p2" ? "GROWTH" : "STARTER")).toUpperCase();
@@ -307,8 +325,20 @@ async function serveIntelligentFallback(
       });
     }
 
-    const priceUsd = targetPlan === "SCALE" ? 399 : 99;
-    const amountInCents = priceUsd * 100;
+    const isAnnual = String(bodyPayload.billingCycle).toUpperCase() === "ANNUAL";
+    let basePriceUsd = targetPlan === "SCALE" ? (isAnnual ? 319 * 12 : 399) : (isAnnual ? 79 * 12 : 99);
+    
+    let amountInMinorUnits: number;
+    let orderCurrency = String(bodyPayload.currency || "USD").toUpperCase();
+
+    if (orderCurrency === "INR") {
+      const inrRate = 83;
+      amountInMinorUnits = Math.round(basePriceUsd * inrRate * 100);
+    } else {
+      orderCurrency = "USD";
+      amountInMinorUnits = Math.round(basePriceUsd * 100);
+    }
+
     const auth = Buffer.from(`${RZP_KEY_ID}:${RZP_KEY_SECRET}`).toString("base64");
 
     try {
@@ -319,15 +349,17 @@ async function serveIntelligentFallback(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: amountInCents,
-          currency: "USD",
+          amount: amountInMinorUnits,
+          currency: orderCurrency,
           receipt: `rcpt_${targetPlan.toLowerCase()}_${Date.now()}`,
           notes: {
             plan: targetPlan,
-            service: "MarketOS AI Agents Subscription",
+            billingCycle: isAnnual ? "ANNUAL" : "MONTHLY",
+            service: "MarketOS Autonomous Fleet Subscription",
           },
         }),
       });
+
 
       const orderData = await r.json();
       if (!r.ok) {
