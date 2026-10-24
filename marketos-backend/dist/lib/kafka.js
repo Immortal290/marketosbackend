@@ -138,7 +138,7 @@ var RESULT_TOPICS = [
 ];
 var connectKafka = async () => {
   if (!process.env.KAFKA_BROKER) {
-    logger.warn("[Kafka] KAFKA_BROKER env not set \u2014 skipping Kafka connection. Real-time agent events disabled.");
+    logger.info("[Kafka] KAFKA_BROKER not configured \u2014 Kafka disabled for this environment. Set KAFKA_BROKER in .env to enable real-time agent events.");
     return;
   }
   try {

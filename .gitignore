@@ -19,7 +19,15 @@ tsconfig.tsbuildinfo
 .env.production.local
 .env.production
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
 # Logs
+
 logs/
 *.log
 npm-debug.log*

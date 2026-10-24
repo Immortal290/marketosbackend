@@ -102,5 +102,22 @@ export const PROVIDERS: Record<string, any> = {
     async verify({ customerId }: any) {
       return { accountLabel: `Account ${customerId}` };
     },
-  }
+  },
+
+  razorpay: {
+    id: "razorpay",
+    fields: [
+      { key: "keyId", regex: /^rzp_(test|live)_[a-zA-Z0-9]+$/ },
+      { key: "keySecret", regex: /^[a-zA-Z0-9]{16,32}$/ },
+    ],
+    async verify({ keyId, keySecret }: any) {
+      const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+      const r = await fetch("https://api.razorpay.com/v1/payments?count=1", {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      if (!r.ok) throw new Error("Razorpay rejected these credentials (invalid Key ID or Key Secret)");
+      return { accountLabel: `Razorpay (${keyId.startsWith("rzp_test") ? "Test" : "Live"})` };
+    },
+  },
 };
+

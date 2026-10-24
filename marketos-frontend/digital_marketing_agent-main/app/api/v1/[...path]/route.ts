@@ -1,7 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 // Dynamic routing for all API requests
 export const dynamic = "force-dynamic";
+
+const RZP_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_TrhNQHCvgOMUn9";
+const RZP_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "k811k53ViV7fAdern0v5vpAi";
+
+let fallbackBillingSettings = {
+  plan: "GROWTH",
+  billingCycle: "MONTHLY",
+  nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  seats: { used: 5, total: 25 },
+  agentTokens: { used: 3400000, total: 10000000 },
+  paymentMethod: "Razorpay • VISA ending in 4242",
+  gateway: "Razorpay",
+  gatewayMode: "Test",
+  keyId: RZP_KEY_ID,
+  status: "active",
+  transactions: [
+    {
+      id: "tx_init_growth",
+      date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      orderId: "order_TrhXivy8EbyQqD",
+      paymentId: "pay_TrhZ1mK92qX",
+      plan: "GROWTH",
+      amount: 99,
+      currency: "USD",
+      status: "captured",
+      receipt: "rcpt_growth_init",
+      method: "Razorpay (Card)",
+    },
+  ],
+};
 
 // ── Backend URL resolution (priority order) ─────────────────────────────────
 // Set NEXT_PUBLIC_API_BASE_URL in the Railway frontend service's Variables tab
@@ -260,19 +291,177 @@ async function serveIntelligentFallback(
     });
   }
 
-  // Settings: Billing
-  if (path.includes("/settings/billing")) {
-    if (method === "PATCH") {
+  // Settings: Billing - Create Order
+  if (path.includes("/settings/billing/create-order") && method === "POST") {
+    const targetPlan = (bodyPayload.planName || (bodyPayload.planId === "p3" ? "SCALE" : bodyPayload.planId === "p2" ? "GROWTH" : "STARTER")).toUpperCase();
+
+    if (targetPlan === "STARTER") {
+      fallbackBillingSettings.plan = "STARTER";
+      fallbackBillingSettings.agentTokens.total = 2000000;
       return NextResponse.json({
         success: true,
+        isFree: true,
+        plan: "STARTER",
+        data: fallbackBillingSettings,
+        agentFeedback: `Workspace switched to STARTER tier. Free token pool allocated (2.0M tokens).`,
+      });
+    }
+
+    const priceUsd = targetPlan === "SCALE" ? 399 : 99;
+    const amountInCents = priceUsd * 100;
+    const auth = Buffer.from(`${RZP_KEY_ID}:${RZP_KEY_SECRET}`).toString("base64");
+
+    try {
+      const r = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: amountInCents,
+          currency: "USD",
+          receipt: `rcpt_${targetPlan.toLowerCase()}_${Date.now()}`,
+          notes: {
+            plan: targetPlan,
+            service: "MarketOS AI Agents Subscription",
+          },
+        }),
+      });
+
+      const orderData = await r.json();
+      if (!r.ok) {
+        return NextResponse.json({
+          success: false,
+          error: orderData?.error?.description || "Failed to create Razorpay order",
+        }, { status: r.status });
+      }
+
+      return NextResponse.json({
+        success: true,
+        orderId: orderData.id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        keyId: RZP_KEY_ID,
+        plan: targetPlan,
+        receipt: orderData.receipt,
+      });
+    } catch (err: any) {
+      return NextResponse.json({
+        success: false,
+        error: err.message || "Failed to reach Razorpay API",
+      }, { status: 502 });
+    }
+  }
+
+  // Settings: Billing - Verify Payment
+  if (path.includes("/settings/billing/verify-payment") && method === "POST") {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planName, planId } = bodyPayload;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return NextResponse.json({ success: false, error: "Missing Razorpay verification credentials" }, { status: 400 });
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", RZP_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return NextResponse.json({
+        success: false,
+        error: "Invalid Razorpay cryptographic signature",
+      }, { status: 400 });
+    }
+
+    const targetPlan = (planName || (planId === "p3" ? "SCALE" : "GROWTH")).toUpperCase();
+    let paymentLabel = "Razorpay Verified Payment";
+
+    try {
+      const auth = Buffer.from(`${RZP_KEY_ID}:${RZP_KEY_SECRET}`).toString("base64");
+      const r = await fetch(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      if (r.ok) {
+        const pd = await r.json();
+        if (pd.method === "card" && pd.card) {
+          paymentLabel = `Razorpay • ${pd.card.network || "Card"} ending in ${pd.card.last4 || "••••"}`;
+        } else if (pd.method === "upi") {
+          paymentLabel = `Razorpay • UPI (${pd.vpa || "Verified"})`;
+        } else if (pd.method === "netbanking") {
+          paymentLabel = `Razorpay • Netbanking (${pd.bank || "Verified"})`;
+        } else {
+          paymentLabel = `Razorpay • ${pd.method || "Online"}`;
+        }
+      }
+    } catch (_e) {}
+
+    fallbackBillingSettings.plan = targetPlan;
+    fallbackBillingSettings.paymentMethod = paymentLabel;
+    fallbackBillingSettings.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    fallbackBillingSettings.agentTokens.total = targetPlan === "SCALE" ? 50000000 : 10000000;
+
+    const newTx = {
+      id: `tx_${Date.now()}`,
+      date: new Date().toISOString(),
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      plan: targetPlan,
+      amount: targetPlan === "SCALE" ? 399 : 99,
+      currency: "USD",
+      status: "captured",
+      receipt: `rcpt_${targetPlan.toLowerCase()}_${Date.now()}`,
+      method: paymentLabel,
+    };
+
+    fallbackBillingSettings.transactions = [newTx, ...fallbackBillingSettings.transactions.slice(0, 9)];
+
+    return NextResponse.json({
+      success: true,
+      data: fallbackBillingSettings,
+      transaction: newTx,
+      agentFeedback: `FinanceAgent cryptographically verified Razorpay payment ${razorpay_payment_id} and upgraded workspace SLA to ${targetPlan}. All 17 specialized AI agents unlocked with expanded token pool (${(fallbackBillingSettings.agentTokens.total / 1000000).toFixed(1)}M tokens).`,
+    });
+  }
+
+  // Settings: Billing - Update Payment Method
+  if (path.includes("/settings/billing/update-payment") && method === "POST") {
+    if (bodyPayload.paymentMethod) {
+      fallbackBillingSettings.paymentMethod = bodyPayload.paymentMethod;
+    }
+    return NextResponse.json({
+      success: true,
+      data: fallbackBillingSettings,
+      agentFeedback: `FinanceAgent updated payment method to ${fallbackBillingSettings.paymentMethod} via Razorpay tokenization.`,
+    });
+  }
+
+  // Settings: Billing - General
+  if (path.includes("/settings/billing")) {
+    if (method === "PATCH") {
+      if (bodyPayload.planName || bodyPayload.planId) {
+        const p = (bodyPayload.planName || (bodyPayload.planId === "p3" ? "SCALE" : bodyPayload.planId === "p2" ? "GROWTH" : "STARTER")).toUpperCase();
+        fallbackBillingSettings.plan = p;
+        fallbackBillingSettings.agentTokens.total = p === "SCALE" ? 50000000 : p === "GROWTH" ? 10000000 : 2000000;
+      }
+      if (bodyPayload.paymentMethod) {
+        fallbackBillingSettings.paymentMethod = bodyPayload.paymentMethod;
+      }
+      return NextResponse.json({
+        success: true,
+        data: fallbackBillingSettings,
         agentFeedback: `FinanceAgent verified billing updates and adjusted workspace SLA across all AI agents.`,
       });
     }
     return NextResponse.json({
       success: true,
-      data: { plan: "GROWTH", status: "ACTIVE" },
+      data: {
+        ...fallbackBillingSettings,
+        keyId: RZP_KEY_ID,
+        gateway: "Razorpay",
+      },
     });
   }
+
 
   // Settings: Security
   if (path.includes("/settings/security")) {

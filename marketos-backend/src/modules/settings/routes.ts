@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
 import { PROVIDERS } from './providers';
+import { razorpayService } from './razorpay.service';
 import crypto from 'crypto';
 
 const KEY = Buffer.alloc(32, process.env.CRED_MASTER_KEY || 'default_secret_key_32_bytes_long!');
@@ -41,6 +42,7 @@ let integrationsList = [
   { id: 'i4', name: 'HubSpot', category: 'CRM', connected: false, description: 'Sync contacts and lifecycle stages.' },
   { id: 'i5', name: 'Mailchimp', category: 'Email', connected: false, description: 'Send and track email campaigns.' },
   { id: 'i6', name: 'LinkedIn', category: 'Social', connected: true, description: 'Publish and track social posts.' },
+  { id: 'razorpay', name: 'Razorpay', category: 'Payments', connected: true, description: 'Live payment gateway and subscription auto-billing.', accountLabel: `Razorpay (${razorpayService.getKeyId().startsWith('rzp_test') ? 'Test Mode' : 'Live'})` },
 ];
 
 let complianceSettings = {
@@ -60,11 +62,29 @@ let complianceSettings = {
 
 let billingSettings = {
   plan: 'GROWTH',
-  billingCycle: 'ANNUAL',
-  nextBillingDate: '2027-01-01',
-  seats: { used: 8, total: 25 },
-  agentTokens: { used: 4200000, total: 10000000 },
-  paymentMethod: 'VISA ending 4242',
+  billingCycle: 'MONTHLY',
+  nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  seats: { used: 5, total: 25 },
+  agentTokens: { used: 3400000, total: 10000000 },
+  paymentMethod: 'Razorpay • VISA ending in 4242',
+  gateway: 'Razorpay',
+  gatewayMode: razorpayService.getKeyId().startsWith('rzp_test') ? 'Test' : 'Live',
+  keyId: razorpayService.getKeyId(),
+  status: 'active',
+  transactions: [
+    {
+      id: 'tx_init_growth',
+      date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      orderId: 'order_TrhXivy8EbyQqD',
+      paymentId: 'pay_TrhZ1mK92qX',
+      plan: 'GROWTH',
+      amount: 99,
+      currency: 'USD',
+      status: 'captured',
+      receipt: 'rcpt_growth_init',
+      method: 'Razorpay (Card)',
+    },
+  ],
 };
 
 let securitySettings = {
@@ -296,19 +316,259 @@ router.patch('/compliance', (req: Request, res: Response) => {
  *     summary: Get billing information
  */
 router.get('/billing', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: billingSettings });
+  res.status(200).json({
+    success: true,
+    data: {
+      ...billingSettings,
+      keyId: razorpayService.getKeyId(),
+      gateway: 'Razorpay',
+      gatewayMode: razorpayService.getKeyId().startsWith('rzp_test') ? 'Test' : 'Live',
+    },
+  });
+});
+
+/**
+ * @openapi
+ * /settings/billing/create-order:
+ *   post:
+ *     summary: Create Razorpay checkout order for plan subscription
+ */
+router.post('/settings/billing/create-order', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { planId, planName } = req.body;
+    const targetPlan = (planName || (planId === 'p3' ? 'SCALE' : planId === 'p2' ? 'GROWTH' : 'STARTER')).toUpperCase();
+
+    // Starter tier is free
+    if (targetPlan === 'STARTER') {
+      billingSettings.plan = 'STARTER';
+      billingSettings.agentTokens.total = 2000000;
+      return res.status(200).json({
+        success: true,
+        isFree: true,
+        plan: 'STARTER',
+        data: billingSettings,
+        agentFeedback: `Workspace switched to STARTER tier. Free token pool allocated (2.0M tokens).`,
+      });
+    }
+
+    const priceUsd = targetPlan === 'SCALE' ? 399 : 99;
+    const amountInCents = priceUsd * 100;
+    const receipt = `rcpt_${targetPlan.toLowerCase()}_${Date.now()}`;
+
+    const order = await razorpayService.createOrder({
+      amount: amountInCents,
+      currency: 'USD',
+      receipt,
+      notes: {
+        plan: targetPlan,
+        service: 'MarketOS AI Agents Subscription',
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: razorpayService.getKeyId(),
+      plan: targetPlan,
+      receipt: order.receipt,
+    });
+  } catch (error: any) {
+    console.error('Failed to create Razorpay order:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to initialize payment gateway order with Razorpay',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /settings/billing/verify-payment:
+ *   post:
+ *     summary: Verify Razorpay HMAC signature and upgrade subscription plan
+ */
+router.post('/settings/billing/verify-payment', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planName, planId } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing Razorpay order ID, payment ID, or signature',
+      });
+    }
+
+    const isValid = razorpayService.verifyPaymentSignature({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+    });
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Razorpay signature. Cryptographic verification failed.',
+      });
+    }
+
+    // Retrieve payment metadata from Razorpay
+    let paymentMethodLabel = 'Razorpay Verified Payment';
+    let paymentMethodType = 'Card';
+    try {
+      const paymentDetails = await razorpayService.getPaymentDetails(razorpay_payment_id);
+      if (paymentDetails) {
+        if (paymentDetails.method === 'card' && paymentDetails.card) {
+          const card = paymentDetails.card;
+          paymentMethodType = card.network || 'Card';
+          paymentMethodLabel = `Razorpay • ${card.network || 'Card'} ending in ${card.last4 || '••••'}`;
+        } else if (paymentDetails.method === 'upi') {
+          paymentMethodType = 'UPI';
+          paymentMethodLabel = `Razorpay • UPI (${paymentDetails.vpa || 'Verified'})`;
+        } else if (paymentDetails.method === 'netbanking') {
+          paymentMethodType = 'Netbanking';
+          paymentMethodLabel = `Razorpay • Netbanking (${paymentDetails.bank || 'Verified'})`;
+        } else {
+          paymentMethodLabel = `Razorpay • ${paymentDetails.method || 'Online'}`;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn('Could not fetch payment details, using standard label:', fetchErr);
+    }
+
+    const targetPlan = (planName || (planId === 'p3' ? 'SCALE' : 'GROWTH')).toUpperCase();
+    billingSettings.plan = targetPlan;
+    billingSettings.paymentMethod = paymentMethodLabel;
+    billingSettings.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    if (targetPlan === 'SCALE') {
+      billingSettings.agentTokens.total = 50000000;
+    } else if (targetPlan === 'GROWTH') {
+      billingSettings.agentTokens.total = 10000000;
+    } else {
+      billingSettings.agentTokens.total = 2000000;
+    }
+
+    const newTx = {
+      id: `tx_${Date.now()}`,
+      date: new Date().toISOString(),
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      plan: targetPlan,
+      amount: targetPlan === 'SCALE' ? 399 : 99,
+      currency: 'USD',
+      status: 'captured',
+      receipt: `rcpt_${targetPlan.toLowerCase()}_${Date.now()}`,
+      method: paymentMethodLabel,
+    };
+
+    billingSettings.transactions = [newTx, ...billingSettings.transactions.slice(0, 9)];
+
+    res.status(200).json({
+      success: true,
+      data: billingSettings,
+      transaction: newTx,
+      agentFeedback: `FinanceAgent cryptographically verified Razorpay payment ${razorpay_payment_id} and upgraded workspace SLA to ${targetPlan}. All 17 specialized AI agents unlocked with expanded token pool (${(billingSettings.agentTokens.total / 1000000).toFixed(1)}M tokens).`,
+    });
+  } catch (error: any) {
+    console.error('Error in Razorpay verification:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Payment verification failed',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /settings/billing/update-payment:
+ *   post:
+ *     summary: Update payment method through Razorpay verification
+ */
+router.post('/settings/billing/update-payment', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
+      const isValid = razorpayService.verifyPaymentSignature({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature,
+      });
+
+      if (!isValid) {
+        return res.status(400).json({ success: false, error: 'Invalid Razorpay signature' });
+      }
+
+      const paymentDetails = await razorpayService.getPaymentDetails(razorpay_payment_id).catch(() => null);
+      if (paymentDetails?.card) {
+        billingSettings.paymentMethod = `Razorpay • ${paymentDetails.card.network || 'Card'} ending in ${paymentDetails.card.last4 || '••••'}`;
+      } else if (paymentDetails?.method === 'upi') {
+        billingSettings.paymentMethod = `Razorpay • UPI (${paymentDetails.vpa || 'Verified'})`;
+      } else {
+        billingSettings.paymentMethod = `Razorpay • Online Verified (${razorpay_payment_id.slice(-6)})`;
+      }
+    } else if (req.body.paymentMethod) {
+      billingSettings.paymentMethod = req.body.paymentMethod;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: billingSettings,
+      agentFeedback: `FinanceAgent verified and updated default billing method (${billingSettings.paymentMethod}) via Razorpay secure tokenization.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to update payment method' });
+  }
+});
+
+/**
+ * @openapi
+ * /settings/billing/webhook:
+ *   post:
+ *     summary: Razorpay webhook handler
+ */
+router.post('/settings/billing/webhook', (req: Request, res: Response) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || 'k811k53ViV7fAdern0v5vpAi';
+  const signature = req.headers['x-razorpay-signature'] as string;
+
+  if (signature) {
+    const shasum = crypto.createHmac('sha256', secret);
+    shasum.update(JSON.stringify(req.body));
+    const digest = shasum.digest('hex');
+
+    if (digest !== signature) {
+      return res.status(400).json({ status: 'invalid_signature' });
+    }
+  }
+
+  const event = req.body.event;
+  if (event === 'payment.captured' || event === 'order.paid') {
+    const payment = req.body.payload?.payment?.entity;
+    if (payment) {
+      const plan = payment.notes?.plan || 'GROWTH';
+      billingSettings.plan = plan;
+      billingSettings.status = 'active';
+      if (payment.card) {
+        billingSettings.paymentMethod = `Razorpay • ${payment.card.network || 'Card'} ending in ${payment.card.last4 || '••••'}`;
+      }
+    }
+  }
+
+  res.status(200).json({ status: 'ok' });
 });
 
 /**
  * @openapi
  * /settings/billing/plan:
  *   patch:
- *     summary: Update subscription plan
+ *     summary: Update subscription plan (direct / free downgrade)
  */
 router.patch('/billing/plan', (req: Request, res: Response) => {
   const { planId, planName } = req.body;
   const planMap: Record<string, string> = { p1: 'STARTER', p2: 'GROWTH', p3: 'SCALE' };
-  const targetPlan = planName || planMap[planId] || 'GROWTH';
+  const targetPlan = (planName || planMap[planId] || 'GROWTH').toUpperCase();
   billingSettings.plan = targetPlan;
 
   if (targetPlan === 'SCALE') {
@@ -322,7 +582,7 @@ router.patch('/billing/plan', (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     data: billingSettings,
-    agentFeedback: `FinanceAgent upgraded workspace SLA to ${targetPlan}. All 17 specialized AI agents unlocked with expanded token pool (${(billingSettings.agentTokens.total / 1000000).toFixed(1)}M tokens).`,
+    agentFeedback: `FinanceAgent adjusted workspace SLA to ${targetPlan}. AI agents pool allocated (${(billingSettings.agentTokens.total / 1000000).toFixed(1)}M tokens).`,
   });
 });
 
@@ -339,9 +599,10 @@ router.patch('/billing/payment', (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     data: billingSettings,
-    agentFeedback: `FinanceAgent verified billing credentials (${billingSettings.paymentMethod}) via secure Stripe tokenization.`,
+    agentFeedback: `FinanceAgent verified billing credentials (${billingSettings.paymentMethod}) via secure Razorpay tokenization.`,
   });
 });
+
 
 /**
  * @openapi

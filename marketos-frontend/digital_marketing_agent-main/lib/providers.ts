@@ -154,5 +154,29 @@ export const PROVIDERS: Record<string, any> = {
       // Mocking Google Ads verify to avoid dealing with complex oauth flow here
       return { accountLabel: `Account ${customerId}` };
     },
+  },
+
+  razorpay: {
+    id: "razorpay",
+    label: "Razorpay",
+    category: "Payments",
+    description: "Automated billing, subscription checkout, and real-time payment gateway.",
+    fields: [
+      { key: "keyId", label: "Key ID", placeholder: "rzp_test_xxxxxxxxxxxxxx", secret: false, regex: /^rzp_(test|live)_[a-zA-Z0-9]+$/ },
+      { key: "keySecret", label: "Key Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxx", secret: true, regex: /^[a-zA-Z0-9]{16,32}$/ },
+    ],
+    guide: [
+      { field: "Key ID", text: "Razorpay Dashboard → Settings → API Keys" },
+      { field: "Key Secret", text: "Generated alongside Key ID in Razorpay Dashboard" }
+    ],
+    async verify({ keyId, keySecret }: any) {
+      const auth = btoa(`${keyId}:${keySecret}`);
+      const r = await fetch("https://api.razorpay.com/v1/payments?count=1", {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      if (!r.ok) throw new Error("Razorpay rejected these credentials (invalid Key ID or Key Secret)");
+      return { accountLabel: `Razorpay (${keyId.startsWith("rzp_test") ? "Test Mode" : "Live"})` };
+    },
   }
 };
+

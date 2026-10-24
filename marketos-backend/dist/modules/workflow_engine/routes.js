@@ -233,6 +233,10 @@ var AGENT_APPROVAL_CONFIG = {
     requiresApproval: true,
     reason: "Outbound WhatsApp messaging requires manual authorization"
   },
+  TelegramAgent: {
+    requiresApproval: true,
+    reason: "Outbound Telegram messages require manual authorization"
+  },
   // Auto-run agents (no approval required)
   SupervisorAgent: { requiresApproval: false },
   CopyAgent: { requiresApproval: false },
@@ -264,8 +268,8 @@ function checkAgentRequiresApproval(agentName) {
 // src/modules/workflow_engine/orchestrator.ts
 function determineAgentPlan(command) {
   const lower = command.toLowerCase();
-  if (lower.includes("campaign") || lower.includes("launch") || lower.includes("target") || lower.includes("cmo")) {
-    return ["SupervisorAgent", "CopyAgent", "CreativeAgent", "ComplianceAgent", "EmailAgent", "AnalyticsAgent"];
+  if (lower.includes("campaign") || lower.includes("launch") || lower.includes("target") || lower.includes("cmo") || lower.includes("sale") || lower.includes("whatsapp") || lower.includes("telegram")) {
+    return ["SupervisorAgent", "CopyAgent", "CreativeAgent", "ComplianceAgent", "EmailAgent", "WhatsappAgent", "TelegramAgent", "AnalyticsAgent"];
   }
   if (lower.includes("content") || lower.includes("post") || lower.includes("social") || lower.includes("blog") || lower.includes("creative")) {
     return ["CopyAgent", "CreativeAgent", "ComplianceAgent", "SocialMediaAgent"];

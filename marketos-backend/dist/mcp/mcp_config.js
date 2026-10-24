@@ -1,0 +1,23 @@
+// src/mcp/mcp_config.json
+var mcpServers = {
+  "marketos-master": {
+    command: "npx",
+    args: ["tsx", "src/mcp/marketos-mcp-server.ts"],
+    cwd: "c:/Users/ASUS/Downloads/market-os/marketosbackend/marketos-backend",
+    env: {
+      GROQ_API_KEY: "",
+      OPENROUTER_API_KEY: "",
+      BACKEND_URL: "http://localhost:3001",
+      AGENT_SERVICE_URL: "http://localhost:8000",
+      NODE_ENV: "development"
+    },
+    description: "MarketOS Master MCP \u2014 47 tools covering API keys, Groq LLM, agents, WhatsApp, Email, SMS, analytics, campaigns, settings, auth."
+  }
+};
+var mcp_config_default = {
+  mcpServers
+};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  mcpServers
+});

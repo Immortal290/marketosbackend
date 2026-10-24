@@ -1,0 +1,145 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/modules/settings/providers.ts
+var providers_exports = {};
+__export(providers_exports, {
+  PROVIDERS: () => PROVIDERS
+});
+module.exports = __toCommonJS(providers_exports);
+var PROVIDERS = {
+  mailchimp: {
+    id: "mailchimp",
+    fields: [
+      { key: "apiKey", regex: /^[a-f0-9]{32}-[a-z]{2,3}\d{1,2}$/ },
+      { key: "audienceId", regex: /^[a-f0-9]{8,12}$/ }
+    ],
+    async verify({ apiKey, audienceId }) {
+      const dc = apiKey.split("-")[1];
+      const headers = { Authorization: "Basic " + Buffer.from("x:" + apiKey).toString("base64") };
+      const ping = await fetch(`https://${dc}.api.mailchimp.com/3.0/ping`, { headers });
+      if (!ping.ok) throw new Error("Mailchimp rejected this API key");
+      const list = await fetch(`https://${dc}.api.mailchimp.com/3.0/lists/${audienceId}`, { headers });
+      if (!list.ok) throw new Error("Audience ID not found in this account");
+      const data = await list.json();
+      return { accountLabel: data.name };
+    }
+  },
+  hubspot: {
+    id: "hubspot",
+    fields: [
+      { key: "portalId", regex: /^\d{6,10}$/ },
+      { key: "token", regex: /^pat-[a-z0-9]+-[a-f0-9-]{36}$/ }
+    ],
+    async verify({ portalId, token }) {
+      const r = await fetch("https://api.hubapi.com/account-info/v3/details", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error("HubSpot rejected this token");
+      const d = await r.json();
+      if (String(d.portalId) !== String(portalId)) throw new Error("Token belongs to a different portal");
+      return { accountLabel: `Portal ${d.portalId}` };
+    }
+  },
+  meta: {
+    id: "meta",
+    fields: [
+      { key: "adAccountId", regex: /^act_\d{5,20}$/ },
+      { key: "pixelId", regex: /^\d{10,20}$/ },
+      { key: "token", regex: /^EA[A-Za-z0-9]{20,}$/ }
+    ],
+    async verify({ adAccountId, pixelId, token }) {
+      const q = (path, f) => fetch(`https://graph.facebook.com/v21.0/${path}?fields=${f}&access_token=${token}`);
+      const acc = await q(adAccountId, "name,account_status");
+      if (!acc.ok) throw new Error("Token has no access to this ad account");
+      const px = await q(pixelId, "name");
+      if (!px.ok) throw new Error("Pixel ID not found or not accessible");
+      const data = await acc.json();
+      return { accountLabel: data.name };
+    }
+  },
+  linkedin: {
+    id: "linkedin",
+    fields: [
+      { key: "adAccountId", regex: /^\d{5,15}$/ },
+      { key: "companyPageId", regex: /^\d{5,15}$/ },
+      { key: "insightPartnerId", regex: /^\d{5,15}$/ },
+      { key: "token", regex: /^AQV[a-zA-Z0-9_-]{10,}$/ }
+    ],
+    async verify({ adAccountId, token }) {
+      const r = await fetch(`https://api.linkedin.com/rest/adAccounts/${adAccountId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "LinkedIn-Version": "202312",
+          "X-Restli-Protocol-Version": "2.0.0"
+        }
+      });
+      if (!r.ok) throw new Error("LinkedIn token invalid or expired");
+      const data = await r.json();
+      return { accountLabel: data.name || `Ad Account ${adAccountId}` };
+    }
+  },
+  ga4: {
+    id: "ga4",
+    fields: [
+      { key: "propertyId", regex: /^\d{5,15}$/ },
+      { key: "serviceAccount", regex: /"private_key":/ }
+    ],
+    async verify({ propertyId, serviceAccount }) {
+      let parsed;
+      try {
+        parsed = JSON.parse(serviceAccount);
+      } catch (e) {
+        throw new Error("Invalid JSON for service account");
+      }
+      if (!parsed.client_email) throw new Error("Invalid service account JSON");
+      return { accountLabel: `Property ${propertyId}` };
+    }
+  },
+  google_ads: {
+    id: "google_ads",
+    fields: [
+      { key: "customerId", regex: /^\d{3}-\d{3}-\d{4}$/ },
+      { key: "developerToken", regex: /^.{10,30}$/ },
+      { key: "clientId", regex: /^.+apps\.googleusercontent\.com$/ },
+      { key: "clientSecret", regex: /^GOCSPX-.+$/ },
+      { key: "refreshToken", regex: /^1\/\/.+$/ }
+    ],
+    async verify({ customerId }) {
+      return { accountLabel: `Account ${customerId}` };
+    }
+  },
+  razorpay: {
+    id: "razorpay",
+    fields: [
+      { key: "keyId", regex: /^rzp_(test|live)_[a-zA-Z0-9]+$/ },
+      { key: "keySecret", regex: /^[a-zA-Z0-9]{16,32}$/ }
+    ],
+    async verify({ keyId, keySecret }) {
+      const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+      const r = await fetch("https://api.razorpay.com/v1/payments?count=1", {
+        headers: { Authorization: `Basic ${auth}` }
+      });
+      if (!r.ok) throw new Error("Razorpay rejected these credentials (invalid Key ID or Key Secret)");
+      return { accountLabel: `Razorpay (${keyId.startsWith("rzp_test") ? "Test" : "Live"})` };
+    }
+  }
+};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  PROVIDERS
+});
