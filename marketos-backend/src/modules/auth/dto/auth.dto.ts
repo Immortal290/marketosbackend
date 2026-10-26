@@ -3,6 +3,7 @@ export interface RegisterDto {
   password: string;
   firstName?: string;
   lastName?: string;
+  workspaceName?: string;
 }
 
 export interface LoginDto {

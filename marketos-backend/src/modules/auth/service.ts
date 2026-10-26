@@ -17,16 +17,41 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName,
-      },
+    // Create the account and its initial workspace atomically.
+    const userId = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: data.email,
+          password: hashedPassword,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        },
+      });
+
+      const workspaceName =
+        data.workspaceName?.trim() ||
+        (data.firstName?.trim()
+          ? `${data.firstName.trim()}'s Workspace`
+          : 'Default Workspace');
+
+      const workspace = await tx.workspace.create({
+        data: {
+          name: workspaceName,
+        },
+      });
+
+      await tx.workspaceMember.create({
+        data: {
+          userId: user.id,
+          workspaceId: workspace.id,
+          role: 'OWNER',
+        },
+      });
+
+      return user.id;
     });
 
-    return this.generateTokens(user.id);
+    return this.generateTokens(userId);
   }
 
   async login(data: LoginDto) {

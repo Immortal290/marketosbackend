@@ -1,4 +1,45 @@
 export const PROVIDERS: Record<string, any> = {
+  gmail: {
+    id: "gmail",
+    label: "Gmail",
+    category: "Email",
+    description: "Connect Gmail securely to send approved email campaigns.",
+    fields: [
+      {
+        key: "gmailAddress",
+        label: "Gmail Address",
+        placeholder: "youraccount@gmail.com",
+        secret: false,
+        regex: /^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/i,
+      },
+      {
+        key: "appPassword",
+        label: "16-Character Google App Password",
+        placeholder: "Enter your App Password",
+        secret: true,
+        regex: /^(?:[a-zA-Z0-9]\s*){16}$/,
+      },
+    ],
+    guide: [
+      {
+        field: "Step 1",
+        text: "Enable 2-Step Verification on your Google account.",
+      },
+      {
+        field: "Step 2",
+        text: "Open https://myaccount.google.com/apppasswords",
+      },
+      {
+        field: "Step 3",
+        text: "Generate an App Password and enter it above.",
+      },
+      {
+        field: "Security",
+        text: "Use a separate test Gmail account first. Never share the password.",
+      },
+    ],
+  },
+
   mailchimp: {
     id: "mailchimp",
     label: "Mailchimp",

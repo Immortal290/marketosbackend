@@ -20,27 +20,65 @@ export default function IntegrationsSettingsPage() {
 
   useEffect(() => {
     const loadIntegrations = async () => {
+      let backendIntegrations: any[] = [];
+
       try {
         const response = await apiRequest<any>("/settings/integrations");
-        if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
-          // Merge provider info with backend connection state
-          const combined = Object.values(PROVIDERS).map((p: any) => {
-            const backendState = response.data.find((b: any) => b.id === p.id) || {};
-            return {
-              ...p,
-              connected: !!backendState.connected,
-              accountLabel: backendState.accountLabel || "",
-              lastVerifiedAt: backendState.lastVerifiedAt || null
-            };
-          });
-          setIntegrations(combined);
-        } else {
-          setIntegrations(Object.values(PROVIDERS).map((p: any) => ({ ...p, connected: false })));
+        if (Array.isArray(response?.data)) {
+          backendIntegrations = response.data;
         }
       } catch (error) {
         console.error("Failed to load integrations:", error);
       }
+
+      const combined = Object.values(PROVIDERS).map((p: any) => {
+        // Gmail must never trust the generic in-memory registry.
+        const backendState =
+          p.id === "gmail"
+            ? {}
+            : backendIntegrations.find((b: any) => b.id === p.id) || {};
+
+        return {
+          ...p,
+          connected: !!(backendState as any).connected,
+          accountLabel: (backendState as any).accountLabel || "",
+          lastVerifiedAt: (backendState as any).lastVerifiedAt || null,
+          statusUnknown: p.id === "gmail",
+        };
+      });
+
+      try {
+          const response = await apiRequest<any>(
+            "/settings/gmail"
+          );
+
+          if (
+            response?.success !== true ||
+            typeof response.data?.connected !== "boolean"
+          ) {
+            throw new Error("Invalid Gmail connection status response");
+          }
+
+          const status = response.data;
+
+          const gmail = combined.find((i: any) => i.id === "gmail");
+
+          if (gmail) {
+            gmail.connected = status.connected;
+            gmail.accountLabel = status.gmailAddress || "";
+            gmail.lastVerifiedAt = status.lastVerifiedAt || null;
+            gmail.statusUnknown = false;
+          }
+      } catch (error) {
+        console.warn(
+          "Gmail connection status could not be verified:",
+          error
+        );
+      }
+
+      setIntegrations(combined);
     };
+
     void loadIntegrations();
   }, []);
 
@@ -50,6 +88,43 @@ export default function IntegrationsSettingsPage() {
       setActiveForm(id);
       setFormValues({});
     } else {
+      if (id === "gmail") {
+        try {
+          const response = await apiRequest<any>(
+            "/settings/gmail",
+            { method: "DELETE" }
+          );
+
+          if (
+            response?.success !== true ||
+            response.data?.connected !== false
+          ) {
+            throw new Error("Gmail disconnect was not confirmed");
+          }
+
+          setIntegrations((list) =>
+            list.map((i) =>
+              i.id === "gmail"
+                ? {
+                    ...i,
+                    connected: false,
+                    accountLabel: "",
+                    lastVerifiedAt: null,
+                    statusUnknown: false,
+                  }
+                : i
+            )
+          );
+
+          toast.success("Gmail disconnected");
+        } catch (error) {
+          console.error("Gmail disconnect failed:", error);
+          toast.error("Gmail disconnect failed. Connection unchanged.");
+        }
+
+        return;
+      }
+
       // Disconnect
       setIntegrations((list) =>
         list.map((i) => (i.id === id ? { ...i, connected: false, accountLabel: null, lastVerifiedAt: null } : i)),
@@ -80,14 +155,25 @@ export default function IntegrationsSettingsPage() {
     e.preventDefault();
     setVerifying(true);
     try {
-      const response = await apiRequest<any>(`/settings/integrations/${providerId}/connect`, {
-        method: "POST",
-        body: JSON.stringify(formValues),
-      });
+      const response = providerId === "gmail"
+        ? await apiRequest<any>("/settings/gmail/connect", {
+            method: "POST",
+            body: JSON.stringify({
+              gmailAddress: formValues.gmailAddress?.trim(),
+              appPassword: formValues.appPassword || "",
+            }),
+          })
+        : await apiRequest<any>(`/settings/integrations/${providerId}/connect`, {
+            method: "POST",
+            body: JSON.stringify(formValues),
+          });
 
       if (response && response.success) {
+        if (providerId === "gmail") {
+          setFormValues({});
+        }
         setIntegrations((list) =>
-          list.map((i) => (i.id === providerId ? { ...i, connected: true, accountLabel: response.accountLabel, lastVerifiedAt: new Date().toISOString() } : i)),
+          list.map((i) => (i.id === providerId ? { ...i, connected: true, accountLabel: response.accountLabel, lastVerifiedAt: new Date().toISOString(), statusUnknown: false } : i)),
         );
         toast.success(`Connected to ${response.accountLabel}`);
         setActiveForm(null);
@@ -124,6 +210,9 @@ export default function IntegrationsSettingsPage() {
                   <span className="font-display font-black text-lg">{i.label}</span>
                   <NeoBadge tone={i.connected ? "success" : "info"}>{i.category}</NeoBadge>
                   {i.advanced && <NeoBadge tone="warning">Advanced</NeoBadge>}
+                  {i.id === "gmail" && i.statusUnknown && (
+                    <NeoBadge tone="warning">Status not verified</NeoBadge>
+                  )}
                 </div>
                 <p className="font-medium text-black/70 mt-1">{i.description}</p>
                 {i.expireWarning && <p className="text-xs text-orange-600 mt-1">{i.expireWarning}</p>}
@@ -147,6 +236,24 @@ export default function IntegrationsSettingsPage() {
             {activeForm === i.id && !i.connected && (
               <div className="mt-4 p-4 border-[3px] border-black bg-blue-50">
                 <form onSubmit={(e) => handleConnect(e, i.id)} className="space-y-4">
+                  {i.id === "gmail" && (
+                    <div className="border-[2px] border-black bg-yellow-100 p-3 space-y-2">
+                      <p className="text-sm font-bold">
+                        Need a 16-character Google App Password?
+                      </p>
+                      <p className="text-xs">
+                        Enable Google 2-Step Verification, then generate a password for MarketOS.
+                      </p>
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block border-[2px] border-black bg-yellow-300 px-4 py-3 text-center text-sm font-black hover:bg-yellow-400"
+                      >
+                        Generate Google App Password ?
+                      </a>
+                    </div>
+                  )}
                   {i.fields.map((f: any) => (
                     <div key={f.key}>
                       <label className="block text-xs font-bold font-mono mb-1">{f.label}</label>

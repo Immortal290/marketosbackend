@@ -36,6 +36,66 @@ async function handleRequest(req: NextRequest, { params }: { params: { path?: st
     } catch (_e) {}
   }
 
+  // GMAIL_REAL_BACKEND_ONLY
+  // Gmail and authentication credentials must never enter the
+  // simulated fallback or reach alternate backend candidates.
+  if (
+    fullPath === "/settings/gmail" ||
+    fullPath.startsWith("/settings/gmail/") ||
+    fullPath.startsWith("/auth/")
+  ) {
+    const backendUrl =
+      process.env.BACKEND_URL?.trim() || "http://localhost:3001";
+
+    try {
+      const target = new URL(
+        `/api/v1${fullPath}${req.nextUrl.search}`,
+        backendUrl
+      );
+
+      const headers = new Headers();
+      const authorization = req.headers.get("authorization");
+
+      if (authorization) {
+        headers.set("authorization", authorization);
+      }
+
+      if (bodyText !== null) {
+        headers.set("content-type", "application/json");
+      }
+
+      const response = await fetch(target, {
+        method,
+        headers,
+        body: bodyText,
+        cache: "no-store",
+        redirect: "manual",
+      });
+
+      // Never forward sensitive requests through a redirect.
+      if (response.status >= 300 && response.status < 400) {
+        return NextResponse.json(
+          { success: false, error: "Gmail backend redirect rejected" },
+          { status: 502 }
+        );
+      }
+
+      return new NextResponse(await response.text(), {
+        status: response.status,
+        headers: {
+          "Content-Type":
+            response.headers.get("content-type") || "application/json",
+          "Cache-Control": "no-store",
+        },
+      });
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Gmail backend unavailable" },
+        { status: 502 }
+      );
+    }
+  }
+
   // 1. Try forwarding to configured/discovered backend servers
   for (const base of BACKEND_CANDIDATES) {
     // Avoid self-proxying if base matches localhost and this Next.js server is listening on port 3000

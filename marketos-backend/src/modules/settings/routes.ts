@@ -1,3 +1,4 @@
+import gmailRoutes from './gmail-routes';
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
 import { PROVIDERS } from './providers';
@@ -13,6 +14,9 @@ export function encrypt(text: string) {
 }
 
 const router = Router();
+
+// Protected, workspace-scoped Gmail integration.
+router.use('/gmail', gmailRoutes);
 
 // In-memory fallback stores (linked and synced with Prisma when DB is available)
 let workspaceSettings = {
@@ -198,6 +202,12 @@ router.get('/integrations', (req: Request, res: Response) => {
  */
 router.patch('/integrations/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  if (String(id).toLowerCase() === 'gmail') {
+    return res.status(403).json({
+      success: false,
+      error: 'Use the protected Gmail connection API',
+    });
+  }
   const { connected } = req.body;
   let target = integrationsList.find((i) => i.id === id);
   if (target && typeof connected === 'boolean') {
@@ -229,6 +239,12 @@ router.patch('/integrations/:id', (req: Request, res: Response) => {
  *     summary: Verify and connect an integration
  */
 router.post('/integrations/:provider/connect', async (req: Request, res: Response): Promise<any> => {
+  if (String(req.params.provider).toLowerCase() === 'gmail') {
+    return res.status(403).json({
+      success: false,
+      error: 'Use the protected Gmail connection API',
+    });
+  }
   const p = PROVIDERS[req.params.provider];
   if (!p) return res.status(404).json({ success: false, error: 'Unknown integration' });
 
