@@ -30,6 +30,8 @@ const defaultBrandProfile: Partial<BrandProfile> = {
 const defaultCampaignBrief: Partial<CampaignBrief> = {
   channels: [],
   goal: 'awareness',
+  imageModel: 'pollinations-flux',
+  imageApiKey: '',
 };
 
 export const useWizardStore = create<WizardState>()(

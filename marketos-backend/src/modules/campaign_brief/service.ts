@@ -90,6 +90,8 @@ export class CampaignBriefService {
       company_address: data.companyAddress ?? '',
       unsubscribe_url: data.unsubscribeUrl ?? 'https://example.com/unsubscribe',
       llm_api_key: llmApiKey,
+      image_model: data.imageModel,
+      image_api_key: data.imageApiKey,
     };
 
     return { brief, campaign, agentPayload };

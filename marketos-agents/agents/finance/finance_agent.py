@@ -322,8 +322,8 @@ TIMELINE: {plan.timeline or '7 days'}
 BUDGET: ₹{budget:,.0f}
 SPENT:  ₹{spent:,.0f}  ({spend_pct*100:.1f}% of budget)
 HOUR OF DAY: {hour}:00 UTC (approx {(hour+5)%24}:30 IST)
-PACING: projected ₹{pacing['projected_spend']:,.0f} EOD ({pacing['pacing_pct']*100:.1f}%)
-BURN RATE: ₹{pacing.get('burn_rate_hr', 0):,.2f}/hour
+PACING: projected ₹{safe_float(pacing.get('projected_spend'), 0):,.0f} EOD ({safe_float(pacing.get('pacing_pct'), 0)*100:.1f}%)
+BURN RATE: ₹{safe_float(pacing.get('burn_rate_hr'), 0):,.2f}/hour
 ESTIMATED SEND VOLUME: {estimated_sends:,} recipients across {len(plan.channels)} channel(s)
 AVERAGE ORDER VALUE: ₹{plan.budget/500 if plan.budget else 999:.0f} (estimated for {plan.campaign_name})
 
@@ -351,7 +351,7 @@ API PIPELINE COST: {api_tokens_used:,} tokens (~${token_cost_usd:.4f} USD)
     if not approved and mode == "PRE_SEND":
         block_reason = (
             f"Budget overpace: at ₹{spent:,.0f} / ₹{budget:,.0f} "
-            f"({spend_pct*100:.1f}%). Projected EOD: ₹{pacing['projected_spend']:,.0f}."
+            f"({spend_pct*100:.1f}%). Projected EOD: ₹{safe_float(pacing.get('projected_spend'), 0):,.0f}."
         )
         # Publish budget_capped event
         publish_event(
@@ -383,9 +383,9 @@ API PIPELINE COST: {api_tokens_used:,} tokens (~${token_cost_usd:.4f} USD)
     kv("Budget Total", f"₹{budget:,.0f}")
     kv("Spent",        f"₹{spent:,.0f}  ({spend_pct*100:.1f}%)")
     kv("RAG Status",   data.get("rag_status", "GREEN"))
-    kv("EOD Projection", f"₹{pacing['projected_spend']:,.0f}  ({pacing['pacing_pct']*100:.1f}%)")
-    kv("CPM Estimate",   f"₹{data.get('cpm_estimate', 0):.1f}")
-    kv("This Send Cost", f"₹{data.get('projected_cost_this_send', 0):,.0f}")
+    kv("EOD Projection", f"₹{safe_float(pacing.get('projected_spend'), 0):,.0f}  ({safe_float(pacing.get('pacing_pct'), 0)*100:.1f}%)")
+    kv("CPM Estimate",   f"₹{safe_float(data.get('cpm_estimate'), 0):.1f}")
+    kv("This Send Cost", f"₹{safe_float(data.get('projected_cost_this_send'), 0):,.0f}")
     kv("Gate",           "✅ APPROVED" if approved else "🚫 BLOCKED")
     if block_reason:
         kv("Reason", block_reason)
@@ -396,9 +396,9 @@ API PIPELINE COST: {api_tokens_used:,} tokens (~${token_cost_usd:.4f} USD)
             print(f"  ⚠  {rf}")
 
     section("ROI ATTRIBUTION")
-    kv("ROAS",               f"{roi_calc.get('roas', 0):.2f}x")
-    kv("CPA",                f"₹{roi_calc.get('cpa', 0):,.2f}")
-    kv("Attributed Revenue", f"₹{roi_calc.get('attributed_revenue', 0):,.2f}")
+    kv("ROAS",               f"{safe_float(roi_calc.get('roas'), 0):.2f}x")
+    kv("CPA",                f"₹{safe_float(roi_calc.get('cpa'), 0):,.2f}")
+    kv("Attributed Revenue", f"₹{safe_float(roi_calc.get('attributed_revenue'), 0):,.2f}")
     kv("Profitable",         "Yes ✅" if roi_calc.get("profitable") else "No ⚠ — below 2x ROAS")
     if data.get("budget_breakdown"):
         bb = data["budget_breakdown"]

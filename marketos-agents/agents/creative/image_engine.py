@@ -87,31 +87,90 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Strict Image Generation (No Fallbacks) ───────────────────────────────
-    image_model = state.get("image_model") or "black-forest-labs/FLUX.1-schnell"
-    
-    if "gemini" in image_model.lower():
-        agent_log("IMAGE", f"Generating with Gemini ({image_model}) strictly...")
+    # ── Image Generation — Ordered by cost (cheapest first) ─────────────────
+    image_model = state.get("image_model") or "pollinations-flux"
+    image_api_key = state.get("image_api_key") or ""
+
+    if "pollinations" in image_model.lower() or image_model == "pollinations-flux":
+        # FREE — no API key required
+        agent_log("IMAGE", "Generating with Pollinations.ai FLUX (free)...")
+        img_b64 = _generate_pollinations_image(full_prompt)
+        source = "pollinations"
+
+    elif "together" in image_model.lower():
+        # Together AI — FLUX.1-schnell-Free (free tier) or paid models
+        api_key = image_api_key or os.getenv("TOGETHER_API_KEY", "")
+        if not api_key:
+            agent_log("IMAGE", "No Together API key — falling back to free Pollinations.ai")
+            img_b64 = _generate_pollinations_image(full_prompt)
+            source = "pollinations"
+        else:
+            agent_log("IMAGE", f"Generating with Together AI ({image_model})...")
+            img_b64 = _generate_together_image(full_prompt, api_key=api_key, model=image_model)
+            source = "together"
+            if not img_b64:
+                agent_log("IMAGE", "Together AI failed — falling back to Pollinations.ai")
+                img_b64 = _generate_pollinations_image(full_prompt)
+                source = "pollinations"
+
+    elif "dall-e" in image_model.lower():
+        api_key = image_api_key or os.getenv("OPENAI_API_KEY", "")
+        if not api_key:
+            agent_log("IMAGE", "No OpenAI key for DALL-E — falling back to free Pollinations.ai")
+            img_b64 = _generate_pollinations_image(full_prompt)
+            source = "pollinations"
+        else:
+            agent_log("IMAGE", f"Generating with OpenAI {image_model}...")
+            img_b64 = _generate_openai_image(full_prompt, api_key=api_key, model=image_model)
+            source = "openai"
+            if not img_b64:
+                agent_log("IMAGE", "OpenAI DALL-E failed — falling back to Pollinations.ai")
+                img_b64 = _generate_pollinations_image(full_prompt)
+                source = "pollinations"
+
+    elif "openrouter" in image_model.lower() or image_model.lower().startswith("google/"):
+        api_key = image_api_key or os.getenv("OPENROUTER_API_KEY", "")
+        if not api_key:
+            agent_log("IMAGE", "No OpenRouter key — falling back to free Pollinations.ai")
+            img_b64 = _generate_pollinations_image(full_prompt)
+            source = "pollinations"
+        else:
+            agent_log("IMAGE", f"Generating with OpenRouter ({image_model})...")
+            img_b64 = _generate_openrouter_image(full_prompt, api_key=api_key, model=image_model)
+            source = "openrouter"
+            if not img_b64:
+                agent_log("IMAGE", "OpenRouter failed — falling back to Pollinations.ai")
+                img_b64 = _generate_pollinations_image(full_prompt)
+                source = "pollinations"
+
+    elif "gemini" in image_model.lower():
+        agent_log("IMAGE", f"Generating with Gemini ({image_model})...")
         img_b64, total_token_usage = _generate_gemini_image(full_prompt, model=image_model)
         source = "gemini"
-    elif "dall-e" in image_model.lower():
-        image_api_key = state.get("image_api_key") or os.getenv("OPENAI_API_KEY")
-        if not image_api_key:
-             raise ValueError(f"OpenAI API Key is missing for {image_model}. No fallback allowed.")
-        agent_log("IMAGE", f"Generating with OpenAI ({image_model}) strictly...")
-        img_b64 = _generate_openai_image(full_prompt, api_key=image_api_key, model=image_model)
-        source = "openai"
-    else:
-        image_api_key = state.get("image_api_key") or os.getenv("HF_TOKEN")
-        if not image_api_key:
-             agent_log("IMAGE", f"No HF_TOKEN found for {image_model}, falling back to free Pollinations.ai...")
-             img_b64 = _generate_pollinations_image(full_prompt)
-             source = "pollinations"
+        if not img_b64:
+            img_b64 = _generate_pollinations_image(full_prompt)
+            source = "pollinations"
+
+    elif "black-forest" in image_model.lower() or "flux" in image_model.lower():
+        # HuggingFace FLUX (needs hf_ token)
+        api_key = image_api_key or os.getenv("HF_TOKEN", "")
+        if not api_key:
+            agent_log("IMAGE", "No HF token — using free Pollinations.ai")
+            img_b64 = _generate_pollinations_image(full_prompt)
+            source = "pollinations"
         else:
-             agent_log("IMAGE", f"Generating with {image_model} strictly...")
-             img_b64 = _generate_flux_schnell_image(full_prompt, api_key=image_api_key, model=image_model)
-             source = "flux-schnell"
-    
+            img_b64 = _generate_flux_schnell_image(full_prompt, api_key=api_key, model=image_model)
+            source = "flux-hf"
+            if not img_b64:
+                img_b64 = _generate_pollinations_image(full_prompt)
+                source = "pollinations"
+
+    else:
+        # Unknown model — use free Pollinations.ai
+        agent_log("IMAGE", f"Unknown model '{image_model}' — using free Pollinations.ai")
+        img_b64 = _generate_pollinations_image(full_prompt)
+        source = "pollinations"
+
     if not img_b64:
         raise ValueError(f"{image_model} image generation failed or returned empty. No fallback allowed.")
         
@@ -503,7 +562,72 @@ def _generate_gemini_image(full_prompt: str, model: str = "gemini-3.1-flash-imag
         return None, 0
 
 
-# ── Provider 2: FLUX.1-schnell via HuggingFace Inference API ─────────────────
+# ── Provider 2: OpenAI / OpenRouter ───────────────────────────────────────────────
+
+def _generate_openrouter_image(
+    full_prompt: str,
+    api_key: str,
+    model: str
+) -> str | None:
+    """
+    Generate an image using OpenRouter's Images Generations API (OpenAI-compatible).
+    Endpoint: https://openrouter.ai/api/v1/images/generations
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_openrouter"
+
+    # Try OpenRouter /images/generations first
+    url = "https://openrouter.ai/api/v1/images/generations"
+    payload = {
+        "model": model,
+        "prompt": full_prompt[:1000],
+        "n": 1,
+        "size": "1024x1024",
+        "response_format": "b64_json",
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://marketos.ai",
+                "X-Title": "MarketOS",
+            }
+        )
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read().decode())
+
+        # Try b64_json first
+        b64 = data.get("data", [{}])[0].get("b64_json")
+        if b64:
+            agent_log("IMAGE", f"OpenRouter ({model}) returned b64 image ✅")
+            return b64
+
+        # Try URL fallback
+        img_url = data.get("data", [{}])[0].get("url")
+        if img_url:
+            agent_log("IMAGE", f"OpenRouter returned image URL: {img_url[:80]}")
+            img_req = urllib.request.Request(img_url, headers={"User-Agent": "MarketOS/1.0"})
+            with urllib.request.urlopen(img_req, timeout=30) as img_resp:
+                return base64.b64encode(img_resp.read()).decode("utf-8")
+
+        agent_log("IMAGE", f"OpenRouter images API returned no data: {str(data)[:200]}")
+        return None
+
+    except Exception as e:
+        agent_log("IMAGE", f"OpenRouter images API error: {e}")
+
+    # Fallback: free Pollinations.ai (no key needed)
+    agent_log("IMAGE", "Falling back to Pollinations.ai for image generation...")
+    try:
+        return _generate_pollinations_image(full_prompt)
+    except Exception as e2:
+        agent_log("IMAGE", f"Pollinations fallback also failed: {e2}")
+        return None
 
 def _generate_openai_image(
     full_prompt: str,
@@ -580,6 +704,66 @@ def _generate_flux_schnell_image(
 
 
 # ── Provider 3: Pollinations.ai ───────────────────────────────────────────────
+
+def _generate_together_image(
+    full_prompt: str,
+    api_key: str,
+    model: str = "black-forest-labs/FLUX.1-schnell-Free",
+) -> str | None:
+    """
+    Generate an image via Together AI's Images API.
+    FLUX.1-schnell-Free is on Together's free tier — no cost.
+    Docs: https://docs.together.ai/docs/images-api
+    Returns base64-encoded image bytes, or None on failure.
+    """
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return "mock_base64_together"
+
+    # Normalize model name
+    if "together" in model.lower() and "/" not in model:
+        model = "black-forest-labs/FLUX.1-schnell-Free"
+
+    url = "https://api.together.xyz/v1/images/generations"
+    payload = {
+        "model": model,
+        "prompt": full_prompt[:1000],
+        "n": 1,
+        "width": 1024,
+        "height": 1024,
+        "steps": 4,
+        "response_format": "b64_json",
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode())
+
+        b64 = data.get("data", [{}])[0].get("b64_json")
+        if b64:
+            agent_log("IMAGE", f"Together AI ({model}) returned b64 image ✅")
+            return b64
+
+        img_url = data.get("data", [{}])[0].get("url")
+        if img_url:
+            img_req = urllib.request.Request(img_url, headers={"User-Agent": "MarketOS/1.0"})
+            with urllib.request.urlopen(img_req, timeout=30) as img_resp:
+                return base64.b64encode(img_resp.read()).decode("utf-8")
+
+        agent_log("IMAGE", f"Together AI returned no image data: {str(data)[:200]}")
+        return None
+
+    except Exception as e:
+        agent_log("IMAGE", f"Together AI image error: {e}")
+        return None
+
 
 def _generate_pollinations_image(
     full_prompt: str,

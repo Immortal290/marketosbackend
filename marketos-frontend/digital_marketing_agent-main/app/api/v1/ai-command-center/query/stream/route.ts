@@ -573,7 +573,8 @@ export async function POST(req: NextRequest) {
 
       console.log(`[AI Stream Proxy] Trying targetUrl: ${targetUrl}`);
       const abortCtrl = new AbortController();
-      const timeoutId = setTimeout(() => abortCtrl.abort(), 4000);
+      // 30s timeout — Python agents need 8-10s just for intent classification
+      const timeoutId = setTimeout(() => abortCtrl.abort(), 30000);
       let res: Response;
       try {
         res = await fetch(targetUrl, {

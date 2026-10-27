@@ -85,6 +85,52 @@ export function Step1Goal() {
           />
         </div>
       </div>
+
+      {/* Image Generation Model */}
+      <div className="border-neo border-neo-ink p-4 bg-neo-surface-alt">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-display text-lg font-black uppercase">Image Generation Model</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="font-mono text-sm font-bold uppercase">Model</label>
+            <select 
+              className="border-neo border-neo-ink p-3 font-mono text-sm bg-white"
+              value={campaignBrief.imageModel || 'pollinations-flux'}
+              onChange={e => updateCampaignBrief({ imageModel: e.target.value })}
+            >
+              <optgroup label="🆓 Free — No API Key Required">
+                <option value="pollinations-flux">Pollinations.ai FLUX — Free (No Key Needed)</option>
+              </optgroup>
+              <optgroup label="🔗 OpenRouter — Gemini">
+                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (via OpenRouter)</option>
+              </optgroup>
+              <optgroup label="💰 Low Cost — OpenAI Key">
+                <option value="dall-e-2">DALL-E 2 (~$0.018/image)</option>
+                <option value="dall-e-3">DALL-E 3 (~$0.040/image)</option>
+              </optgroup>
+              <optgroup label="HuggingFace — hf_ Token">
+                <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell via HuggingFace</option>
+                <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev via HuggingFace</option>
+              </optgroup>
+              <optgroup label="🆓 Free Tier — Together API Key">
+                <option value="together-flux-free">Together AI — FLUX.1-schnell (Free Tier)</option>
+              </optgroup>
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="font-mono text-sm font-bold uppercase">Image API Key</label>
+            <input 
+              type="password"
+              className="border-neo border-neo-ink p-3 font-mono text-sm bg-white"
+              value={campaignBrief.imageApiKey || ''}
+              placeholder={(campaignBrief.imageModel === 'pollinations-flux') ? 'No key needed — Pollinations is free' : 'Paste your image API key...'}
+              onChange={e => updateCampaignBrief({ imageApiKey: e.target.value })}
+              disabled={campaignBrief.imageModel === 'pollinations-flux'}
+            />
+          </div>
+        </div>
+      </div>
     </div>
-  );
+    );
 }

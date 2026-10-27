@@ -20,6 +20,8 @@ export const createCampaignBriefSchema = z.object({
     kpiTarget: z.string().optional(),
     freeTextContext: z.string().optional(),
     rawPromptFallback: z.string().optional(),
+    imageModel: z.string().optional(),
+    imageApiKey: z.string().optional(),
     // Optional send context
     recipientEmail: z.string().email().optional(),
     recipientPhone: z.string().optional(),

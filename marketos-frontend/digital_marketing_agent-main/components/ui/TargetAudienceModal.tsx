@@ -118,44 +118,34 @@ export function TargetAudienceModal({
   const [senderName, setSenderName]         = useState("");
   const [companyName, setCompanyName]       = useState("");
   const [channels, setChannels]             = useState<string[]>(["email", "sms", "social"]);
-  const [llmModel, setLlmModel]             = useState("gemini-2.5-flash");
+  const [llmModel, setLlmModel]             = useState("gpt-4o-mini");
   const [customModel, setCustomModel]       = useState("");
   const [llmApiKey, setLlmApiKey]           = useState("");
-  const [savedKeyLoaded, setSavedKeyLoaded] = useState(false);
-  const [imageModel, setImageModel]         = useState("black-forest-labs/FLUX.1-schnell");
+  const [imageModel, setImageModel]         = useState("pollinations-flux");
   const [customImageModel, setCustomImageModel] = useState("");
   const [imageApiKey, setImageApiKey]       = useState("");
+  const [sameKeyForImage, setSameKeyForImage] = useState(true); // auto-sync image key from LLM key
   const [isSubmitting, setIsSubmitting]     = useState(false);
+
+  // Track whether the user manually edited the LLM key — if so, never auto-overwrite it
+  const userEditedLlmKey   = React.useRef(false);
+  const userEditedImageKey = React.useRef(false);
 
   const [savedApiKeys, setSavedApiKeys] = useState<Record<string, string>>({});
 
-  // Auto-load saved API keys from Settings > AI Models
+  // Load saved API keys when modal opens — just populate savedApiKeys,
+  // the model-change effect below will set the key field accordingly
   useEffect(() => {
     if (!isOpen) return;
+    // Reset user-edit flags and same-key toggle whenever the modal reopens
+    userEditedLlmKey.current   = false;
+    userEditedImageKey.current = false;
+    setSameKeyForImage(true);
     const loadSavedKey = async () => {
       try {
         const response = await apiRequest<any>("/settings/api-keys");
         if (response?.data) {
           setSavedApiKeys(response.data);
-          if (llmModel.includes("gemini") && response.data.gemini) {
-            setLlmApiKey(response.data.gemini);
-            setSavedKeyLoaded(true);
-          } else if ((llmModel.includes("gpt") || llmModel.includes("o3")) && response.data.openai) {
-            setLlmApiKey(response.data.openai);
-            setSavedKeyLoaded(true);
-          } else if (llmModel.includes("claude") && response.data.anthropic) {
-            setLlmApiKey(response.data.anthropic);
-            setSavedKeyLoaded(true);
-          } else if (llmModel.includes("groq") && response.data.groq) {
-            setLlmApiKey(response.data.groq);
-            setSavedKeyLoaded(true);
-          } else if (llmModel.includes("deepseek") && response.data.openrouter) {
-            setLlmApiKey(response.data.openrouter);
-            setSavedKeyLoaded(true);
-          } else if (llmModel.includes("llama-3.1-405b") && response.data.openrouter) {
-            setLlmApiKey(response.data.openrouter);
-            setSavedKeyLoaded(true);
-          }
         }
       } catch (_) {
         // silently ignore — user can still type manually
@@ -164,31 +154,37 @@ export function TargetAudienceModal({
     void loadSavedKey();
   }, [isOpen]);
 
-  // Update API key when model changes
+  // Auto-fill LLM key from saved keys when model changes
+  // NEVER overwrite if the user has manually edited the key field
   useEffect(() => {
-    if (llmModel.includes("gemini") && savedApiKeys.gemini) {
-      setLlmApiKey(savedApiKeys.gemini);
-      setSavedKeyLoaded(true);
-    } else if ((llmModel.includes("gpt") || llmModel.includes("o3")) && savedApiKeys.openai) {
-      setLlmApiKey(savedApiKeys.openai);
-      setSavedKeyLoaded(true);
-    } else if (llmModel.includes("claude") && savedApiKeys.anthropic) {
-      setLlmApiKey(savedApiKeys.anthropic);
-      setSavedKeyLoaded(true);
-    } else if (llmModel.includes("groq") && savedApiKeys.groq) {
-      setLlmApiKey(savedApiKeys.groq);
-      setSavedKeyLoaded(true);
-    } else if (llmModel.includes("deepseek") && savedApiKeys.openrouter) {
-      setLlmApiKey(savedApiKeys.openrouter);
-      setSavedKeyLoaded(true);
-    } else if (llmModel.includes("llama-3.1-405b") && savedApiKeys.openrouter) {
-      setLlmApiKey(savedApiKeys.openrouter);
-      setSavedKeyLoaded(true);
-    } else {
-      setLlmApiKey("");
-      setSavedKeyLoaded(false);
-    }
+    if (userEditedLlmKey.current) return; // user typed something — leave it alone
+
+    let autoKey = "";
+    if (llmModel.includes("gemini"))                                               autoKey = savedApiKeys.gemini      ?? "";
+    else if (llmModel.includes("gpt") || llmModel.includes("o3"))                 autoKey = savedApiKeys.openai      ?? "";
+    else if (llmModel.includes("claude"))                                          autoKey = savedApiKeys.anthropic   ?? "";
+    else if (llmModel.includes("groq"))                                            autoKey = savedApiKeys.groq        ?? "";
+    else if (llmModel.includes("deepseek") || llmModel.includes("llama-3.1-405b")) autoKey = savedApiKeys.openrouter ?? "";
+
+    setLlmApiKey(autoKey);
   }, [llmModel, savedApiKeys]);
+
+  // Auto-fill image key: if sameKeyForImage is on, mirror LLM key; else use saved keys
+  useEffect(() => {
+    if (sameKeyForImage) {
+      setImageApiKey(llmApiKey);
+      return;
+    }
+    if (userEditedImageKey.current) return;
+
+    let autoKey = "";
+    if (imageModel.includes("riverflow") || imageModel.includes("sourceful"))  autoKey = savedApiKeys.openrouter ?? "";
+    else if (imageModel.includes("google/"))                                    autoKey = savedApiKeys.openrouter ?? "";
+    else if (imageModel.includes("dall-e"))                                    autoKey = savedApiKeys.openai     ?? "";
+
+    setImageApiKey(autoKey);
+  }, [imageModel, savedApiKeys, llmApiKey, sameKeyForImage]);
+
 
   // Auto-extract email / phone whenever the prompt changes
   // Only overwrite if a valid email/phone is found in the prompt
@@ -202,15 +198,23 @@ export function TargetAudienceModal({
     const rawPhone = phoneMatch ? phoneMatch[0].replace(/[\s()\-]/g, "") : "";
     const isValidPhone = rawPhone.replace(/\D/g, "").length >= 10;
     // Extract api key if provided in the prompt
-    const apiKeyMatch = initialPrompt.match(/(?:api_key|apikey|key)\s*[:=]\s*([A-Za-z0-9_-]{20,})/i) || initialPrompt.match(/(AIza[0-9A-Za-z-_]{35}|sk-[a-zA-Z0-9]{32,}|gsk_[a-zA-Z0-9]{20,})/);
+    // Note: sk-or- (OpenRouter) must be checked BEFORE sk- (OpenAI) to avoid misclassification
+    const apiKeyMatch =
+      initialPrompt.match(/(?:api_key|apikey|key)\s*[:=]\s*([A-Za-z0-9_-]{20,})/i) ||
+      initialPrompt.match(/(AIza[0-9A-Za-z-_]{35}|sk-or-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{32,}|gsk_[a-zA-Z0-9]{20,})/);
     // Only override defaults if explicit email/phone/key found in prompt
     if (emailMatch) setRecipientEmail(emailMatch[0]);
     if (isValidPhone) setRecipientPhone(rawPhone);
     if (apiKeyMatch) {
       const extractedKey = apiKeyMatch[1] || apiKeyMatch[0];
       setLlmApiKey(extractedKey);
-      if (extractedKey.startsWith("gsk_")) {
+      if (extractedKey.startsWith("sk-or-")) {
+        // OpenRouter key — default to DeepSeek (works well with OpenRouter)
+        setLlmModel("deepseek/deepseek-chat");
+      } else if (extractedKey.startsWith("gsk_")) {
         setLlmModel("groq-llama-3.3-70b");
+      } else if (extractedKey.startsWith("sk-ant-")) {
+        setLlmModel("claude-3-5-sonnet-20241022");
       } else if (extractedKey.startsWith("sk-")) {
         setLlmModel("gpt-4o-mini");
       } else if (extractedKey.startsWith("AIza")) {
@@ -221,6 +225,39 @@ export function TargetAudienceModal({
   }, [initialPrompt]);
 
   if (!isOpen) return null;
+
+  // Detect which provider a key belongs to based on its prefix
+  const detectKeyProvider = (key: string): string | null => {
+    if (!key) return null;
+    if (key.startsWith("sk-or-")) return "openrouter";
+    if (key.startsWith("gsk_"))   return "groq";
+    if (key.startsWith("AIza"))   return "gemini";
+    if (key.startsWith("sk-ant-")) return "anthropic";
+    if (key.startsWith("sk-"))    return "openai";
+    return null;
+  };
+
+  // Detect which provider a model requires
+  const getModelProvider = (model: string): string => {
+    if (model.includes("gemini"))  return "gemini";
+    if (model.includes("gpt") || model.includes("o3")) return "openai";
+    if (model.includes("claude")) return "anthropic";
+    if (model.includes("groq") || model.includes("llama") || model.includes("mixtral")) return "groq";
+    if (model.includes("deepseek") || model.includes("/")) return "openrouter";
+    return "custom";
+  };
+
+  const keyProvider    = detectKeyProvider(llmApiKey);
+  const modelProvider  = getModelProvider(llmModel);
+  const hasMismatch    = !!keyProvider && !!modelProvider && keyProvider !== modelProvider && modelProvider !== "custom";
+
+  const providerLabel: Record<string, string> = {
+    openrouter: "OpenRouter (sk-or-v1-...)",
+    openai:     "OpenAI (sk-...)",
+    groq:       "Groq (gsk_...)",
+    gemini:     "Gemini (AIza...)",
+    anthropic:  "Anthropic (sk-ant-...)",
+  };
 
   const toggleChannel = (ch: string) => {
     setChannels((prev) =>
@@ -239,6 +276,17 @@ export function TargetAudienceModal({
     setIsSubmitting(true);
 
     try {
+      // Helper: detect provider from key format (overrides model-based detection)
+      const detectProviderFromKey = (key: string): string | null => {
+        const k = key.trim();
+        if (k.startsWith("sk-or-"))  return "openrouter";
+        if (k.startsWith("gsk_"))    return "groq";
+        if (k.startsWith("AIza"))    return "gemini";
+        if (k.startsWith("sk-ant-")) return "anthropic";
+        if (k.startsWith("sk-"))     return "openai";
+        return null;
+      };
+
       // 1. Verify LLM Key
       let llmProvider = "custom";
       if (llmModel.includes("gemini")) llmProvider = "gemini";
@@ -247,39 +295,55 @@ export function TargetAudienceModal({
       else if (llmModel.includes("groq")) llmProvider = "groq";
       else if (llmModel.includes("deepseek") || llmModel.includes("llama-3.1-405b")) llmProvider = "openrouter";
 
-      if (llmProvider !== "custom" && llmApiKey) {
+      // Override provider if key format tells us something different
+      const detectedLlmProvider = llmApiKey ? detectProviderFromKey(llmApiKey) : null;
+      if (detectedLlmProvider) llmProvider = detectedLlmProvider;
+
+      if (hasMismatch) {
+        throw new Error(
+          `Key/model mismatch! Your key is for ${providerLabel[keyProvider!] ?? keyProvider} but model requires ${providerLabel[modelProvider] ?? modelProvider}. Please enter the correct API key.`
+        );
+      }
+
+      if (llmApiKey) {
         toast.info("Verifying LLM API Key...");
         const llmVerifyRes = await fetch("/api/v1/verify-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: llmProvider, apiKey: llmApiKey })
+          body: JSON.stringify({ provider: llmProvider, apiKey: llmApiKey.trim() })
         });
         const llmVerify = await llmVerifyRes.json();
         if (!llmVerify.valid) {
           throw new Error("Invalid LLM API Key: " + (llmVerify.error || "Verification failed"));
         }
-      } else if (llmProvider !== "custom" && !llmApiKey) {
-          throw new Error("LLM API Key is required for the selected model");
+        toast.success("LLM key verified ✓");
+      } else if (llmProvider !== "custom") {
+        throw new Error("LLM API Key is required. Please enter your API key.");
       }
 
-      // 2. Verify Image Key
-      let imgProvider = "custom";
-      if (imageModel.includes("dall-e")) imgProvider = "dall-e";
-      else if (imageModel.includes("FLUX") || imageModel.includes("black-forest")) imgProvider = "black-forest-labs";
+      // 2. Resolve effective image key (may be same as LLM key)
+      const effectiveImageKey = sameKeyForImage ? llmApiKey : imageApiKey;
 
-      if (imgProvider !== "custom" && imageApiKey) {
+      // 3. Verify Image Key only if different from already-verified LLM key
+      let imgProvider = "openai"; // default for dall-e
+      if (imageModel.includes("dall-e"))                                         imgProvider = "openai";
+      else if (imageModel.includes("FLUX") || imageModel.includes("black-forest")) imgProvider = "black-forest-labs";
+      else if (imageModel.includes("riverflow") || imageModel.includes("sourceful") || imageModel.includes("google/")) imgProvider = "openrouter";
+
+      if (!sameKeyForImage && effectiveImageKey) {
         toast.info("Verifying Image API Key...");
         const imgVerifyRes = await fetch("/api/v1/verify-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: imgProvider, apiKey: imageApiKey })
+          body: JSON.stringify({ provider: imgProvider, apiKey: effectiveImageKey.trim() })
         });
         const imgVerify = await imgVerifyRes.json();
         if (!imgVerify.valid) {
           throw new Error("Invalid Image API Key: " + (imgVerify.error || "Verification failed"));
         }
-      } else if (imgProvider !== "custom" && !imageApiKey) {
-          throw new Error("Image API Key is required for the selected image model");
+        toast.success("Image key verified ✓");
+      } else if (!sameKeyForImage && !effectiveImageKey && imgProvider !== "custom") {
+        throw new Error("Image API Key is required for the selected image model.");
       }
 
       const payload: AudienceData = {
@@ -291,9 +355,9 @@ export function TargetAudienceModal({
         companyName,
         channels,
         llmModel: llmModel === "custom" ? (customModel.trim() || "custom-agent-llm") : llmModel,
-        llmApiKey,
+        llmApiKey: llmApiKey.trim(),
         imageModel: imageModel === "custom" ? (customImageModel.trim() || "custom-image-model") : imageModel,
-        imageApiKey,
+        imageApiKey: effectiveImageKey.trim(),
       };
 
       if (onLaunch) onLaunch(payload);
@@ -487,8 +551,19 @@ export function TargetAudienceModal({
                 <select
                   value={llmModel}
                   onChange={(e) => {
-                    setLlmModel(e.target.value);
-                    if (e.target.value !== "custom") setCustomModel("");
+                    const newModel = e.target.value;
+                    setLlmModel(newModel);
+                    if (newModel !== "custom") setCustomModel("");
+                    // If current key belongs to a DIFFERENT provider than the newly selected model,
+                    // clear the key so user is forced to enter the right one.
+                    if (llmApiKey) {
+                      const newModelProvider = getModelProvider(newModel);
+                      const currentKeyProvider = detectKeyProvider(llmApiKey);
+                      if (currentKeyProvider && newModelProvider !== "custom" && currentKeyProvider !== newModelProvider) {
+                        setLlmApiKey("");
+                        userEditedLlmKey.current = false; // allow auto-fill
+                      }
+                    }
                   }}
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
@@ -532,11 +607,16 @@ export function TargetAudienceModal({
               </div>
 
               <div className="flex-1 space-y-1 mt-3 sm:mt-0">
-                <label className="font-mono text-[9px] font-bold uppercase text-black/60 flex items-center gap-1">
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60 flex items-center gap-1 flex-wrap">
                   LLM API Key
-                  {savedKeyLoaded && (
+                  {llmApiKey && !hasMismatch && (
                     <span className="flex items-center gap-0.5 bg-green-100 text-green-700 border border-green-400 px-1 py-0.5 rounded text-[8px] font-bold">
-                      <CheckCircle2 className="w-2.5 h-2.5" /> LOADED FROM SETTINGS
+                      <CheckCircle2 className="w-2.5 h-2.5" /> KEY ENTERED
+                    </span>
+                  )}
+                  {hasMismatch && (
+                    <span className="flex items-center gap-0.5 bg-red-100 text-red-700 border border-red-500 px-1 py-0.5 rounded text-[8px] font-bold animate-pulse">
+                      ⚠ WRONG KEY TYPE — Need {providerLabel[modelProvider] ?? modelProvider}
                     </span>
                   )}
                 </label>
@@ -545,21 +625,32 @@ export function TargetAudienceModal({
                   <input
                     type="password"
                     value={llmApiKey}
-                    onChange={(e) => { 
+                    onChange={(e) => {
                       const val = e.target.value;
-                      setLlmApiKey(val); 
-                      setSavedKeyLoaded(false); 
-                      if (val.startsWith("gsk_")) setLlmModel("groq-llama-3.3-70b");
-                      else if (val.startsWith("sk-")) setLlmModel("gpt-4o-mini");
-                      else if (val.startsWith("AIza")) setLlmModel("gemini-2.5-flash");
+                      userEditedLlmKey.current = true;
+                      setLlmApiKey(val);
+                      // Auto-switch model AND image model based on key prefix
+                      if (val.startsWith("sk-or-")) {
+                        setLlmModel("deepseek/deepseek-chat");
+                        // Do not auto-switch image model — respect user's explicit image model choice
+                      } else if (val.startsWith("gsk_")) {
+                        setLlmModel("groq-llama-3.3-70b");
+                        // Groq is text-only — keep current image model
+                      } else if (val.startsWith("sk-ant-")) {
+                        setLlmModel("claude-3-5-sonnet");
+                      } else if (val.startsWith("sk-")) {
+                        setLlmModel("gpt-4o-mini");
+                        setImageModel("dall-e-2"); // OpenAI key → DALL-E 2 (cheaper)
+                      } else if (val.startsWith("AIza")) {
+                        setLlmModel("gemini-2.5-flash");
+                      }
                     }}
                     placeholder={
-                      savedKeyLoaded ? "••••••••••••••••••• (saved)" :
                       llmModel.includes("gemini") ? "Paste Gemini API Key (AIza...)" :
                       (llmModel.includes("gpt") || llmModel.includes("o3")) ? "Paste OpenAI API Key (sk-...)" :
                       llmModel.includes("claude") ? "Paste Anthropic API Key (sk-ant-...)" :
                       llmModel.includes("groq") ? "Paste Groq API Key (gsk_...)" :
-                      (llmModel.includes("deepseek") || llmModel.includes("llama-3.1-405b")) ? "Paste OpenRouter API Key (sk-or-v1-...)" :
+                      (llmModel.includes("deepseek") || llmModel.includes("llama")) ? "Paste OpenRouter API Key (sk-or-v1-...)" :
                       "Paste your API key here..."
                     }
                     className="w-full bg-white border-[3px] border-black rounded-none pl-7 pr-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
@@ -584,16 +675,25 @@ export function TargetAudienceModal({
                   }}
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
-                  <optgroup label="HuggingFace / BFL">
-                    <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell (Fast)</option>
-                    <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev (High Quality)</option>
+                  <optgroup label="🆓 Free — No API Key Required">
+                    <option value="pollinations-flux">Pollinations.ai FLUX — Free ✓ (No Key Needed)</option>
                   </optgroup>
-                  <optgroup label="OpenAI">
-                    <option value="dall-e-3">DALL-E 3 (High Quality)</option>
-                    <option value="dall-e-2">DALL-E 2 (Fast)</option>
+                  <optgroup label="🔗 OpenRouter — Gemini">
+                    <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (via OpenRouter)</option>
                   </optgroup>
-                  <optgroup label="Custom / Other">
-                    <option value="custom">✨ Enter Custom Image Model ID...</option>
+                  <optgroup label="🆓 Free Tier — Together API Key">
+                    <option value="together-flux-free">Together AI — FLUX.1-schnell (Free Tier)</option>
+                  </optgroup>
+                  <optgroup label="💰 Low Cost — OpenAI Key">
+                    <option value="dall-e-2">DALL-E 2 (~$0.018/image)</option>
+                    <option value="dall-e-3">DALL-E 3 (~$0.040/image)</option>
+                  </optgroup>
+                  <optgroup label="HuggingFace — hf_ Token">
+                    <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell via HuggingFace</option>
+                    <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev via HuggingFace</option>
+                  </optgroup>
+                  <optgroup label="Custom">
+                    <option value="custom">✨ Enter Custom Model ID...</option>
                   </optgroup>
                 </select>
                 {imageModel === "custom" && (
@@ -608,21 +708,52 @@ export function TargetAudienceModal({
               </div>
 
               <div className="flex-1 space-y-1 mt-3 sm:mt-0">
-                <label className="font-mono text-[9px] font-bold uppercase text-black/60">
-                  Image API Key (HF/BFL)
+                <label className="font-mono text-[9px] font-bold uppercase text-black/60 flex items-center gap-2">
+                  Image API Key
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sameKeyForImage}
+                      onChange={(e) => {
+                        setSameKeyForImage(e.target.checked);
+                        if (e.target.checked) {
+                          userEditedImageKey.current = false;
+                          setImageApiKey(llmApiKey);
+                        }
+                      }}
+                      className="w-3 h-3 accent-black"
+                    />
+                    <span className="text-[8px] font-bold text-black/50">SAME AS LLM KEY</span>
+                  </label>
                 </label>
                 <input
                   type="password"
-                  value={imageApiKey}
-                  onChange={(e) => setImageApiKey(e.target.value)}
+                  value={sameKeyForImage ? llmApiKey : imageApiKey}
+                  disabled={sameKeyForImage || imageModel === "pollinations-flux"}
+                  onChange={(e) => {
+                    if (!sameKeyForImage && imageModel !== "pollinations-flux") {
+                      userEditedImageKey.current = true;
+                      setImageApiKey(e.target.value);
+                    }
+                  }}
                   placeholder={
+                    imageModel === "pollinations-flux" ? "No key needed — Pollinations.ai is free! ✓" :
+                    sameKeyForImage ? "(Using same key as LLM above)" :
+                    imageModel.includes("together") ? "Paste Together AI Key (from api.together.xyz)" :
                     imageModel.includes("dall-e") ? "Paste OpenAI API Key (sk-...)" :
-                    imageModel.includes("FLUX") ? "Paste HF/BFL Token (hf_...)" :
-                    "Enter API Key for image generation..."
+                    (imageModel.includes("FLUX") || imageModel.includes("black-forest")) ? "Paste HuggingFace Token (hf_...)" :
+                    "Enter API key for image generation..."
                   }
-                  className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
+                  className={`w-full border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2 ${(sameKeyForImage || imageModel === "pollinations-flux") ? "bg-gray-100 cursor-not-allowed opacity-70" : "bg-white"}`}
                 />
+                {sameKeyForImage && llmApiKey && (
+                  <p className="font-mono text-[8px] text-green-700 font-bold">✓ Image key synced from LLM key above</p>
+                )}
+                {imageModel === "pollinations-flux" && (
+                  <p className="font-mono text-[8px] text-blue-600 font-bold">✓ Pollinations.ai is completely free — no key needed</p>
+                )}
               </div>
+
             </div>
           </div>
 

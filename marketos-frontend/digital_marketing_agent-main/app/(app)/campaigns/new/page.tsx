@@ -39,6 +39,8 @@ export default function NewCampaignPage() {
         offerDetails: campaignBrief.offerDetails,
         kpiTarget: campaignBrief.kpiTarget,
         freeTextContext: campaignBrief.freeTextContext,
+        imageModel: campaignBrief.imageModel,
+        imageApiKey: campaignBrief.imageApiKey,
       });
 
       toast.success('Campaign launched successfully!');

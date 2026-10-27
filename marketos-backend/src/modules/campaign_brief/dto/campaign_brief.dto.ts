@@ -11,6 +11,8 @@ export interface CreateCampaignBriefDto {
   kpiTarget?: string;
   freeTextContext?: string;
   rawPromptFallback?: string;
+  imageModel?: string;
+  imageApiKey?: string;
   // Optional send context forwarded to agent service
   recipientEmail?: string;
   recipientPhone?: string;

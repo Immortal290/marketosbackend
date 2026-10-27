@@ -425,6 +425,13 @@ async def run_query_stream(request: QueryRequest):
     """
     from agents.orchestrator.glm_orchestrator import orchestrate_query_stream
     
+    import logging
+    logging.getLogger("QUERY_STREAM").info(
+        f"[DEBUG] /v1/query/stream received: model={request.llm_model!r} "
+        f"key_prefix={request.llm_api_key[:12] if request.llm_api_key else None!r}"
+    )
+    print(f"[DEBUG] /v1/query/stream received: model={request.llm_model!r} key_prefix={request.llm_api_key[:12] if request.llm_api_key else None!r}", flush=True)
+    
     active_llm_api_key.set(request.llm_api_key)
     active_llm_model.set(request.llm_model)
 

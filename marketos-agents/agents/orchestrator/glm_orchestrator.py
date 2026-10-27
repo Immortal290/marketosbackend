@@ -183,8 +183,19 @@ def _event(stage: str, agent: str, status: str, detail: str = "", data: dict | N
 def _run_agent_node(agent_key: str, state: dict, intent_data: dict) -> dict:
     """
     Execute an individual agent node directly.
+    Re-applies ContextVars before every call so get_llm() always sees the
+    user-supplied key regardless of thread/context propagation.
     """
     import importlib
+    from agents.llm.llm_provider import active_llm_api_key, active_llm_model
+
+    # Always re-set ContextVars from state before calling the agent.
+    # This is the single source of truth and survives thread-pool dispatch.
+    if state.get("llm_api_key"):
+        active_llm_api_key.set(state["llm_api_key"])
+    if state.get("llm_model"):
+        active_llm_model.set(state["llm_model"])
+
     AGENT_REGISTRY_LOCAL = {
         "supervisor":   ("agents.supervisor.supervisor_agent",        "supervisor_node"),
         "copy":         ("agents.copy.copy_agent",                    "copy_agent_node"),
@@ -363,6 +374,12 @@ def orchestrate_query_stream(
     if intent in ("CREATE_CAMPAIGN", "EMAIL_CAMPAIGN", "SMS_CAMPAIGN", "SOCIAL_CAMPAIGN",
                   "GENERATE_CONTENT", "VISUAL_CAMPAIGN", "GENERAL_QUERY"):
         try:
+            # Re-set ContextVars so supervisor_node's get_llm() sees the user key
+            from agents.llm.llm_provider import active_llm_api_key, active_llm_model
+            if pipeline_state.get("llm_api_key"):
+                active_llm_api_key.set(pipeline_state["llm_api_key"])
+            if pipeline_state.get("llm_model"):
+                active_llm_model.set(pipeline_state["llm_model"])
             from agents.supervisor.supervisor_agent import supervisor_node
             sup_output = supervisor_node(pipeline_state)
             if "campaign_plan" in sup_output and sup_output["campaign_plan"]:
