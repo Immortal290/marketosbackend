@@ -22,7 +22,8 @@ const hashToken = (token: string) =>
 export class AuthService {
   private getSecrets() {
     const access = process.env.JWT_SECRET;
-    const refresh = process.env.JWT_REFRESH_SECRET;
+    const refresh =
+      process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET;
 
     if (!access || !refresh) {
       throw new AuthError(

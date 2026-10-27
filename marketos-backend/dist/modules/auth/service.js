@@ -73,7 +73,7 @@ var hashToken = (token) => (0, import_crypto.createHash)("sha256").update(token)
 var AuthService = class {
   getSecrets() {
     const access = process.env.JWT_SECRET;
-    const refresh = process.env.JWT_REFRESH_SECRET;
+    const refresh = process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET;
     if (!access || !refresh) {
       throw new AuthError(
         "Authentication is not configured",
