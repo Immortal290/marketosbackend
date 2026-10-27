@@ -128,7 +128,9 @@ var CampaignBriefService = class {
       company_name: data.companyName ?? brandProfile.businessName,
       company_address: data.companyAddress ?? "",
       unsubscribe_url: data.unsubscribeUrl ?? "https://example.com/unsubscribe",
-      llm_api_key: llmApiKey
+      llm_api_key: llmApiKey,
+      image_model: data.imageModel,
+      image_api_key: data.imageApiKey
     };
     return { brief, campaign, agentPayload };
   }
@@ -221,6 +223,8 @@ var createCampaignBriefSchema = import_zod2.z.object({
     kpiTarget: import_zod2.z.string().optional(),
     freeTextContext: import_zod2.z.string().optional(),
     rawPromptFallback: import_zod2.z.string().optional(),
+    imageModel: import_zod2.z.string().optional(),
+    imageApiKey: import_zod2.z.string().optional(),
     // Optional send context
     recipientEmail: import_zod2.z.string().email().optional(),
     recipientPhone: import_zod2.z.string().optional(),

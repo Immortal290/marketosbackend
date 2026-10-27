@@ -64,7 +64,9 @@ async function handleRequest(req: NextRequest, { params }: { params: { path?: st
     fullPath.startsWith("/auth/")
   ) {
     const backendUrl =
-      process.env.BACKEND_URL?.trim() || "http://localhost:3001";
+      process.env.BACKEND_URL?.trim() ||
+      process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+      "http://localhost:3001";
 
     try {
       const target = new URL(

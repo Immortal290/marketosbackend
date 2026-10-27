@@ -42,6 +42,8 @@ var createCampaignBriefSchema = import_zod.z.object({
     kpiTarget: import_zod.z.string().optional(),
     freeTextContext: import_zod.z.string().optional(),
     rawPromptFallback: import_zod.z.string().optional(),
+    imageModel: import_zod.z.string().optional(),
+    imageApiKey: import_zod.z.string().optional(),
     // Optional send context
     recipientEmail: import_zod.z.string().email().optional(),
     recipientPhone: import_zod.z.string().optional(),

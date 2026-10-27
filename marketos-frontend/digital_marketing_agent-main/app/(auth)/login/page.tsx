@@ -117,13 +117,17 @@ export default function LoginPage() {
           </NeoButton>
         </form>
 
-        <div className="my-4 flex items-center gap-3 text-xs font-bold text-black/50">
-          <div className="h-px flex-1 bg-black/20" />
-          OR
-          <div className="h-px flex-1 bg-black/20" />
-        </div>
+        {Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs font-bold text-black/50">
+              <div className="h-px flex-1 bg-black/20" />
+              OR
+              <div className="h-px flex-1 bg-black/20" />
+            </div>
 
-        <GoogleSignIn />
+            <GoogleSignIn />
+          </>
+        )}
 
         <div className="mt-6 text-center font-mono text-xs font-bold text-black/60">
           Don&apos;t have an account?{" "}

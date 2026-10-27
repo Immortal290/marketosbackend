@@ -93,11 +93,7 @@ export default function GoogleSignIn() {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   if (!clientId) {
-    return (
-      <p role="alert" className="text-sm font-bold text-red-700">
-        Google sign-in is not configured. Please contact support.
-      </p>
-    );
+    return null;
   }
 
   return (
