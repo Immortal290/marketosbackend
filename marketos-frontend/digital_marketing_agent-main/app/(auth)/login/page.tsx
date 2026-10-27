@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ScanEye } from "lucide-react";
 import { NeoCard } from "@/components/ui/NeoCard";
 import { NeoInput } from "@/components/ui/NeoInput";
 import { NeoButton } from "@/components/ui/NeoButton";
@@ -22,21 +23,23 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") || "").trim();
+    const password = String(form.get("password") || "");
 
     try {
       const result = await apiRequest<AuthResponse>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({
-          email: String(form.get("email") || "").trim(),
-          password: String(form.get("password") || ""),
-        }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!result.success || !result.data?.accessToken || !result.data?.refreshToken) {
@@ -73,14 +76,30 @@ export default function LoginPage() {
             autoComplete="email"
             required
           />
-          <NeoInput
-            label="Password"
-            name="password"
-            type="password"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-            required
-          />
+          <div className="relative">
+            <NeoInput
+              label="Password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              className="w-full pr-12"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              className="absolute bottom-2.5 right-3 flex h-7 w-7 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              <ScanEye
+                size={19}
+                aria-hidden="true"
+                className={showPassword ? "text-black" : "text-black/60"}
+              />
+            </button>
+          </div>
 
           {error && (
             <p role="alert" className="text-sm font-bold text-red-700">
@@ -105,7 +124,6 @@ export default function LoginPage() {
         </div>
 
         <GoogleSignIn />
-
 
         <div className="mt-6 text-center font-mono text-xs font-bold text-black/60">
           Don&apos;t have an account?{" "}

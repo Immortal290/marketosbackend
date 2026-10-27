@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -25,22 +25,38 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
     const fullName = String(form.get("fullName") || "").trim();
+    const email = String(form.get("email") || "").trim();
+    const workspaceName = String(
+      form.get("workspaceName") || form.get("companyName") || ""
+    ).trim();
+    const password = String(form.get("password") || "");
+
+    if (!fullName || !email || !workspaceName || password.length < 8) {
+      setError("Please complete all fields and use a password of at least 8 characters.");
+      setLoading(false);
+      return;
+    }
+
     const nameParts = fullName.split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ");
 
     try {
       const result = await apiRequest<AuthResponse>("/auth/register", {
         method: "POST",
         body: JSON.stringify({
-          firstName: nameParts[0] || "",
-          lastName: nameParts.slice(1).join(" "),
-          email: String(form.get("email") || "").trim(),
-          workspaceName: String(form.get("companyName") || "").trim(),
-          password: String(form.get("password") || ""),
+          firstName,
+          lastName,
+          email,
+          workspaceName,
+          password,
         }),
       });
 
@@ -54,7 +70,9 @@ export default function SignupPage() {
       router.push("/dashboard");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to create your account. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Unable to create your account. Please try again."
       );
     } finally {
       setLoading(false);
@@ -88,7 +106,7 @@ export default function SignupPage() {
           />
           <NeoInput
             label="Company Name"
-            name="companyName"
+            name="workspaceName"
             type="text"
             placeholder="Acme Corp"
             required
@@ -97,7 +115,7 @@ export default function SignupPage() {
             label="Password"
             name="password"
             type="password"
-            placeholder="Create a password"
+            placeholder="Create a password (min. 8 characters)"
             autoComplete="new-password"
             minLength={8}
             required

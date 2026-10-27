@@ -33,10 +33,12 @@ __export(controller_exports, {
   AuthController: () => AuthController
 });
 module.exports = __toCommonJS(controller_exports);
+var import_http_status_codes = require("http-status-codes");
 
 // src/modules/auth/service.ts
 var import_bcryptjs = __toESM(require("bcryptjs"));
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
+var import_crypto = require("crypto");
 
 // src/lib/prisma.ts
 var import_config = require("dotenv/config");
@@ -61,45 +63,131 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // src/modules/auth/service.ts
-var JWT_SECRET = process.env.JWT_SECRET || "secret";
-var JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
-var JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "refresh_secret";
-var JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
+var import_google_auth_library = require("google-auth-library");
+var AuthError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = "AuthError";
+  }
+  status;
+};
+var hashToken = (token) => (0, import_crypto.createHash)("sha256").update(token).digest("hex");
 var AuthService = class {
-  async register(data) {
-    const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existingUser) {
-      throw new Error("User already exists");
+  getSecrets() {
+    const access = process.env.JWT_SECRET;
+    const refresh = process.env.JWT_REFRESH_SECRET;
+    if (!access || !refresh) {
+      throw new AuthError(
+        "Authentication is not configured",
+        500
+      );
     }
-    const hashedPassword = await import_bcryptjs.default.hash(data.password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName
-      }
+    return { access, refresh };
+  }
+  async register(data) {
+    const email = data.email.trim().toLowerCase();
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
     });
-    return this.generateTokens(user.id);
+    if (existingUser) {
+      throw new AuthError("Email already registered", 409);
+    }
+    const hashedPassword = await import_bcryptjs.default.hash(data.password, 12);
+    const emailPrefix = email.split("@")[0];
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            firstName: data.firstName?.trim() || null,
+            lastName: data.lastName?.trim() || null
+          }
+        });
+        const workspace = await tx.workspace.create({
+          data: {
+            name: data.workspaceName?.trim() || `${data.firstName?.trim() || emailPrefix}'s Workspace`
+          }
+        });
+        await tx.workspaceMember.create({
+          data: {
+            userId: createdUser.id,
+            workspaceId: workspace.id,
+            role: "OWNER"
+          }
+        });
+        return createdUser;
+      });
+      return await this.createSessionTokens(user.id);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        throw error;
+      }
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+        throw new AuthError("Email already registered", 409);
+      }
+      throw error;
+    }
   }
   async login(data) {
-    const user = await prisma.user.findUnique({ where: { email: data.email } });
-    if (!user) {
-      throw new Error("Invalid credentials");
+    const email = data.email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (!user || !user.password || !user.isActive || !await import_bcryptjs.default.compare(data.password, user.password)) {
+      throw new AuthError("Invalid credentials", 401);
     }
-    const isMatch = await import_bcryptjs.default.compare(data.password, user.password);
-    if (!isMatch) {
-      throw new Error("Invalid credentials");
-    }
-    return this.generateTokens(user.id);
+    return this.createSessionTokens(user.id);
   }
   async refresh(refreshToken) {
+    const { refresh } = this.getSecrets();
+    let payload;
     try {
-      const payload = import_jsonwebtoken.default.verify(refreshToken, JWT_REFRESH_SECRET);
-      return this.generateTokens(payload.userId);
+      const verified = import_jsonwebtoken.default.verify(refreshToken, refresh);
+      if (typeof verified === "string" || typeof verified.userId !== "string" || !verified.userId) {
+        throw new Error("Invalid token payload");
+      }
+      payload = verified;
     } catch {
-      throw new Error("Invalid or expired refresh token");
+      throw new AuthError("Invalid or expired refresh token", 401);
     }
+    const tokenHash = hashToken(refreshToken);
+    const now = /* @__PURE__ */ new Date();
+    const session = await prisma.authSession.findUnique({
+      where: { refreshTokenHash: tokenHash }
+    });
+    if (!session || session.userId !== payload.userId || session.revokedAt || session.expiresAt <= now) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { isActive: true }
+    });
+    if (!user?.isActive) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    const revoked = await prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        revokedAt: null,
+        expiresAt: { gt: now }
+      },
+      data: { revokedAt: now }
+    });
+    if (revoked.count !== 1) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    return this.createSessionTokens(session.userId);
+  }
+  async logout(refreshToken) {
+    await prisma.authSession.updateMany({
+      where: {
+        refreshTokenHash: hashToken(refreshToken),
+        revokedAt: null
+      },
+      data: { revokedAt: /* @__PURE__ */ new Date() }
+    });
   }
   async getMe(userId) {
     const user = await prisma.user.findUnique({
@@ -113,19 +201,131 @@ var AuthService = class {
       }
     });
     if (!user) {
-      throw new Error("User not found");
+      throw new AuthError("User not found", 404);
     }
     return user;
   }
-  generateTokens(userId) {
-    const accessToken = import_jsonwebtoken.default.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const refreshToken = import_jsonwebtoken.default.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
-    return { accessToken, refreshToken, expiresIn: 86400 };
+  async createSessionTokens(userId) {
+    const { access, refresh } = this.getSecrets();
+    const accessToken = import_jsonwebtoken.default.sign(
+      { userId },
+      access,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
+    );
+    const refreshToken = import_jsonwebtoken.default.sign(
+      { userId, tokenId: (0, import_crypto.randomUUID)() },
+      refresh,
+      {
+        expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d"
+      }
+    );
+    const decoded = import_jsonwebtoken.default.decode(refreshToken);
+    if (!decoded?.exp) {
+      throw new AuthError("Could not create session", 500);
+    }
+    await prisma.authSession.create({
+      data: {
+        userId,
+        refreshTokenHash: hashToken(refreshToken),
+        expiresAt: new Date(decoded.exp * 1e3)
+      }
+    });
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: 86400
+    };
+  }
+  async googleLogin(idToken) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw new AuthError("Google sign-in is not configured", 500);
+    }
+    const client = new import_google_auth_library.OAuth2Client(clientId);
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: clientId
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new AuthError("Invalid Google ID token", 401);
+    }
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      throw new AuthError("Google account email is not verified", 401);
+    }
+    const email = payload.email.trim().toLowerCase();
+    const identity = await prisma.authIdentity.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: "GOOGLE",
+          providerUserId: payload.sub
+        }
+      },
+      include: { user: true }
+    });
+    if (identity) {
+      if (!identity.user.isActive) {
+        throw new AuthError("This account is disabled", 403);
+      }
+      return this.createSessionTokens(identity.userId);
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (existingUser) {
+      throw new AuthError(
+        "This email already has an account. Log in with your existing method first.",
+        409
+      );
+    }
+    const firstName = payload.given_name?.trim() || null;
+    const lastName = payload.family_name?.trim() || null;
+    const workspaceName = firstName ? `${firstName}'s Workspace` : `${email.split("@")[0]}'s Workspace`;
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            password: null,
+            firstName,
+            lastName
+          }
+        });
+        const workspace = await tx.workspace.create({
+          data: { name: workspaceName }
+        });
+        await tx.workspaceMember.create({
+          data: {
+            userId: createdUser.id,
+            workspaceId: workspace.id,
+            role: "OWNER"
+          }
+        });
+        await tx.authIdentity.create({
+          data: {
+            userId: createdUser.id,
+            provider: "GOOGLE",
+            providerUserId: payload.sub
+          }
+        });
+        return createdUser;
+      });
+      return this.createSessionTokens(user.id);
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+        throw new AuthError(
+          "This account may already exist. Please try signing in again.",
+          409
+        );
+      }
+      throw error;
+    }
   }
 };
 
 // src/modules/auth/controller.ts
-var import_http_status_codes = require("http-status-codes");
 var AuthController = class {
   service = new AuthService();
   register = async (req, res, next) => {
@@ -153,14 +353,14 @@ var AuthController = class {
   refresh = async (req, res, next) => {
     try {
       const { refreshToken } = req.body;
-      if (!refreshToken) {
+      if (typeof refreshToken !== "string" || !refreshToken) {
         return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
           success: false,
-          error: "refreshToken is required"
+          message: "refreshToken is required"
         });
       }
       const tokens = await this.service.refresh(refreshToken);
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: tokens
       });
@@ -170,7 +370,15 @@ var AuthController = class {
   };
   logout = async (req, res, next) => {
     try {
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      const { refreshToken } = req.body;
+      if (typeof refreshToken !== "string" || !refreshToken) {
+        return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "refreshToken is required"
+        });
+      }
+      await this.service.logout(refreshToken);
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: null,
         message: "Logged out successfully"
@@ -181,11 +389,35 @@ var AuthController = class {
   };
   me = async (req, res, next) => {
     try {
-      const userId = req.user?.userId ?? "unknown";
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(import_http_status_codes.StatusCodes.UNAUTHORIZED).json({
+          success: false,
+          message: "Authentication required"
+        });
+      }
       const user = await this.service.getMe(userId);
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  google = async (req, res, next) => {
+    try {
+      const { idToken } = req.body;
+      if (typeof idToken !== "string" || !idToken) {
+        return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Google ID token is required"
+        });
+      }
+      const tokens = await this.service.googleLogin(idToken);
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
+        success: true,
+        data: tokens
       });
     } catch (error) {
       next(error);

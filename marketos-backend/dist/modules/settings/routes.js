@@ -34,7 +34,12 @@ __export(routes_exports, {
   encrypt: () => encrypt
 });
 module.exports = __toCommonJS(routes_exports);
+
+// src/modules/settings/gmail-routes.ts
 var import_express = require("express");
+
+// src/modules/settings/gmail-auth.ts
+var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
 
 // src/lib/prisma.ts
 var import_config = require("dotenv/config");
@@ -57,6 +62,360 @@ var prisma = globalForPrisma.prisma ?? new import_client.PrismaClient({
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
+// src/modules/settings/gmail-auth.ts
+async function requireGmailWorkspaceOwner(req, res, next) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === "secret" || secret.length < 32) {
+    res.status(503).json({
+      success: false,
+      error: "Secure JWT configuration is required"
+    });
+    return;
+  }
+  const authorization = req.headers.authorization || "";
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization);
+  if (!match) {
+    res.status(401).json({
+      success: false,
+      error: "Authentication required"
+    });
+    return;
+  }
+  let userId;
+  try {
+    const payload = import_jsonwebtoken.default.verify(match[1], secret, {
+      algorithms: ["HS256"]
+    });
+    if (typeof payload === "string" || typeof payload.userId !== "string" || !payload.userId) {
+      throw new Error("Invalid token payload");
+    }
+    userId = payload.userId;
+  } catch {
+    res.status(401).json({
+      success: false,
+      error: "Invalid or expired access token"
+    });
+    return;
+  }
+  try {
+    const requestedId = req.body?.workspaceId ?? req.query.workspaceId;
+    let workspaceId;
+    if (requestedId !== void 0) {
+      if (typeof requestedId !== "string" || !requestedId.trim()) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid workspace ID"
+        });
+        return;
+      }
+      const membership = await prisma.workspaceMember.findUnique({
+        where: {
+          userId_workspaceId: {
+            userId,
+            workspaceId: requestedId
+          }
+        }
+      });
+      if (!membership || membership.role !== "OWNER") {
+        res.status(403).json({
+          success: false,
+          error: "Workspace owner permission required"
+        });
+        return;
+      }
+      workspaceId = requestedId;
+    } else {
+      const owned = await prisma.workspaceMember.findMany({
+        where: { userId, role: "OWNER" },
+        select: { workspaceId: true },
+        take: 2
+      });
+      if (owned.length === 0) {
+        res.status(403).json({
+          success: false,
+          error: "No owned workspace found for this account"
+        });
+        return;
+      }
+      if (owned.length > 1) {
+        res.status(409).json({
+          success: false,
+          error: "Multiple workspaces found; workspace selection is required"
+        });
+        return;
+      }
+      workspaceId = owned[0].workspaceId;
+    }
+    req.gmailWorkspace = {
+      userId,
+      workspaceId
+    };
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+// src/modules/settings/gmail-crypto.ts
+var import_crypto = __toESM(require("crypto"));
+var VERSION = "v1";
+var ALGORITHM = "aes-256-gcm";
+function getEncryptionKey() {
+  const value = process.env.GMAIL_CREDENTIAL_KEY_HEX;
+  if (!value || !/^[a-fA-F0-9]{64}$/.test(value)) {
+    throw new Error(
+      "GMAIL_CREDENTIAL_KEY_HEX must be configured as 64 hexadecimal characters"
+    );
+  }
+  return Buffer.from(value, "hex");
+}
+function getWorkspaceAAD(workspaceId) {
+  if (!workspaceId || !workspaceId.trim()) {
+    throw new Error("A valid workspace ID is required");
+  }
+  return Buffer.from(`gmail-credential:${workspaceId}`, "utf8");
+}
+function encryptGmailCredential(appPassword, workspaceId) {
+  if (typeof appPassword !== "string" || !appPassword) {
+    throw new Error("Gmail App Password is required");
+  }
+  const key = getEncryptionKey();
+  const iv = import_crypto.default.randomBytes(12);
+  const cipher = import_crypto.default.createCipheriv(ALGORITHM, key, iv);
+  cipher.setAAD(getWorkspaceAAD(workspaceId));
+  const ciphertext = Buffer.concat([
+    cipher.update(appPassword, "utf8"),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+  return [
+    VERSION,
+    iv.toString("base64url"),
+    tag.toString("base64url"),
+    ciphertext.toString("base64url")
+  ].join(".");
+}
+
+// src/modules/settings/gmail-storage.ts
+async function saveVerifiedGmailConnection(workspaceId, gmailAddress, appPassword) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  const normalizedEmail = gmailAddress?.trim().toLowerCase();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    throw new Error("A valid Gmail account address is required");
+  }
+  const normalizedPassword = appPassword?.replace(/\s/g, "");
+  if (!normalizedPassword || !/^[a-zA-Z0-9]{16}$/.test(normalizedPassword)) {
+    throw new Error("A valid 16-character Gmail App Password is required");
+  }
+  const encryptedAppPassword = encryptGmailCredential(
+    normalizedPassword,
+    workspaceId
+  );
+  const connection = await prisma.gmailConnection.upsert({
+    where: { workspaceId },
+    create: {
+      workspaceId,
+      gmailAddress: normalizedEmail,
+      encryptedAppPassword,
+      lastVerifiedAt: /* @__PURE__ */ new Date()
+    },
+    update: {
+      gmailAddress: normalizedEmail,
+      encryptedAppPassword,
+      lastVerifiedAt: /* @__PURE__ */ new Date()
+    },
+    select: {
+      workspaceId: true,
+      gmailAddress: true,
+      lastVerifiedAt: true
+    }
+  });
+  return {
+    connected: true,
+    gmailAddress: connection.gmailAddress,
+    lastVerifiedAt: connection.lastVerifiedAt
+  };
+}
+async function getGmailConnectionStatus(workspaceId) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  const connection = await prisma.gmailConnection.findUnique({
+    where: { workspaceId },
+    select: {
+      gmailAddress: true,
+      lastVerifiedAt: true
+    }
+  });
+  if (!connection) {
+    return {
+      connected: false,
+      gmailAddress: null,
+      lastVerifiedAt: null
+    };
+  }
+  return {
+    connected: true,
+    gmailAddress: connection.gmailAddress,
+    lastVerifiedAt: connection.lastVerifiedAt
+  };
+}
+async function disconnectGmailConnection(workspaceId) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  await prisma.gmailConnection.deleteMany({
+    where: { workspaceId }
+  });
+  return { connected: false };
+}
+
+// src/modules/settings/gmail-smtp.ts
+var import_nodemailer = __toESM(require("nodemailer"));
+function createGmailSmtpTransport(gmailAddress, appPassword) {
+  return import_nodemailer.default.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: {
+      user: gmailAddress,
+      pass: appPassword
+    },
+    tls: {
+      minVersion: "TLSv1.2"
+    },
+    connectionTimeout: 15e3,
+    greetingTimeout: 15e3,
+    socketTimeout: 15e3,
+    logger: false,
+    debug: false
+  });
+}
+async function verifyGmailCredentials(gmailAddress, appPassword) {
+  if (typeof gmailAddress !== "string") {
+    throw new Error("A valid Gmail address is required");
+  }
+  if (typeof appPassword !== "string") {
+    throw new Error("A 16-character Gmail App Password is required");
+  }
+  const email = gmailAddress.trim().toLowerCase();
+  const password = appPassword.replace(/\s/g, "");
+  if (!/^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/.test(email)) {
+    throw new Error("Enter a valid Gmail address");
+  }
+  if (!/^[a-zA-Z0-9]{16}$/.test(password)) {
+    throw new Error("Enter a valid 16-character Gmail App Password");
+  }
+  const transporter = createGmailSmtpTransport(email, password);
+  try {
+    const verified = await transporter.verify();
+    if (!verified) {
+      throw new Error("SMTP verification unsuccessful");
+    }
+    return {
+      verified: true,
+      gmailAddress: email
+    };
+  } catch {
+    throw new Error(
+      "Gmail verification failed. Check your App Password and SMTP connectivity."
+    );
+  } finally {
+    transporter.close();
+  }
+}
+
+// src/modules/settings/gmail-routes.ts
+var router = (0, import_express.Router)();
+router.use(requireGmailWorkspaceOwner);
+function authorizedWorkspaceId(req) {
+  const context = req.gmailWorkspace;
+  if (!context) {
+    throw new Error("Gmail authorization context missing");
+  }
+  return context.workspaceId;
+}
+router.post(
+  "/connect",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const { gmailAddress, appPassword } = req.body ?? {};
+      if (typeof gmailAddress !== "string" || typeof appPassword !== "string" || !gmailAddress.trim() || !appPassword.trim()) {
+        res.status(400).json({
+          success: false,
+          error: "Gmail address and App Password are required"
+        });
+        return;
+      }
+      let verifiedAddress;
+      try {
+        const verification = await verifyGmailCredentials(
+          gmailAddress,
+          appPassword
+        );
+        verifiedAddress = verification.gmailAddress;
+      } catch {
+        res.status(422).json({
+          success: false,
+          error: "Gmail verification failed. Check your address, App Password, and connection."
+        });
+        return;
+      }
+      const data = await saveVerifiedGmailConnection(
+        workspaceId,
+        verifiedAddress,
+        appPassword
+      );
+      res.status(200).json({
+        success: true,
+        status: "active",
+        accountLabel: data.gmailAddress,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+router.get(
+  "/",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const data = await getGmailConnectionStatus(workspaceId);
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+router.delete(
+  "/",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const data = await disconnectGmailConnection(workspaceId);
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+var gmail_routes_default = router;
+
+// src/modules/settings/routes.ts
+var import_express2 = require("express");
 
 // src/modules/settings/providers.ts
 var PROVIDERS = {
@@ -177,7 +536,7 @@ var PROVIDERS = {
 };
 
 // src/modules/settings/razorpay.service.ts
-var import_crypto = __toESM(require("crypto"));
+var import_crypto2 = __toESM(require("crypto"));
 var RazorpayService = class {
   keyId;
   keySecret;
@@ -222,7 +581,7 @@ var RazorpayService = class {
   verifyPaymentSignature(options) {
     const { orderId, paymentId, signature } = options;
     const body = `${orderId}|${paymentId}`;
-    const expectedSignature = import_crypto.default.createHmac("sha256", this.keySecret).update(body).digest("hex");
+    const expectedSignature = import_crypto2.default.createHmac("sha256", this.keySecret).update(body).digest("hex");
     return expectedSignature === signature;
   }
   /**
@@ -261,15 +620,16 @@ var RazorpayService = class {
 var razorpayService = new RazorpayService();
 
 // src/modules/settings/routes.ts
-var import_crypto2 = __toESM(require("crypto"));
+var import_crypto3 = __toESM(require("crypto"));
 var KEY = Buffer.alloc(32, process.env.CRED_MASTER_KEY || "default_secret_key_32_bytes_long!");
 function encrypt(text) {
-  const iv = import_crypto2.default.randomBytes(12);
-  const c = import_crypto2.default.createCipheriv("aes-256-gcm", KEY, iv);
+  const iv = import_crypto3.default.randomBytes(12);
+  const c = import_crypto3.default.createCipheriv("aes-256-gcm", KEY, iv);
   const enc = Buffer.concat([c.update(text, "utf8"), c.final()]);
   return Buffer.concat([iv, c.getAuthTag(), enc]).toString("base64");
 }
-var router = (0, import_express.Router)();
+var router2 = (0, import_express2.Router)();
+router2.use("/gmail", gmail_routes_default);
 var workspaceSettings = {
   id: "ws-uuid-001",
   name: "Acme Marketing",
@@ -336,7 +696,7 @@ var securitySettings = {
     { id: "s4", label: "IP Allowlist", description: "Only permit access from approved IP ranges.", enabled: false }
   ]
 };
-router.get("/workspace", async (req, res) => {
+router2.get("/workspace", async (req, res) => {
   try {
     const dbWs = await prisma.workspace.findFirst().catch(() => null);
     if (dbWs) {
@@ -347,7 +707,7 @@ router.get("/workspace", async (req, res) => {
   }
   res.status(200).json({ success: true, data: workspaceSettings });
 });
-router.patch("/workspace", async (req, res) => {
+router2.patch("/workspace", async (req, res) => {
   try {
     workspaceSettings = { ...workspaceSettings, ...req.body };
     if (req.body.name) {
@@ -364,10 +724,10 @@ router.patch("/workspace", async (req, res) => {
     agentFeedback: `Supervisor & Creative agents synchronized with workspace '${workspaceSettings.name}' (Brand Color: ${workspaceSettings.brandColor}, Timezone: ${workspaceSettings.defaultTimezone || workspaceSettings.timezone}).`
   });
 });
-router.get("/team", (req, res) => {
+router2.get("/team", (req, res) => {
   res.status(200).json({ success: true, data: teamMembers });
 });
-router.post("/team/invite", (req, res) => {
+router2.post("/team/invite", (req, res) => {
   const { email, role = "Viewer" } = req.body;
   if (!email) {
     return res.status(400).json({ success: false, error: "Email is required" });
@@ -389,7 +749,7 @@ router.post("/team/invite", (req, res) => {
     agentFeedback: `OnboardingAgent initiated invite sequence for ${email} as ${role}. Permissions linked across all 11 active agents.`
   });
 });
-router.delete("/team/:userId", (req, res) => {
+router2.delete("/team/:userId", (req, res) => {
   const { userId } = req.params;
   const removed = teamMembers.find((m) => m.id === userId);
   teamMembers = teamMembers.filter((m) => m.id !== userId);
@@ -399,11 +759,17 @@ router.delete("/team/:userId", (req, res) => {
     agentFeedback: `SecurityAgent revoked active sessions, API keys, and workspace access for ${removed ? removed.name : userId}.`
   });
 });
-router.get("/integrations", (req, res) => {
+router2.get("/integrations", (req, res) => {
   res.status(200).json({ success: true, data: integrationsList });
 });
-router.patch("/integrations/:id", (req, res) => {
+router2.patch("/integrations/:id", (req, res) => {
   const { id } = req.params;
+  if (String(id).toLowerCase() === "gmail") {
+    return res.status(403).json({
+      success: false,
+      error: "Use the protected Gmail connection API"
+    });
+  }
   const { connected } = req.body;
   let target = integrationsList.find((i) => i.id === id);
   if (target && typeof connected === "boolean") {
@@ -424,7 +790,13 @@ router.patch("/integrations/:id", (req, res) => {
     agentFeedback: target?.connected ? `AdsAgent & AnalyticsAgent established real-time bidirectional telemetry sync with ${target.name}.` : `AnalyticsAgent gracefully unlinked ${target?.name || id} pipeline without data loss.`
   });
 });
-router.post("/integrations/:provider/connect", async (req, res) => {
+router2.post("/integrations/:provider/connect", async (req, res) => {
+  if (String(req.params.provider).toLowerCase() === "gmail") {
+    return res.status(403).json({
+      success: false,
+      error: "Use the protected Gmail connection API"
+    });
+  }
   const p = PROVIDERS[req.params.provider];
   if (!p) return res.status(404).json({ success: false, error: "Unknown integration" });
   const values = {};
@@ -448,10 +820,10 @@ router.post("/integrations/:provider/connect", async (req, res) => {
     res.status(422).json({ success: false, status: "error", error: e.message });
   }
 });
-router.get("/compliance", (req, res) => {
+router2.get("/compliance", (req, res) => {
   res.status(200).json({ success: true, data: complianceSettings });
 });
-router.patch("/compliance", (req, res) => {
+router2.patch("/compliance", (req, res) => {
   if (req.body.controls && Array.isArray(req.body.controls)) {
     complianceSettings.controls = req.body.controls;
   }
@@ -464,7 +836,7 @@ router.patch("/compliance", (req, res) => {
     agentFeedback: `ComplianceAgent locked new regulatory safeguards across all 11 AI agents. Data audit trails and privacy policies updated.`
   });
 });
-router.get("/billing", (req, res) => {
+router2.get("/billing", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -475,7 +847,7 @@ router.get("/billing", (req, res) => {
     }
   });
 });
-router.post("/settings/billing/ping", async (req, res) => {
+router2.post("/settings/billing/ping", async (req, res) => {
   try {
     const start = Date.now();
     const ok = await razorpayService.verifyCredentials();
@@ -493,7 +865,7 @@ router.post("/settings/billing/ping", async (req, res) => {
     res.status(500).json({ success: false, error: error.message || "Gateway ping failed" });
   }
 });
-router.post("/settings/billing/create-order", async (req, res) => {
+router2.post("/settings/billing/create-order", async (req, res) => {
   try {
     const { planId, planName, billingCycle = "MONTHLY", currency = "USD" } = req.body;
     const targetPlan = (planName || (planId === "p3" ? "SCALE" : planId === "p2" ? "GROWTH" : "STARTER")).toUpperCase();
@@ -548,7 +920,7 @@ router.post("/settings/billing/create-order", async (req, res) => {
     });
   }
 });
-router.post("/settings/billing/verify-payment", async (req, res) => {
+router2.post("/settings/billing/verify-payment", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planName, planId } = req.body;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -628,7 +1000,7 @@ router.post("/settings/billing/verify-payment", async (req, res) => {
     });
   }
 });
-router.post("/settings/billing/update-payment", async (req, res) => {
+router2.post("/settings/billing/update-payment", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
@@ -660,11 +1032,11 @@ router.post("/settings/billing/update-payment", async (req, res) => {
     res.status(500).json({ success: false, error: error.message || "Failed to update payment method" });
   }
 });
-router.post("/settings/billing/webhook", (req, res) => {
+router2.post("/settings/billing/webhook", (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "k811k53ViV7fAdern0v5vpAi";
   const signature = req.headers["x-razorpay-signature"];
   if (signature) {
-    const shasum = import_crypto2.default.createHmac("sha256", secret);
+    const shasum = import_crypto3.default.createHmac("sha256", secret);
     shasum.update(JSON.stringify(req.body));
     const digest = shasum.digest("hex");
     if (digest !== signature) {
@@ -685,7 +1057,7 @@ router.post("/settings/billing/webhook", (req, res) => {
   }
   res.status(200).json({ status: "ok" });
 });
-router.patch("/billing/plan", (req, res) => {
+router2.patch("/billing/plan", (req, res) => {
   const { planId, planName } = req.body;
   const planMap = { p1: "STARTER", p2: "GROWTH", p3: "SCALE" };
   const targetPlan = (planName || planMap[planId] || "GROWTH").toUpperCase();
@@ -703,7 +1075,7 @@ router.patch("/billing/plan", (req, res) => {
     agentFeedback: `FinanceAgent adjusted workspace SLA to ${targetPlan}. AI agents pool allocated (${(billingSettings.agentTokens.total / 1e6).toFixed(1)}M tokens).`
   });
 });
-router.patch("/billing/payment", (req, res) => {
+router2.patch("/billing/payment", (req, res) => {
   if (req.body.paymentMethod) {
     billingSettings.paymentMethod = req.body.paymentMethod;
   }
@@ -713,10 +1085,10 @@ router.patch("/billing/payment", (req, res) => {
     agentFeedback: `FinanceAgent verified billing credentials (${billingSettings.paymentMethod}) via secure Razorpay tokenization.`
   });
 });
-router.get("/security", (req, res) => {
+router2.get("/security", (req, res) => {
   res.status(200).json({ success: true, data: securitySettings });
 });
-router.patch("/security", (req, res) => {
+router2.patch("/security", (req, res) => {
   if (req.body.policies && Array.isArray(req.body.policies)) {
     securitySettings.policies = req.body.policies;
   }
@@ -729,7 +1101,7 @@ router.patch("/security", (req, res) => {
     agentFeedback: `SupervisorAgent enforced new security posture (Session timeout: ${securitySettings.sessionTimeoutMinutes} min, MFA: ${securitySettings.policies.find((p) => p.id === "s1")?.enabled ? "Mandated" : "Optional"}).`
   });
 });
-router.get("/api-keys", async (req, res) => {
+router2.get("/api-keys", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     res.status(200).json({ success: true, data: user?.apiKeys || {} });
@@ -737,7 +1109,7 @@ router.get("/api-keys", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to fetch API keys" });
   }
 });
-router.patch("/api-keys", async (req, res) => {
+router2.patch("/api-keys", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     if (user) {
@@ -755,7 +1127,7 @@ router.patch("/api-keys", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to update API keys" });
   }
 });
-var routes_default = router;
+var routes_default = router2;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   encrypt

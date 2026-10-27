@@ -33,6 +33,7 @@ model Workspace {
   members       WorkspaceMember[]
   campaigns     Campaign[]
   brandProfiles BrandProfile[]
+  gmailConnection GmailConnection?
 }
 
 model WorkspaceMember {
@@ -236,4 +237,16 @@ model AuthIdentity {
 
   @@unique([provider, providerUserId])
   @@index([userId])
+}
+
+model GmailConnection {
+  id                   String    @id @default(uuid())
+  workspaceId          String    @unique
+  gmailAddress         String
+  encryptedAppPassword String
+  lastVerifiedAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }

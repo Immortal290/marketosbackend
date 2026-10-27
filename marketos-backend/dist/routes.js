@@ -33,14 +33,18 @@ __export(routes_exports, {
   default: () => routes_default25
 });
 module.exports = __toCommonJS(routes_exports);
-var import_express26 = require("express");
+var import_express27 = require("express");
 
 // src/modules/auth/routes.ts
 var import_express = require("express");
 
+// src/modules/auth/controller.ts
+var import_http_status_codes = require("http-status-codes");
+
 // src/modules/auth/service.ts
 var import_bcryptjs = __toESM(require("bcryptjs"));
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
+var import_crypto = require("crypto");
 
 // src/lib/prisma.ts
 var import_config = require("dotenv/config");
@@ -65,45 +69,131 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // src/modules/auth/service.ts
-var JWT_SECRET = process.env.JWT_SECRET || "secret";
-var JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
-var JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "refresh_secret";
-var JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
+var import_google_auth_library = require("google-auth-library");
+var AuthError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = "AuthError";
+  }
+  status;
+};
+var hashToken = (token) => (0, import_crypto.createHash)("sha256").update(token).digest("hex");
 var AuthService = class {
-  async register(data) {
-    const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existingUser) {
-      throw new Error("User already exists");
+  getSecrets() {
+    const access = process.env.JWT_SECRET;
+    const refresh = process.env.JWT_REFRESH_SECRET;
+    if (!access || !refresh) {
+      throw new AuthError(
+        "Authentication is not configured",
+        500
+      );
     }
-    const hashedPassword = await import_bcryptjs.default.hash(data.password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName
-      }
+    return { access, refresh };
+  }
+  async register(data) {
+    const email = data.email.trim().toLowerCase();
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
     });
-    return this.generateTokens(user.id);
+    if (existingUser) {
+      throw new AuthError("Email already registered", 409);
+    }
+    const hashedPassword = await import_bcryptjs.default.hash(data.password, 12);
+    const emailPrefix = email.split("@")[0];
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            firstName: data.firstName?.trim() || null,
+            lastName: data.lastName?.trim() || null
+          }
+        });
+        const workspace = await tx.workspace.create({
+          data: {
+            name: data.workspaceName?.trim() || `${data.firstName?.trim() || emailPrefix}'s Workspace`
+          }
+        });
+        await tx.workspaceMember.create({
+          data: {
+            userId: createdUser.id,
+            workspaceId: workspace.id,
+            role: "OWNER"
+          }
+        });
+        return createdUser;
+      });
+      return await this.createSessionTokens(user.id);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        throw error;
+      }
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+        throw new AuthError("Email already registered", 409);
+      }
+      throw error;
+    }
   }
   async login(data) {
-    const user = await prisma.user.findUnique({ where: { email: data.email } });
-    if (!user) {
-      throw new Error("Invalid credentials");
+    const email = data.email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (!user || !user.password || !user.isActive || !await import_bcryptjs.default.compare(data.password, user.password)) {
+      throw new AuthError("Invalid credentials", 401);
     }
-    const isMatch = await import_bcryptjs.default.compare(data.password, user.password);
-    if (!isMatch) {
-      throw new Error("Invalid credentials");
-    }
-    return this.generateTokens(user.id);
+    return this.createSessionTokens(user.id);
   }
   async refresh(refreshToken) {
+    const { refresh } = this.getSecrets();
+    let payload;
     try {
-      const payload = import_jsonwebtoken.default.verify(refreshToken, JWT_REFRESH_SECRET);
-      return this.generateTokens(payload.userId);
+      const verified = import_jsonwebtoken.default.verify(refreshToken, refresh);
+      if (typeof verified === "string" || typeof verified.userId !== "string" || !verified.userId) {
+        throw new Error("Invalid token payload");
+      }
+      payload = verified;
     } catch {
-      throw new Error("Invalid or expired refresh token");
+      throw new AuthError("Invalid or expired refresh token", 401);
     }
+    const tokenHash = hashToken(refreshToken);
+    const now = /* @__PURE__ */ new Date();
+    const session = await prisma.authSession.findUnique({
+      where: { refreshTokenHash: tokenHash }
+    });
+    if (!session || session.userId !== payload.userId || session.revokedAt || session.expiresAt <= now) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { isActive: true }
+    });
+    if (!user?.isActive) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    const revoked = await prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        revokedAt: null,
+        expiresAt: { gt: now }
+      },
+      data: { revokedAt: now }
+    });
+    if (revoked.count !== 1) {
+      throw new AuthError("Invalid or expired refresh token", 401);
+    }
+    return this.createSessionTokens(session.userId);
+  }
+  async logout(refreshToken) {
+    await prisma.authSession.updateMany({
+      where: {
+        refreshTokenHash: hashToken(refreshToken),
+        revokedAt: null
+      },
+      data: { revokedAt: /* @__PURE__ */ new Date() }
+    });
   }
   async getMe(userId) {
     const user = await prisma.user.findUnique({
@@ -117,19 +207,131 @@ var AuthService = class {
       }
     });
     if (!user) {
-      throw new Error("User not found");
+      throw new AuthError("User not found", 404);
     }
     return user;
   }
-  generateTokens(userId) {
-    const accessToken = import_jsonwebtoken.default.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const refreshToken = import_jsonwebtoken.default.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
-    return { accessToken, refreshToken, expiresIn: 86400 };
+  async createSessionTokens(userId) {
+    const { access, refresh } = this.getSecrets();
+    const accessToken = import_jsonwebtoken.default.sign(
+      { userId },
+      access,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
+    );
+    const refreshToken = import_jsonwebtoken.default.sign(
+      { userId, tokenId: (0, import_crypto.randomUUID)() },
+      refresh,
+      {
+        expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d"
+      }
+    );
+    const decoded = import_jsonwebtoken.default.decode(refreshToken);
+    if (!decoded?.exp) {
+      throw new AuthError("Could not create session", 500);
+    }
+    await prisma.authSession.create({
+      data: {
+        userId,
+        refreshTokenHash: hashToken(refreshToken),
+        expiresAt: new Date(decoded.exp * 1e3)
+      }
+    });
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: 86400
+    };
+  }
+  async googleLogin(idToken) {
+    const clientId2 = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId2) {
+      throw new AuthError("Google sign-in is not configured", 500);
+    }
+    const client = new import_google_auth_library.OAuth2Client(clientId2);
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: clientId2
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new AuthError("Invalid Google ID token", 401);
+    }
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      throw new AuthError("Google account email is not verified", 401);
+    }
+    const email = payload.email.trim().toLowerCase();
+    const identity = await prisma.authIdentity.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: "GOOGLE",
+          providerUserId: payload.sub
+        }
+      },
+      include: { user: true }
+    });
+    if (identity) {
+      if (!identity.user.isActive) {
+        throw new AuthError("This account is disabled", 403);
+      }
+      return this.createSessionTokens(identity.userId);
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (existingUser) {
+      throw new AuthError(
+        "This email already has an account. Log in with your existing method first.",
+        409
+      );
+    }
+    const firstName = payload.given_name?.trim() || null;
+    const lastName = payload.family_name?.trim() || null;
+    const workspaceName = firstName ? `${firstName}'s Workspace` : `${email.split("@")[0]}'s Workspace`;
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            password: null,
+            firstName,
+            lastName
+          }
+        });
+        const workspace = await tx.workspace.create({
+          data: { name: workspaceName }
+        });
+        await tx.workspaceMember.create({
+          data: {
+            userId: createdUser.id,
+            workspaceId: workspace.id,
+            role: "OWNER"
+          }
+        });
+        await tx.authIdentity.create({
+          data: {
+            userId: createdUser.id,
+            provider: "GOOGLE",
+            providerUserId: payload.sub
+          }
+        });
+        return createdUser;
+      });
+      return this.createSessionTokens(user.id);
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+        throw new AuthError(
+          "This account may already exist. Please try signing in again.",
+          409
+        );
+      }
+      throw error;
+    }
   }
 };
 
 // src/modules/auth/controller.ts
-var import_http_status_codes = require("http-status-codes");
 var AuthController = class {
   service = new AuthService();
   register = async (req, res, next) => {
@@ -157,14 +359,14 @@ var AuthController = class {
   refresh = async (req, res, next) => {
     try {
       const { refreshToken } = req.body;
-      if (!refreshToken) {
+      if (typeof refreshToken !== "string" || !refreshToken) {
         return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
           success: false,
-          error: "refreshToken is required"
+          message: "refreshToken is required"
         });
       }
       const tokens = await this.service.refresh(refreshToken);
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: tokens
       });
@@ -174,7 +376,15 @@ var AuthController = class {
   };
   logout = async (req, res, next) => {
     try {
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      const { refreshToken } = req.body;
+      if (typeof refreshToken !== "string" || !refreshToken) {
+        return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "refreshToken is required"
+        });
+      }
+      await this.service.logout(refreshToken);
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: null,
         message: "Logged out successfully"
@@ -185,11 +395,35 @@ var AuthController = class {
   };
   me = async (req, res, next) => {
     try {
-      const userId = req.user?.userId ?? "unknown";
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(import_http_status_codes.StatusCodes.UNAUTHORIZED).json({
+          success: false,
+          message: "Authentication required"
+        });
+      }
       const user = await this.service.getMe(userId);
-      res.status(import_http_status_codes.StatusCodes.OK).json({
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
         success: true,
         data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  google = async (req, res, next) => {
+    try {
+      const { idToken } = req.body;
+      if (typeof idToken !== "string" || !idToken) {
+        return res.status(import_http_status_codes.StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Google ID token is required"
+        });
+      }
+      const tokens = await this.service.googleLogin(idToken);
+      return res.status(import_http_status_codes.StatusCodes.OK).json({
+        success: true,
+        data: tokens
       });
     } catch (error) {
       next(error);
@@ -242,18 +476,413 @@ var loginSchema = import_zod2.z.object({
   })
 });
 
+// src/middlewares/jwt-auth.middleware.ts
+var import_jsonwebtoken2 = __toESM(require("jsonwebtoken"));
+var JWT_SECRET = process.env.JWT_SECRET;
+var requireJwtAuth = (req, res, next) => {
+  if (!JWT_SECRET) {
+    console.error("JWT_SECRET is not configured");
+    return res.status(500).json({
+      success: false,
+      message: "Authentication is not configured"
+    });
+  }
+  const authorization = req.headers.authorization;
+  const [scheme, token] = authorization?.split(" ") ?? [];
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required"
+    });
+  }
+  try {
+    const payload = import_jsonwebtoken2.default.verify(token, JWT_SECRET);
+    if (typeof payload.userId !== "string" || !payload.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid access token"
+      });
+    }
+    req.user = {
+      userId: payload.userId
+    };
+    next();
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired access token"
+    });
+  }
+};
+
 // src/modules/auth/routes.ts
 var router = (0, import_express.Router)();
 var controller = new AuthController();
 router.post("/register", validate(registerSchema), controller.register);
 router.post("/login", validate(loginSchema), controller.login);
+router.post("/google", controller.google);
 router.post("/refresh", controller.refresh);
-router.post("/logout", controller.logout);
-router.get("/me", controller.me);
+router.post("/logout", requireJwtAuth, controller.logout);
+router.get("/me", requireJwtAuth, controller.me);
 var routes_default = router;
 
-// src/modules/settings/routes.ts
+// src/modules/settings/gmail-routes.ts
 var import_express2 = require("express");
+
+// src/modules/settings/gmail-auth.ts
+var import_jsonwebtoken3 = __toESM(require("jsonwebtoken"));
+async function requireGmailWorkspaceOwner(req, res, next) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === "secret" || secret.length < 32) {
+    res.status(503).json({
+      success: false,
+      error: "Secure JWT configuration is required"
+    });
+    return;
+  }
+  const authorization = req.headers.authorization || "";
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization);
+  if (!match) {
+    res.status(401).json({
+      success: false,
+      error: "Authentication required"
+    });
+    return;
+  }
+  let userId;
+  try {
+    const payload = import_jsonwebtoken3.default.verify(match[1], secret, {
+      algorithms: ["HS256"]
+    });
+    if (typeof payload === "string" || typeof payload.userId !== "string" || !payload.userId) {
+      throw new Error("Invalid token payload");
+    }
+    userId = payload.userId;
+  } catch {
+    res.status(401).json({
+      success: false,
+      error: "Invalid or expired access token"
+    });
+    return;
+  }
+  try {
+    const requestedId = req.body?.workspaceId ?? req.query.workspaceId;
+    let workspaceId;
+    if (requestedId !== void 0) {
+      if (typeof requestedId !== "string" || !requestedId.trim()) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid workspace ID"
+        });
+        return;
+      }
+      const membership = await prisma.workspaceMember.findUnique({
+        where: {
+          userId_workspaceId: {
+            userId,
+            workspaceId: requestedId
+          }
+        }
+      });
+      if (!membership || membership.role !== "OWNER") {
+        res.status(403).json({
+          success: false,
+          error: "Workspace owner permission required"
+        });
+        return;
+      }
+      workspaceId = requestedId;
+    } else {
+      const owned = await prisma.workspaceMember.findMany({
+        where: { userId, role: "OWNER" },
+        select: { workspaceId: true },
+        take: 2
+      });
+      if (owned.length === 0) {
+        res.status(403).json({
+          success: false,
+          error: "No owned workspace found for this account"
+        });
+        return;
+      }
+      if (owned.length > 1) {
+        res.status(409).json({
+          success: false,
+          error: "Multiple workspaces found; workspace selection is required"
+        });
+        return;
+      }
+      workspaceId = owned[0].workspaceId;
+    }
+    req.gmailWorkspace = {
+      userId,
+      workspaceId
+    };
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+// src/modules/settings/gmail-crypto.ts
+var import_crypto2 = __toESM(require("crypto"));
+var VERSION = "v1";
+var ALGORITHM = "aes-256-gcm";
+function getEncryptionKey() {
+  const value = process.env.GMAIL_CREDENTIAL_KEY_HEX;
+  if (!value || !/^[a-fA-F0-9]{64}$/.test(value)) {
+    throw new Error(
+      "GMAIL_CREDENTIAL_KEY_HEX must be configured as 64 hexadecimal characters"
+    );
+  }
+  return Buffer.from(value, "hex");
+}
+function getWorkspaceAAD(workspaceId) {
+  if (!workspaceId || !workspaceId.trim()) {
+    throw new Error("A valid workspace ID is required");
+  }
+  return Buffer.from(`gmail-credential:${workspaceId}`, "utf8");
+}
+function encryptGmailCredential(appPassword, workspaceId) {
+  if (typeof appPassword !== "string" || !appPassword) {
+    throw new Error("Gmail App Password is required");
+  }
+  const key = getEncryptionKey();
+  const iv = import_crypto2.default.randomBytes(12);
+  const cipher = import_crypto2.default.createCipheriv(ALGORITHM, key, iv);
+  cipher.setAAD(getWorkspaceAAD(workspaceId));
+  const ciphertext = Buffer.concat([
+    cipher.update(appPassword, "utf8"),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+  return [
+    VERSION,
+    iv.toString("base64url"),
+    tag.toString("base64url"),
+    ciphertext.toString("base64url")
+  ].join(".");
+}
+
+// src/modules/settings/gmail-storage.ts
+async function saveVerifiedGmailConnection(workspaceId, gmailAddress, appPassword) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  const normalizedEmail = gmailAddress?.trim().toLowerCase();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    throw new Error("A valid Gmail account address is required");
+  }
+  const normalizedPassword = appPassword?.replace(/\s/g, "");
+  if (!normalizedPassword || !/^[a-zA-Z0-9]{16}$/.test(normalizedPassword)) {
+    throw new Error("A valid 16-character Gmail App Password is required");
+  }
+  const encryptedAppPassword = encryptGmailCredential(
+    normalizedPassword,
+    workspaceId
+  );
+  const connection = await prisma.gmailConnection.upsert({
+    where: { workspaceId },
+    create: {
+      workspaceId,
+      gmailAddress: normalizedEmail,
+      encryptedAppPassword,
+      lastVerifiedAt: /* @__PURE__ */ new Date()
+    },
+    update: {
+      gmailAddress: normalizedEmail,
+      encryptedAppPassword,
+      lastVerifiedAt: /* @__PURE__ */ new Date()
+    },
+    select: {
+      workspaceId: true,
+      gmailAddress: true,
+      lastVerifiedAt: true
+    }
+  });
+  return {
+    connected: true,
+    gmailAddress: connection.gmailAddress,
+    lastVerifiedAt: connection.lastVerifiedAt
+  };
+}
+async function getGmailConnectionStatus(workspaceId) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  const connection = await prisma.gmailConnection.findUnique({
+    where: { workspaceId },
+    select: {
+      gmailAddress: true,
+      lastVerifiedAt: true
+    }
+  });
+  if (!connection) {
+    return {
+      connected: false,
+      gmailAddress: null,
+      lastVerifiedAt: null
+    };
+  }
+  return {
+    connected: true,
+    gmailAddress: connection.gmailAddress,
+    lastVerifiedAt: connection.lastVerifiedAt
+  };
+}
+async function disconnectGmailConnection(workspaceId) {
+  if (!workspaceId?.trim()) {
+    throw new Error("Workspace ID is required");
+  }
+  await prisma.gmailConnection.deleteMany({
+    where: { workspaceId }
+  });
+  return { connected: false };
+}
+
+// src/modules/settings/gmail-smtp.ts
+var import_nodemailer = __toESM(require("nodemailer"));
+function createGmailSmtpTransport(gmailAddress, appPassword) {
+  return import_nodemailer.default.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: {
+      user: gmailAddress,
+      pass: appPassword
+    },
+    tls: {
+      minVersion: "TLSv1.2"
+    },
+    connectionTimeout: 15e3,
+    greetingTimeout: 15e3,
+    socketTimeout: 15e3,
+    logger: false,
+    debug: false
+  });
+}
+async function verifyGmailCredentials(gmailAddress, appPassword) {
+  if (typeof gmailAddress !== "string") {
+    throw new Error("A valid Gmail address is required");
+  }
+  if (typeof appPassword !== "string") {
+    throw new Error("A 16-character Gmail App Password is required");
+  }
+  const email = gmailAddress.trim().toLowerCase();
+  const password = appPassword.replace(/\s/g, "");
+  if (!/^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/.test(email)) {
+    throw new Error("Enter a valid Gmail address");
+  }
+  if (!/^[a-zA-Z0-9]{16}$/.test(password)) {
+    throw new Error("Enter a valid 16-character Gmail App Password");
+  }
+  const transporter = createGmailSmtpTransport(email, password);
+  try {
+    const verified = await transporter.verify();
+    if (!verified) {
+      throw new Error("SMTP verification unsuccessful");
+    }
+    return {
+      verified: true,
+      gmailAddress: email
+    };
+  } catch {
+    throw new Error(
+      "Gmail verification failed. Check your App Password and SMTP connectivity."
+    );
+  } finally {
+    transporter.close();
+  }
+}
+
+// src/modules/settings/gmail-routes.ts
+var router2 = (0, import_express2.Router)();
+router2.use(requireGmailWorkspaceOwner);
+function authorizedWorkspaceId(req) {
+  const context = req.gmailWorkspace;
+  if (!context) {
+    throw new Error("Gmail authorization context missing");
+  }
+  return context.workspaceId;
+}
+router2.post(
+  "/connect",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const { gmailAddress, appPassword } = req.body ?? {};
+      if (typeof gmailAddress !== "string" || typeof appPassword !== "string" || !gmailAddress.trim() || !appPassword.trim()) {
+        res.status(400).json({
+          success: false,
+          error: "Gmail address and App Password are required"
+        });
+        return;
+      }
+      let verifiedAddress;
+      try {
+        const verification = await verifyGmailCredentials(
+          gmailAddress,
+          appPassword
+        );
+        verifiedAddress = verification.gmailAddress;
+      } catch {
+        res.status(422).json({
+          success: false,
+          error: "Gmail verification failed. Check your address, App Password, and connection."
+        });
+        return;
+      }
+      const data = await saveVerifiedGmailConnection(
+        workspaceId,
+        verifiedAddress,
+        appPassword
+      );
+      res.status(200).json({
+        success: true,
+        status: "active",
+        accountLabel: data.gmailAddress,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+router2.get(
+  "/",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const data = await getGmailConnectionStatus(workspaceId);
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+router2.delete(
+  "/",
+  async (req, res, next) => {
+    try {
+      const workspaceId = authorizedWorkspaceId(req);
+      const data = await disconnectGmailConnection(workspaceId);
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+var gmail_routes_default = router2;
+
+// src/modules/settings/routes.ts
+var import_express3 = require("express");
 
 // src/modules/settings/providers.ts
 var PROVIDERS = {
@@ -374,7 +1003,7 @@ var PROVIDERS = {
 };
 
 // src/modules/settings/razorpay.service.ts
-var import_crypto = __toESM(require("crypto"));
+var import_crypto3 = __toESM(require("crypto"));
 var RazorpayService = class {
   keyId;
   keySecret;
@@ -419,7 +1048,7 @@ var RazorpayService = class {
   verifyPaymentSignature(options) {
     const { orderId, paymentId, signature } = options;
     const body = `${orderId}|${paymentId}`;
-    const expectedSignature = import_crypto.default.createHmac("sha256", this.keySecret).update(body).digest("hex");
+    const expectedSignature = import_crypto3.default.createHmac("sha256", this.keySecret).update(body).digest("hex");
     return expectedSignature === signature;
   }
   /**
@@ -458,9 +1087,10 @@ var RazorpayService = class {
 var razorpayService = new RazorpayService();
 
 // src/modules/settings/routes.ts
-var import_crypto2 = __toESM(require("crypto"));
+var import_crypto4 = __toESM(require("crypto"));
 var KEY = Buffer.alloc(32, process.env.CRED_MASTER_KEY || "default_secret_key_32_bytes_long!");
-var router2 = (0, import_express2.Router)();
+var router3 = (0, import_express3.Router)();
+router3.use("/gmail", gmail_routes_default);
 var workspaceSettings = {
   id: "ws-uuid-001",
   name: "Acme Marketing",
@@ -527,7 +1157,7 @@ var securitySettings = {
     { id: "s4", label: "IP Allowlist", description: "Only permit access from approved IP ranges.", enabled: false }
   ]
 };
-router2.get("/workspace", async (req, res) => {
+router3.get("/workspace", async (req, res) => {
   try {
     const dbWs = await prisma.workspace.findFirst().catch(() => null);
     if (dbWs) {
@@ -538,7 +1168,7 @@ router2.get("/workspace", async (req, res) => {
   }
   res.status(200).json({ success: true, data: workspaceSettings });
 });
-router2.patch("/workspace", async (req, res) => {
+router3.patch("/workspace", async (req, res) => {
   try {
     workspaceSettings = { ...workspaceSettings, ...req.body };
     if (req.body.name) {
@@ -555,10 +1185,10 @@ router2.patch("/workspace", async (req, res) => {
     agentFeedback: `Supervisor & Creative agents synchronized with workspace '${workspaceSettings.name}' (Brand Color: ${workspaceSettings.brandColor}, Timezone: ${workspaceSettings.defaultTimezone || workspaceSettings.timezone}).`
   });
 });
-router2.get("/team", (req, res) => {
+router3.get("/team", (req, res) => {
   res.status(200).json({ success: true, data: teamMembers });
 });
-router2.post("/team/invite", (req, res) => {
+router3.post("/team/invite", (req, res) => {
   const { email, role = "Viewer" } = req.body;
   if (!email) {
     return res.status(400).json({ success: false, error: "Email is required" });
@@ -580,7 +1210,7 @@ router2.post("/team/invite", (req, res) => {
     agentFeedback: `OnboardingAgent initiated invite sequence for ${email} as ${role}. Permissions linked across all 11 active agents.`
   });
 });
-router2.delete("/team/:userId", (req, res) => {
+router3.delete("/team/:userId", (req, res) => {
   const { userId } = req.params;
   const removed = teamMembers.find((m) => m.id === userId);
   teamMembers = teamMembers.filter((m) => m.id !== userId);
@@ -590,11 +1220,17 @@ router2.delete("/team/:userId", (req, res) => {
     agentFeedback: `SecurityAgent revoked active sessions, API keys, and workspace access for ${removed ? removed.name : userId}.`
   });
 });
-router2.get("/integrations", (req, res) => {
+router3.get("/integrations", (req, res) => {
   res.status(200).json({ success: true, data: integrationsList });
 });
-router2.patch("/integrations/:id", (req, res) => {
+router3.patch("/integrations/:id", (req, res) => {
   const { id } = req.params;
+  if (String(id).toLowerCase() === "gmail") {
+    return res.status(403).json({
+      success: false,
+      error: "Use the protected Gmail connection API"
+    });
+  }
   const { connected } = req.body;
   let target = integrationsList.find((i) => i.id === id);
   if (target && typeof connected === "boolean") {
@@ -615,7 +1251,13 @@ router2.patch("/integrations/:id", (req, res) => {
     agentFeedback: target?.connected ? `AdsAgent & AnalyticsAgent established real-time bidirectional telemetry sync with ${target.name}.` : `AnalyticsAgent gracefully unlinked ${target?.name || id} pipeline without data loss.`
   });
 });
-router2.post("/integrations/:provider/connect", async (req, res) => {
+router3.post("/integrations/:provider/connect", async (req, res) => {
+  if (String(req.params.provider).toLowerCase() === "gmail") {
+    return res.status(403).json({
+      success: false,
+      error: "Use the protected Gmail connection API"
+    });
+  }
   const p = PROVIDERS[req.params.provider];
   if (!p) return res.status(404).json({ success: false, error: "Unknown integration" });
   const values = {};
@@ -639,10 +1281,10 @@ router2.post("/integrations/:provider/connect", async (req, res) => {
     res.status(422).json({ success: false, status: "error", error: e.message });
   }
 });
-router2.get("/compliance", (req, res) => {
+router3.get("/compliance", (req, res) => {
   res.status(200).json({ success: true, data: complianceSettings });
 });
-router2.patch("/compliance", (req, res) => {
+router3.patch("/compliance", (req, res) => {
   if (req.body.controls && Array.isArray(req.body.controls)) {
     complianceSettings.controls = req.body.controls;
   }
@@ -655,7 +1297,7 @@ router2.patch("/compliance", (req, res) => {
     agentFeedback: `ComplianceAgent locked new regulatory safeguards across all 11 AI agents. Data audit trails and privacy policies updated.`
   });
 });
-router2.get("/billing", (req, res) => {
+router3.get("/billing", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -666,7 +1308,7 @@ router2.get("/billing", (req, res) => {
     }
   });
 });
-router2.post("/settings/billing/ping", async (req, res) => {
+router3.post("/settings/billing/ping", async (req, res) => {
   try {
     const start = Date.now();
     const ok = await razorpayService.verifyCredentials();
@@ -684,7 +1326,7 @@ router2.post("/settings/billing/ping", async (req, res) => {
     res.status(500).json({ success: false, error: error.message || "Gateway ping failed" });
   }
 });
-router2.post("/settings/billing/create-order", async (req, res) => {
+router3.post("/settings/billing/create-order", async (req, res) => {
   try {
     const { planId, planName, billingCycle = "MONTHLY", currency = "USD" } = req.body;
     const targetPlan = (planName || (planId === "p3" ? "SCALE" : planId === "p2" ? "GROWTH" : "STARTER")).toUpperCase();
@@ -739,7 +1381,7 @@ router2.post("/settings/billing/create-order", async (req, res) => {
     });
   }
 });
-router2.post("/settings/billing/verify-payment", async (req, res) => {
+router3.post("/settings/billing/verify-payment", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planName, planId } = req.body;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -819,7 +1461,7 @@ router2.post("/settings/billing/verify-payment", async (req, res) => {
     });
   }
 });
-router2.post("/settings/billing/update-payment", async (req, res) => {
+router3.post("/settings/billing/update-payment", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
@@ -851,11 +1493,11 @@ router2.post("/settings/billing/update-payment", async (req, res) => {
     res.status(500).json({ success: false, error: error.message || "Failed to update payment method" });
   }
 });
-router2.post("/settings/billing/webhook", (req, res) => {
+router3.post("/settings/billing/webhook", (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "k811k53ViV7fAdern0v5vpAi";
   const signature = req.headers["x-razorpay-signature"];
   if (signature) {
-    const shasum = import_crypto2.default.createHmac("sha256", secret);
+    const shasum = import_crypto4.default.createHmac("sha256", secret);
     shasum.update(JSON.stringify(req.body));
     const digest = shasum.digest("hex");
     if (digest !== signature) {
@@ -876,7 +1518,7 @@ router2.post("/settings/billing/webhook", (req, res) => {
   }
   res.status(200).json({ status: "ok" });
 });
-router2.patch("/billing/plan", (req, res) => {
+router3.patch("/billing/plan", (req, res) => {
   const { planId, planName } = req.body;
   const planMap = { p1: "STARTER", p2: "GROWTH", p3: "SCALE" };
   const targetPlan = (planName || planMap[planId] || "GROWTH").toUpperCase();
@@ -894,7 +1536,7 @@ router2.patch("/billing/plan", (req, res) => {
     agentFeedback: `FinanceAgent adjusted workspace SLA to ${targetPlan}. AI agents pool allocated (${(billingSettings.agentTokens.total / 1e6).toFixed(1)}M tokens).`
   });
 });
-router2.patch("/billing/payment", (req, res) => {
+router3.patch("/billing/payment", (req, res) => {
   if (req.body.paymentMethod) {
     billingSettings.paymentMethod = req.body.paymentMethod;
   }
@@ -904,10 +1546,10 @@ router2.patch("/billing/payment", (req, res) => {
     agentFeedback: `FinanceAgent verified billing credentials (${billingSettings.paymentMethod}) via secure Razorpay tokenization.`
   });
 });
-router2.get("/security", (req, res) => {
+router3.get("/security", (req, res) => {
   res.status(200).json({ success: true, data: securitySettings });
 });
-router2.patch("/security", (req, res) => {
+router3.patch("/security", (req, res) => {
   if (req.body.policies && Array.isArray(req.body.policies)) {
     securitySettings.policies = req.body.policies;
   }
@@ -920,7 +1562,7 @@ router2.patch("/security", (req, res) => {
     agentFeedback: `SupervisorAgent enforced new security posture (Session timeout: ${securitySettings.sessionTimeoutMinutes} min, MFA: ${securitySettings.policies.find((p) => p.id === "s1")?.enabled ? "Mandated" : "Optional"}).`
   });
 });
-router2.get("/api-keys", async (req, res) => {
+router3.get("/api-keys", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     res.status(200).json({ success: true, data: user?.apiKeys || {} });
@@ -928,7 +1570,7 @@ router2.get("/api-keys", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to fetch API keys" });
   }
 });
-router2.patch("/api-keys", async (req, res) => {
+router3.patch("/api-keys", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     if (user) {
@@ -946,10 +1588,10 @@ router2.patch("/api-keys", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to update API keys" });
   }
 });
-var routes_default2 = router2;
+var routes_default2 = router3;
 
 // src/modules/dashboard/routes.ts
-var import_express3 = require("express");
+var import_express4 = require("express");
 
 // src/modules/dashboard/service.ts
 var DashboardService = class {
@@ -1352,18 +1994,18 @@ var AgentsService = class {
 };
 
 // src/modules/dashboard/routes.ts
-var router3 = (0, import_express3.Router)();
+var router4 = (0, import_express4.Router)();
 var controller2 = new DashboardController();
-router3.get("/kpis", controller2.getKpis);
-router3.get("/activity", controller2.getActivityFeed);
-router3.get("/agents", async (req, res) => {
+router4.get("/kpis", controller2.getKpis);
+router4.get("/activity", controller2.getActivityFeed);
+router4.get("/agents", async (req, res) => {
   const agentsService = new AgentsService();
   res.status(200).json({
     success: true,
     data: await agentsService.getAllAgents()
   });
 });
-router3.get("/alerts", async (req, res) => {
+router4.get("/alerts", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const alerts = [];
@@ -1390,7 +2032,7 @@ router3.get("/alerts", async (req, res) => {
   }
   res.status(200).json({ success: true, data: alerts });
 });
-router3.get("/campaign-health", async (req, res) => {
+router4.get("/campaign-health", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
@@ -1403,10 +2045,10 @@ router3.get("/campaign-health", async (req, res) => {
     ]
   });
 });
-var routes_default3 = router3;
+var routes_default3 = router4;
 
 // src/modules/campaigns/routes.ts
-var import_express4 = require("express");
+var import_express5 = require("express");
 
 // src/modules/campaigns/service.ts
 var CampaignsService = class {
@@ -1518,31 +2160,31 @@ var updateCampaignSchema = import_zod3.z.object({
 });
 
 // src/modules/campaigns/routes.ts
-var router4 = (0, import_express4.Router)();
+var router5 = (0, import_express5.Router)();
 var controller3 = new CampaignsController();
-router4.get("/", controller3.getAll);
-router4.get("/stats", (req, res) => {
+router5.get("/", controller3.getAll);
+router5.get("/stats", (req, res) => {
   res.status(200).json({
     success: true,
     data: { total: 42, active: 8, paused: 3, scheduled: 5, completed: 26 }
   });
 });
-router4.get("/:id", controller3.getById);
-router4.post("/", validate(createCampaignSchema), controller3.create);
-router4.patch("/:id", validate(updateCampaignSchema), controller3.update);
-router4.delete("/:id", controller3.delete);
-router4.post("/:id/launch", (req, res) => {
+router5.get("/:id", controller3.getById);
+router5.post("/", validate(createCampaignSchema), controller3.create);
+router5.patch("/:id", validate(updateCampaignSchema), controller3.update);
+router5.delete("/:id", controller3.delete);
+router5.post("/:id/launch", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, status: "ACTIVE" } });
 });
-router4.post("/:id/pause", (req, res) => {
+router5.post("/:id/pause", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, status: "PAUSED" } });
 });
-var routes_default4 = router4;
+var routes_default4 = router5;
 
 // src/modules/campaign_detail/routes.ts
-var import_express5 = require("express");
-var router5 = (0, import_express5.Router)();
-router5.get("/:campaignId/overview", (req, res) => {
+var import_express6 = require("express");
+var router6 = (0, import_express6.Router)();
+router6.get("/:campaignId/overview", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1553,13 +2195,13 @@ router5.get("/:campaignId/overview", (req, res) => {
     }
   });
 });
-router5.get("/:campaignId/audience", (req, res) => {
+router6.get("/:campaignId/audience", (req, res) => {
   res.status(200).json({ success: true, data: { total: 48200, reachable: 44100, suppressed: 4100, segments: [] } });
 });
-router5.get("/:campaignId/assets", (req, res) => {
+router6.get("/:campaignId/assets", (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router5.get("/:campaignId/channels", (req, res) => {
+router6.get("/:campaignId/channels", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1570,33 +2212,33 @@ router5.get("/:campaignId/channels", (req, res) => {
     }
   });
 });
-router5.get("/:campaignId/timeline", (req, res) => {
+router6.get("/:campaignId/timeline", (req, res) => {
   res.status(200).json({ success: true, data: [
     { stage: "CREATION", timestamp: "2026-10-01T10:00:00Z", actor: "John Doe", note: "Campaign created" },
     { stage: "LAUNCH", timestamp: "2026-10-05T09:00:00Z", actor: "SupervisorAgent", note: "Campaign launched" }
   ] });
 });
-router5.get("/:campaignId/ab-tests", (req, res) => {
+router6.get("/:campaignId/ab-tests", (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router5.get("/:campaignId/analytics", (req, res) => {
+router6.get("/:campaignId/analytics", (req, res) => {
   res.status(200).json({ success: true, data: { impressions: 164e4, clicks: 42300, leads: 2810, mqls: 410, revenue: 96400 } });
 });
-router5.get("/:campaignId/finance", (req, res) => {
+router6.get("/:campaignId/finance", (req, res) => {
   res.status(200).json({ success: true, data: { budget: 5e4, spend: 23400, revenue: 96400, roi: 3.12, roas: 4.12, projectedRevenue: 19e4 } });
 });
-router5.get("/:campaignId/activity-log", (req, res) => {
+router6.get("/:campaignId/activity-log", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-var routes_default5 = router5;
+var routes_default5 = router6;
 
 // src/modules/analytics/routes.ts
-var import_express6 = require("express");
-var router6 = (0, import_express6.Router)();
-router6.get("/executive", (req, res) => {
+var import_express7 = require("express");
+var router7 = (0, import_express7.Router)();
+router7.get("/executive", (req, res) => {
   res.status(200).json({ success: true, data: { revenue: 124e4, pipeline: 56e5, cac: 124.5, ltv: 4800, roas: 4.2, conversionRate: 3.47 } });
 });
-router6.get("/attribution", (req, res) => {
+router7.get("/attribution", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1610,10 +2252,10 @@ router6.get("/attribution", (req, res) => {
     }
   });
 });
-router6.get("/channels", (req, res) => {
+router7.get("/channels", (req, res) => {
   res.status(200).json({ success: true, data: { email: {}, sms: {}, social: {}, paidAds: {} } });
 });
-router6.get("/funnel", (req, res) => {
+router7.get("/funnel", (req, res) => {
   res.status(200).json({
     success: true,
     data: [
@@ -1627,13 +2269,13 @@ router6.get("/funnel", (req, res) => {
     ]
   });
 });
-router6.get("/journey", (req, res) => {
+router7.get("/journey", (req, res) => {
   res.status(200).json({ success: true, data: { topPaths: [], touchpoints: [], dropoffs: [] } });
 });
-router6.get("/cohorts", (req, res) => {
+router7.get("/cohorts", (req, res) => {
   res.status(200).json({ success: true, data: { cohorts: [], periods: [] } });
 });
-router6.get("/realtime", (req, res) => {
+router7.get("/realtime", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -1652,36 +2294,36 @@ router6.get("/realtime", (req, res) => {
     }
   });
 });
-var routes_default6 = router6;
+var routes_default6 = router7;
 
 // src/modules/audience/routes.ts
-var import_express7 = require("express");
-var router7 = (0, import_express7.Router)();
-router7.get("/contacts", (req, res) => {
+var import_express8 = require("express");
+var router8 = (0, import_express8.Router)();
+router8.get("/contacts", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router7.get("/contacts/:id", (req, res) => {
+router8.get("/contacts/:id", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, email: "contact@example.com", firstName: "Jane", lastName: "Smith", leadScore: 72, lifecycleStage: "MQL" } });
 });
-router7.post("/contacts", (req, res) => {
+router8.post("/contacts", (req, res) => {
   res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body, leadScore: 0, createdAt: (/* @__PURE__ */ new Date()).toISOString() } });
 });
-router7.patch("/contacts/:id", (req, res) => {
+router8.patch("/contacts/:id", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, ...req.body } });
 });
-router7.delete("/contacts/:id", (req, res) => {
+router8.delete("/contacts/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-router7.get("/segments", (req, res) => {
+router8.get("/segments", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router7.post("/segments", (req, res) => {
+router8.post("/segments", (req, res) => {
   res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body, size: 0, createdAt: (/* @__PURE__ */ new Date()).toISOString() } });
 });
-router7.delete("/segments/:id", (req, res) => {
+router8.delete("/segments/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-router7.get("/lead-scores", async (req, res) => {
+router8.get("/lead-scores", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
@@ -1699,7 +2341,7 @@ router7.get("/lead-scores", async (req, res) => {
     }
   });
 });
-router7.get("/personas", async (req, res) => {
+router8.get("/personas", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
@@ -1709,7 +2351,7 @@ router7.get("/personas", async (req, res) => {
     { id: "p2", name: "SMB Founder", description: "Owner of 10-50 employee companies", size: Math.round(5120 * mult), traits: ["budget-conscious", "growth-driven", "hands-on"] }
   ] });
 });
-router7.get("/lifecycle", async (req, res) => {
+router8.get("/lifecycle", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const activeAgents = agents.filter((a) => a.status === "RUNNING");
@@ -1726,12 +2368,12 @@ router7.get("/lifecycle", async (req, res) => {
     ]
   });
 });
-var routes_default7 = router7;
+var routes_default7 = router8;
 
 // src/modules/ai_command_center/routes.ts
-var import_express8 = require("express");
-var router8 = (0, import_express8.Router)();
-router8.post("/command", (req, res) => {
+var import_express9 = require("express");
+var router9 = (0, import_express9.Router)();
+router9.post("/command", (req, res) => {
   const prompt = req.body.prompt?.toLowerCase() || "";
   let intent = "UNKNOWN_INTENT";
   let agentsSpawned = ["GeneralAgent"];
@@ -1763,13 +2405,13 @@ router8.post("/command", (req, res) => {
     }
   });
 });
-router8.get("/suggestions", (req, res) => {
+router9.get("/suggestions", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "s1", label: "Boost Q4 campaign budget", description: "ROAS is 5.1x \u2014 increasing budget could yield 40% more revenue", impact: "HIGH", prompt: "Increase budget for Q4 Product Launch campaign by 20%" },
     { id: "s2", label: "Re-engage cold leads", description: "4,200 leads haven't opened an email in 30 days", impact: "MEDIUM", prompt: "Create a re-engagement sequence for cold leads" }
   ] });
 });
-router8.get("/agents", async (req, res) => {
+router9.get("/agents", async (req, res) => {
   try {
     const health = await agentClient_default.getHealth();
     const infra = health?.data || {};
@@ -1788,7 +2430,7 @@ router8.get("/agents", async (req, res) => {
     res.status(200).json({ success: true, data: agentNames.map((type, i) => ({ id: `agent-${i}`, name: `${type.charAt(0)}${type.slice(1).toLowerCase()}Agent`, type, status: "OFFLINE", queueLength: 0, successRate: 0 })) });
   }
 });
-router8.get("/tasks", async (req, res) => {
+router9.get("/tasks", async (req, res) => {
   const page = parseInt(String(req.query.page || "1"));
   const limit = parseInt(String(req.query.limit || "20"));
   const skip = (page - 1) * limit;
@@ -1820,7 +2462,7 @@ router8.get("/tasks", async (req, res) => {
     meta: { total, page, limit, pages: Math.ceil(total / limit) }
   });
 });
-router8.get("/decisions", async (req, res) => {
+router9.get("/decisions", async (req, res) => {
   const limit = parseInt(String(req.query.limit || "20"));
   const runs = await prisma.workflowRun.findMany({
     take: limit,
@@ -1838,7 +2480,7 @@ router8.get("/decisions", async (req, res) => {
   }));
   res.status(200).json({ success: true, data });
 });
-router8.get("/memory", async (req, res) => {
+router9.get("/memory", async (req, res) => {
   const page = parseInt(String(req.query.page || "1"));
   const limit = parseInt(String(req.query.limit || "20"));
   const skip = (page - 1) * limit;
@@ -1867,19 +2509,19 @@ router8.get("/memory", async (req, res) => {
     meta: { total, page, limit, pages: Math.ceil(total / limit) }
   });
 });
-router8.get("/automation-rules", (req, res) => {
+router9.get("/automation-rules", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "r1", name: "Pause ad if ROAS < 2x", type: "BUDGET", enabled: true, trigger: { metric: "roas", operator: "lt", value: 2 }, action: { type: "PAUSE_AD" }, lastFired: null },
     { id: "r2", name: "Alert on budget threshold", type: "ALERT", enabled: true, trigger: { metric: "budgetUsed", operator: "gte", value: 80 }, action: { type: "SEND_ALERT" }, lastFired: "2026-06-14T08:00:00Z" }
   ] });
 });
-router8.post("/automation-rules", (req, res) => {
+router9.post("/automation-rules", (req, res) => {
   res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body, lastFired: null } });
 });
-router8.delete("/automation-rules/:id", (req, res) => {
+router9.delete("/automation-rules/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-router8.post("/pipeline/campaign", async (req, res) => {
+router9.post("/pipeline/campaign", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     req.body.llm_api_key = req.body.llm_api_key || user?.apiKeys?.gemini;
@@ -1891,7 +2533,7 @@ router8.post("/pipeline/campaign", async (req, res) => {
     res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
   }
 });
-router8.post("/pipeline/campaign/async", async (req, res) => {
+router9.post("/pipeline/campaign/async", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     req.body.llm_api_key = req.body.llm_api_key || user?.apiKeys?.gemini;
@@ -1903,7 +2545,7 @@ router8.post("/pipeline/campaign/async", async (req, res) => {
     res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
   }
 });
-router8.get("/pipeline/:campaignId/status", async (req, res) => {
+router9.get("/pipeline/:campaignId/status", async (req, res) => {
   const { campaignId } = req.params;
   logger.info(`[AI CC][STATUS POLL] job_id=${campaignId}`);
   try {
@@ -1926,7 +2568,7 @@ router8.get("/pipeline/:campaignId/status", async (req, res) => {
     res.status(502).json({ success: false, error: "Agent service unavailable", detail: message });
   }
 });
-router8.get("/status/:jobId", async (req, res) => {
+router9.get("/status/:jobId", async (req, res) => {
   const { jobId } = req.params;
   logger.info(`[AI CC][STATUS POLL] job_id=${jobId}`);
   try {
@@ -1953,7 +2595,7 @@ router8.get("/status/:jobId", async (req, res) => {
     res.status(502).json({ success: false, error: "Status lookup failed", detail: message });
   }
 });
-router8.post("/pipeline/campaign/stream", async (req, res) => {
+router9.post("/pipeline/campaign/stream", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     req.body.llm_api_key = req.body.llm_api_key || user?.apiKeys?.gemini;
@@ -1991,7 +2633,7 @@ data: ${JSON.stringify({ error: message })}
     }
   }
 });
-router8.post("/query/stream", async (req, res) => {
+router9.post("/query/stream", async (req, res) => {
   try {
     const user = await prisma.user.findFirst();
     req.body.llm_api_key = req.body.llm_api_key || user?.apiKeys?.gemini;
@@ -2029,7 +2671,7 @@ data: ${JSON.stringify({ error: message })}
     }
   }
 });
-router8.get("/agent-service/health", async (_req, res) => {
+router9.get("/agent-service/health", async (_req, res) => {
   try {
     const health = await agentClient_default.getHealth();
     res.status(health.data?.status === "healthy" ? 200 : 207).json({ success: true, data: health });
@@ -2039,10 +2681,10 @@ router8.get("/agent-service/health", async (_req, res) => {
     res.status(502).json({ success: false, error: "Agent service unreachable", detail: message });
   }
 });
-var routes_default8 = router8;
+var routes_default8 = router9;
 
 // src/modules/agents/routes.ts
-var import_express9 = require("express");
+var import_express10 = require("express");
 
 // src/modules/agents/controller.ts
 var AgentsController = class {
@@ -2142,18 +2784,18 @@ var AgentsController = class {
 };
 
 // src/modules/agents/routes.ts
-var router9 = (0, import_express9.Router)();
+var router10 = (0, import_express10.Router)();
 var controller4 = new AgentsController();
-router9.get("/", controller4.getAllAgents);
-router9.post("/:agentType/run", controller4.runAgent);
-router9.get("/:agentType", controller4.getAgentByType);
-router9.get("/:agentType/tasks", controller4.getAgentTasks);
-router9.get("/:agentType/memory", controller4.getAgentMemory);
-router9.post("/:agentType/command", controller4.executeCommand);
-var routes_default9 = router9;
+router10.get("/", controller4.getAllAgents);
+router10.post("/:agentType/run", controller4.runAgent);
+router10.get("/:agentType", controller4.getAgentByType);
+router10.get("/:agentType/tasks", controller4.getAgentTasks);
+router10.get("/:agentType/memory", controller4.getAgentMemory);
+router10.post("/:agentType/command", controller4.executeCommand);
+var routes_default9 = router10;
 
 // src/modules/workflow_engine/routes.ts
-var import_express10 = require("express");
+var import_express11 = require("express");
 
 // src/modules/workflow_engine/approvalConfig.ts
 var AGENT_APPROVAL_CONFIG = {
@@ -2484,8 +3126,8 @@ async function getWorkflowRun(runId) {
 }
 
 // src/modules/workflow_engine/routes.ts
-var router10 = (0, import_express10.Router)();
-router10.post("/workflows", async (req, res) => {
+var router11 = (0, import_express11.Router)();
+router11.post("/workflows", async (req, res) => {
   try {
     const command = req.body.command || req.body.prompt;
     if (!command || typeof command !== "string") {
@@ -2506,7 +3148,7 @@ router10.post("/workflows", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router10.post("/", async (req, res) => {
+router11.post("/", async (req, res) => {
   try {
     const command = req.body.command || req.body.prompt;
     if (!command || typeof command !== "string") {
@@ -2527,7 +3169,7 @@ router10.post("/", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router10.get("/workflows/:runId", async (req, res) => {
+router11.get("/workflows/:runId", async (req, res) => {
   try {
     const run = await getWorkflowRun(req.params.runId);
     if (!run) {
@@ -2539,7 +3181,7 @@ router10.get("/workflows/:runId", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router10.get("/:runId", async (req, res) => {
+router11.get("/:runId", async (req, res) => {
   try {
     const run = await getWorkflowRun(req.params.runId);
     if (!run) {
@@ -2551,7 +3193,7 @@ router10.get("/:runId", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router10.post("/workflows/:runId/approve", async (req, res) => {
+router11.post("/workflows/:runId/approve", async (req, res) => {
   try {
     const { decision } = req.body;
     if (decision !== "approved" && decision !== "rejected") {
@@ -2564,7 +3206,7 @@ router10.post("/workflows/:runId/approve", async (req, res) => {
     res.status(400).json({ success: false, error: err.message });
   }
 });
-router10.post("/:runId/approve", async (req, res) => {
+router11.post("/:runId/approve", async (req, res) => {
   try {
     const { decision } = req.body;
     if (decision !== "approved" && decision !== "rejected") {
@@ -2577,7 +3219,7 @@ router10.post("/:runId/approve", async (req, res) => {
     res.status(400).json({ success: false, error: err.message });
   }
 });
-router10.get("/graph", (_req, res) => {
+router11.get("/graph", (_req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -2601,16 +3243,16 @@ router10.get("/graph", (_req, res) => {
     }
   });
 });
-router10.get("/executions", (_req, res) => {
+router11.get("/executions", (_req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router10.get("/executions/:id", (req, res) => {
+router11.get("/executions/:id", (req, res) => {
   res.status(200).json({ success: true, data: { execution: { id: req.params.id }, steps: [] } });
 });
-router10.post("/executions/:id/cancel", (req, res) => {
+router11.post("/executions/:id/cancel", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, status: "CANCELLED" } });
 });
-router10.get("/dependencies", (_req, res) => {
+router11.get("/dependencies", (_req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -2619,80 +3261,80 @@ router10.get("/dependencies", (_req, res) => {
     }
   });
 });
-router10.get("/automation", (_req, res) => {
+router11.get("/automation", (_req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "wf1", name: "Full Campaign Launch Workflow", description: "End-to-end workflow from brief to launch", steps: 8, lastRun: null, enabled: true },
     { id: "wf2", name: "Re-engagement Workflow", description: "Automated re-engagement sequence for cold leads", steps: 5, lastRun: "2026-06-01T10:00:00Z", enabled: true }
   ] });
 });
-router10.post("/automation/:id/trigger", (_req, res) => {
+router11.post("/automation/:id/trigger", (_req, res) => {
   res.status(200).json({ success: true, data: { executionId: "exec-uuid", status: "RUNNING" } });
 });
-var routes_default10 = router10;
+var routes_default10 = router11;
 
 // src/modules/creative_studio/routes.ts
-var import_express11 = require("express");
-var router11 = (0, import_express11.Router)();
-router11.get("/assets", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
-});
-router11.delete("/assets/:id", (req, res) => {
-  res.status(200).json({ success: true, data: null });
-});
-router11.get("/brand-kit", (req, res) => {
-  res.status(200).json({ success: true, data: { colors: { primary: "#6C63FF", secondary: "#FF6584", background: "#0F0F1A" }, fonts: { heading: "Inter", body: "Inter" }, logos: [], toneOfVoice: "Professional, confident, data-driven" } });
-});
-router11.patch("/brand-kit", (req, res) => {
-  res.status(200).json({ success: true, data: req.body });
-});
-router11.post("/generate", (req, res) => {
-  res.status(200).json({ success: true, data: { taskId: "gen-task-uuid", status: "QUEUED", estimatedMs: 8e3 } });
-});
-router11.get("/generated", (req, res) => {
-  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
-});
-router11.get("/templates", (req, res) => {
-  res.status(200).json({ success: true, data: [] });
-});
-var routes_default11 = router11;
-
-// src/modules/competitive_intelligence/routes.ts
 var import_express12 = require("express");
 var router12 = (0, import_express12.Router)();
-router12.get("/competitors", (req, res) => {
+router12.get("/assets", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router12.delete("/assets/:id", (req, res) => {
+  res.status(200).json({ success: true, data: null });
+});
+router12.get("/brand-kit", (req, res) => {
+  res.status(200).json({ success: true, data: { colors: { primary: "#6C63FF", secondary: "#FF6584", background: "#0F0F1A" }, fonts: { heading: "Inter", body: "Inter" }, logos: [], toneOfVoice: "Professional, confident, data-driven" } });
+});
+router12.patch("/brand-kit", (req, res) => {
+  res.status(200).json({ success: true, data: req.body });
+});
+router12.post("/generate", (req, res) => {
+  res.status(200).json({ success: true, data: { taskId: "gen-task-uuid", status: "QUEUED", estimatedMs: 8e3 } });
+});
+router12.get("/generated", (req, res) => {
+  res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
+});
+router12.get("/templates", (req, res) => {
+  res.status(200).json({ success: true, data: [] });
+});
+var routes_default11 = router12;
+
+// src/modules/competitive_intelligence/routes.ts
+var import_express13 = require("express");
+var router13 = (0, import_express13.Router)();
+router13.get("/competitors", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "c1", name: "RivalCo", website: "https://rivalco.com", adSpend: 25e4, keywords: ["crm", "marketing automation"] }
   ] });
 });
-router12.post("/competitors", (req, res) => {
+router13.post("/competitors", (req, res) => {
   res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body } });
 });
-router12.delete("/competitors/:id", (req, res) => {
+router13.delete("/competitors/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-router12.get("/ad-monitoring", (req, res) => {
+router13.get("/ad-monitoring", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router12.get("/pricing", (req, res) => {
+router13.get("/pricing", (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router12.get("/seo", (req, res) => {
+router13.get("/seo", (req, res) => {
   res.status(200).json({ success: true, data: { yourDomain: { domainAuthority: 48, organicKeywords: 3200, backlinks: 12400 }, competitors: [], keywordGaps: [] } });
 });
-router12.get("/opportunities", (req, res) => {
+router13.get("/opportunities", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "o1", type: "PRICING_GAP", title: "RivalCo raised starter plan price by 25%", description: "Their starter plan now costs $149/mo vs your $99/mo \u2014 opportunity to capture price-sensitive segment", impact: "HIGH", detectedAt: (/* @__PURE__ */ new Date()).toISOString() }
   ] });
 });
-var routes_default12 = router12;
+var routes_default12 = router13;
 
 // src/modules/finance/routes.ts
-var import_express13 = require("express");
-var router13 = (0, import_express13.Router)();
-router13.get("/spend", (req, res) => {
+var import_express14 = require("express");
+var router14 = (0, import_express14.Router)();
+router14.get("/spend", (req, res) => {
   res.status(200).json({ success: true, data: { totalBudget: 5e5, totalSpend: 214300, remainingBudget: 285700, projectedSpend: 49e4, roas: 4.2, roi: 3.2 } });
 });
-router13.get("/revenue", (req, res) => {
+router14.get("/revenue", (req, res) => {
   res.status(200).json({
     success: true,
     data: {
@@ -2707,33 +3349,33 @@ router13.get("/revenue", (req, res) => {
     }
   });
 });
-router13.get("/roas", (req, res) => {
+router14.get("/roas", (req, res) => {
   res.status(200).json({ success: true, data: { overallRoas: 4.2, benchmark: 3.5, breakdown: [], trend: [] } });
 });
-router13.get("/budget", (req, res) => {
+router14.get("/budget", (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router13.patch("/budget/:campaignId", (req, res) => {
+router14.patch("/budget/:campaignId", (req, res) => {
   res.status(200).json({ success: true, data: { campaignId: req.params.campaignId, ...req.body } });
 });
-router13.get("/forecast", (req, res) => {
+router14.get("/forecast", (req, res) => {
   res.status(200).json({ success: true, data: { projectedRevenue: 148e4, projectedSpend: 49e4, projectedRoas: 3.9, confidence: 0.84, timeline: [] } });
 });
-var routes_default13 = router13;
+var routes_default13 = router14;
 
 // src/modules/reports/routes.ts
-var import_express14 = require("express");
-var router14 = (0, import_express14.Router)();
-router14.get("/scheduled", (req, res) => {
+var import_express15 = require("express");
+var router15 = (0, import_express15.Router)();
+router15.get("/scheduled", (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router14.post("/scheduled", (req, res) => {
+router15.post("/scheduled", (req, res) => {
   res.status(201).json({ success: true, data: { id: "new-uuid", ...req.body, status: "PENDING", createdAt: (/* @__PURE__ */ new Date()).toISOString() } });
 });
-router14.post("/custom", (req, res) => {
+router15.post("/custom", (req, res) => {
   res.status(200).json({ success: true, data: { reportId: "rpt-uuid", status: "GENERATING", estimatedMs: 15e3 } });
 });
-router14.get("/executive", async (req, res) => {
+router15.get("/executive", async (req, res) => {
   const agentsService = new AgentsService();
   const agents = await agentsService.getAllAgents();
   const reportingAgent = agents.find((a) => a.type === "REPORTING");
@@ -2744,61 +3386,61 @@ router14.get("/executive", async (req, res) => {
     { id: "r2", name: "AI Agent Performance ROI", type: "ANALYTICS", format: "EXCEL", status: reportStatus, downloadUrl: "https://example.com/reports/r2.xlsx", createdAt: (/* @__PURE__ */ new Date()).toISOString() }
   ] });
 });
-router14.get("/:id/download", (req, res) => {
+router15.get("/:id/download", (req, res) => {
   res.status(200).json({ success: true, data: { downloadUrl: `https://example.com/reports/${req.params.id}.pdf`, expiresAt: new Date(Date.now() + 36e5).toISOString() } });
 });
-router14.delete("/:id", (req, res) => {
+router15.delete("/:id", (req, res) => {
   res.status(200).json({ success: true, data: null });
 });
-var routes_default14 = router14;
+var routes_default14 = router15;
 
 // src/modules/monitoring/routes.ts
-var import_express15 = require("express");
-var router15 = (0, import_express15.Router)();
-router15.get("/health", (req, res) => {
+var import_express16 = require("express");
+var router16 = (0, import_express16.Router)();
+router16.get("/health", (req, res) => {
   res.status(200).json({ success: true, data: { overall: "HEALTHY", api: "HEALTHY", database: "HEALTHY", redis: "HEALTHY", kafka: "HEALTHY", agents: "HEALTHY", uptime: 99.97, checkedAt: (/* @__PURE__ */ new Date()).toISOString() } });
 });
-router15.get("/alerts", (req, res) => {
+router16.get("/alerts", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "a1", type: "WARNING", title: "Redis memory at 85%", message: "Redis is approaching memory limits", resolved: false, timestamp: (/* @__PURE__ */ new Date()).toISOString() },
     { id: "a2", type: "CRITICAL", title: "EmailAgent failure", message: "EmailAgent has crashed \u2014 auto-restart in progress", resolved: false, timestamp: (/* @__PURE__ */ new Date()).toISOString() }
   ], meta: { total: 2, page: 1, limit: 20, pages: 1 } });
 });
-router15.post("/alerts/:id/resolve", (req, res) => {
+router16.post("/alerts/:id/resolve", (req, res) => {
   res.status(200).json({ success: true, data: { id: req.params.id, resolved: true } });
 });
-router15.get("/incidents", (req, res) => {
+router16.get("/incidents", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router15.get("/remediation", (req, res) => {
+router16.get("/remediation", (req, res) => {
   res.status(200).json({ success: true, data: [
     { id: "rem1", alertId: "a2", action: "Restarted EmailAgent", outcome: "SUCCESS", timestamp: (/* @__PURE__ */ new Date()).toISOString() }
   ], meta: { total: 1, page: 1, limit: 20, pages: 1 } });
 });
-var routes_default15 = router15;
+var routes_default15 = router16;
 
 // src/modules/audit_logs/routes.ts
-var import_express16 = require("express");
-var router16 = (0, import_express16.Router)();
-router16.get("/activity", (req, res) => {
+var import_express17 = require("express");
+var router17 = (0, import_express17.Router)();
+router17.get("/activity", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router16.get("/agents", (req, res) => {
+router17.get("/agents", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router16.get("/api", (req, res) => {
+router17.get("/api", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router16.get("/compliance", (req, res) => {
+router17.get("/compliance", (req, res) => {
   res.status(200).json({ success: true, data: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } });
 });
-router16.get("/events", (req, res) => {
+router17.get("/events", (req, res) => {
   res.status(200).json({ success: true, data: [], lastEventAt: (/* @__PURE__ */ new Date()).toISOString() });
 });
-var routes_default16 = router16;
+var routes_default16 = router17;
 
 // src/modules/brand_profile/routes.ts
-var import_express17 = require("express");
+var import_express18 = require("express");
 
 // src/modules/brand_profile/service.ts
 var BrandProfileService = class {
@@ -2990,17 +3632,17 @@ var autofillSchema = import_zod4.z.object({
 });
 
 // src/modules/brand_profile/routes.ts
-var router17 = (0, import_express17.Router)();
+var router18 = (0, import_express18.Router)();
 var controller5 = new BrandProfileController();
-router17.post("/", validate(createBrandProfileSchema), controller5.create);
-router17.get("/", controller5.listByWorkspace);
-router17.get("/:id", controller5.getById);
-router17.patch("/:id", validate(updateBrandProfileSchema), controller5.update);
-router17.post("/:id/autofill", validate(autofillSchema), controller5.autofill);
-var routes_default17 = router17;
+router18.post("/", validate(createBrandProfileSchema), controller5.create);
+router18.get("/", controller5.listByWorkspace);
+router18.get("/:id", controller5.getById);
+router18.patch("/:id", validate(updateBrandProfileSchema), controller5.update);
+router18.post("/:id/autofill", validate(autofillSchema), controller5.autofill);
+var routes_default17 = router18;
 
 // src/modules/campaign_brief/routes.ts
-var import_express18 = require("express");
+var import_express19 = require("express");
 
 // src/modules/campaign_brief/service.ts
 var CampaignBriefService = class {
@@ -3160,23 +3802,23 @@ var createCampaignBriefSchema = import_zod5.z.object({
 });
 
 // src/modules/campaign_brief/routes.ts
-var router18 = (0, import_express18.Router)();
+var router19 = (0, import_express19.Router)();
 var controller6 = new CampaignBriefController();
-router18.post(
+router19.post(
   "/brief",
   validate(createCampaignBriefSchema),
   controller6.createAndLaunch
 );
-var routes_default18 = router18;
+var routes_default18 = router19;
 
 // src/modules/whatsapp/routes.ts
-var import_express20 = require("express");
+var import_express21 = require("express");
 
 // src/middlewares/auth.middleware.ts
-var import_express19 = require("@clerk/express");
+var import_express20 = require("@clerk/express");
 var import_bcryptjs2 = __toESM(require("bcryptjs"));
 var requireClerkAuth = async (req, res, next) => {
-  const auth = (0, import_express19.getAuth)(req);
+  const auth = (0, import_express20.getAuth)(req);
   if (!auth.userId) {
     return res.status(401).json({
       success: false,
@@ -3185,7 +3827,7 @@ var requireClerkAuth = async (req, res, next) => {
     });
   }
   try {
-    const clerkUser = await import_express19.clerkClient.users.getUser(auth.userId);
+    const clerkUser = await import_express20.clerkClient.users.getUser(auth.userId);
     const email = clerkUser.emailAddresses[0]?.emailAddress;
     if (!email) {
       return res.status(400).json({
@@ -3496,8 +4138,8 @@ async function sendBulk({
 }
 
 // src/modules/whatsapp/routes.ts
-var router19 = (0, import_express20.Router)();
-router19.post(
+var router20 = (0, import_express21.Router)();
+router20.post(
   "/generate",
   requireClerkAuth,
   async (req, res) => {
@@ -3509,7 +4151,7 @@ router19.post(
     }
   }
 );
-router19.post(
+router20.post(
   "/send",
   requireClerkAuth,
   async (req, res) => {
@@ -3521,12 +4163,12 @@ router19.post(
     }
   }
 );
-var routes_default19 = router19;
+var routes_default19 = router20;
 
 // src/modules/phone/routes.ts
-var import_express21 = require("express");
-var router20 = (0, import_express21.Router)();
-router20.post("/verify", async (req, res) => {
+var import_express22 = require("express");
+var router21 = (0, import_express22.Router)();
+router21.post("/verify", async (req, res) => {
   const { accountSid, authToken, phoneNumber } = req.body;
   if (!accountSid || !authToken) {
     return res.status(400).json({
@@ -3605,7 +4247,7 @@ router20.post("/verify", async (req, res) => {
     });
   }
 });
-router20.post("/call", async (req, res) => {
+router21.post("/call", async (req, res) => {
   const { accountSid, authToken, from, to, url } = req.body;
   if (!accountSid || !authToken || !from || !to) {
     return res.status(400).json({
@@ -3655,7 +4297,7 @@ router20.post("/call", async (req, res) => {
     });
   }
 });
-router20.get("/status", async (req, res) => {
+router21.get("/status", async (req, res) => {
   const { accountSid, authToken } = req.query;
   if (!accountSid || !authToken) {
     return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
@@ -3683,12 +4325,12 @@ router20.get("/status", async (req, res) => {
     return res.status(502).json({ success: false, connected: false, error: err.message });
   }
 });
-var routes_default20 = router20;
+var routes_default20 = router21;
 
 // src/modules/sms/routes.ts
-var import_express22 = require("express");
-var router21 = (0, import_express22.Router)();
-router21.post("/verify", async (req, res) => {
+var import_express23 = require("express");
+var router22 = (0, import_express23.Router)();
+router22.post("/verify", async (req, res) => {
   const { accountSid, authToken, fromNumber } = req.body;
   if (!accountSid || !authToken) {
     return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
@@ -3762,7 +4404,7 @@ router21.post("/verify", async (req, res) => {
     });
   }
 });
-router21.post("/send", async (req, res) => {
+router22.post("/send", async (req, res) => {
   const { accountSid, authToken, from, to, body: messageBody } = req.body;
   if (!accountSid || !authToken || !from || !to || !messageBody) {
     return res.status(400).json({
@@ -3830,7 +4472,7 @@ router21.post("/send", async (req, res) => {
     results
   });
 });
-router21.get("/messages", async (req, res) => {
+router22.get("/messages", async (req, res) => {
   const { accountSid, authToken, limit = "20" } = req.query;
   if (!accountSid || !authToken) {
     return res.status(400).json({ success: false, error: "accountSid and authToken are required" });
@@ -3860,12 +4502,12 @@ router21.get("/messages", async (req, res) => {
     return res.status(502).json({ success: false, error: err.message });
   }
 });
-var routes_default21 = router21;
+var routes_default21 = router22;
 
 // src/modules/email_channel/routes.ts
-var import_express23 = require("express");
-var router22 = (0, import_express23.Router)();
-router22.post("/verify/clerk", async (req, res) => {
+var import_express24 = require("express");
+var router23 = (0, import_express24.Router)();
+router23.post("/verify/clerk", async (req, res) => {
   const { secretKey, publishableKey, fromEmail } = req.body;
   if (!secretKey) {
     return res.status(400).json({ success: false, error: "secretKey is required" });
@@ -3940,7 +4582,7 @@ router22.post("/verify/clerk", async (req, res) => {
     });
   }
 });
-router22.post("/verify/google", async (req, res) => {
+router23.post("/verify/google", async (req, res) => {
   const {
     clientId: clientId2,
     clientSecret,
@@ -4013,7 +4655,7 @@ router22.post("/verify/google", async (req, res) => {
     });
   }
 });
-router22.post("/google/token", async (req, res) => {
+router23.post("/google/token", async (req, res) => {
   const { clientId: clientId2, clientSecret, redirectUri, code } = req.body;
   if (!clientId2 || !clientSecret || !redirectUri || !code) {
     return res.status(400).json({
@@ -4055,7 +4697,7 @@ router22.post("/google/token", async (req, res) => {
     return res.status(502).json({ success: false, error: err.message });
   }
 });
-router22.post("/send/clerk", async (req, res) => {
+router23.post("/send/clerk", async (req, res) => {
   const { secretKey, fromEmail, fromName, toEmail, subject, body: emailBody } = req.body;
   if (!secretKey || !toEmail || !subject || !emailBody) {
     return res.status(400).json({
@@ -4096,7 +4738,7 @@ router22.post("/send/clerk", async (req, res) => {
     return res.status(502).json({ success: false, error: err.message });
   }
 });
-router22.post("/send/gmail", async (req, res) => {
+router23.post("/send/gmail", async (req, res) => {
   const { accessToken, from, to, subject, body: emailBody } = req.body;
   if (!accessToken || !from || !to || !subject || !emailBody) {
     return res.status(400).json({
@@ -4146,7 +4788,7 @@ router22.post("/send/gmail", async (req, res) => {
     return res.status(502).json({ success: false, error: err.message });
   }
 });
-router22.get("/health", (_req, res) => {
+router23.get("/health", (_req, res) => {
   res.json({
     success: true,
     module: "email-channel",
@@ -4155,18 +4797,18 @@ router22.get("/health", (_req, res) => {
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
-var routes_default22 = router22;
+var routes_default22 = router23;
 
 // src/modules/history/routes.ts
-var import_express24 = require("express");
-var router23 = (0, import_express24.Router)();
+var import_express25 = require("express");
+var router24 = (0, import_express25.Router)();
 async function getUserId(req) {
   const userId = req.user?.userId;
   if (userId) return userId;
   const user = await prisma.user.findFirst().catch(() => null);
   return user?.id ?? null;
 }
-router23.get("/", async (req, res) => {
+router24.get("/", async (req, res) => {
   try {
     const userId = await getUserId(req);
     if (!userId) {
@@ -4199,7 +4841,7 @@ router23.get("/", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router23.get("/:id", async (req, res) => {
+router24.get("/:id", async (req, res) => {
   try {
     const userId = await getUserId(req);
     const item = await prisma.campaignHistory.findFirst({
@@ -4213,7 +4855,7 @@ router23.get("/:id", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router23.post("/", async (req, res) => {
+router24.post("/", async (req, res) => {
   try {
     const userId = await getUserId(req);
     if (!userId) {
@@ -4252,7 +4894,7 @@ router23.post("/", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router23.delete("/:id", async (req, res) => {
+router24.delete("/:id", async (req, res) => {
   try {
     const userId = await getUserId(req);
     const existing = await prisma.campaignHistory.findFirst({
@@ -4270,7 +4912,7 @@ router23.delete("/:id", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-router23.post("/:id/dispatch", async (req, res) => {
+router24.post("/:id/dispatch", async (req, res) => {
   try {
     const userId = await getUserId(req);
     const item = await prisma.campaignHistory.findFirst({
@@ -4356,10 +4998,10 @@ router23.post("/:id/dispatch", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-var routes_default23 = router23;
+var routes_default23 = router24;
 
 // src/modules/telegram/routes.ts
-var import_express25 = require("express");
+var import_express26 = require("express");
 
 // src/modules/telegram/core.ts
 var {
@@ -4561,8 +5203,8 @@ async function sendTelegramMessage(input) {
 }
 
 // src/modules/telegram/routes.ts
-var router24 = (0, import_express25.Router)();
-router24.post(
+var router25 = (0, import_express26.Router)();
+router25.post(
   "/generate",
   requireClerkAuth,
   async (req, res) => {
@@ -4574,7 +5216,7 @@ router24.post(
     }
   }
 );
-router24.post(
+router25.post(
   "/send",
   requireClerkAuth,
   async (req, res) => {
@@ -4586,32 +5228,32 @@ router24.post(
     }
   }
 );
-var routes_default24 = router24;
+var routes_default24 = router25;
 
 // src/routes.ts
-var router25 = (0, import_express26.Router)();
-router25.use("/auth", routes_default);
-router25.use("/settings", routes_default2);
-router25.use("/dashboard", routes_default3);
-router25.use("/campaigns", routes_default4);
-router25.use("/campaign-detail", routes_default5);
-router25.use("/analytics", routes_default6);
-router25.use("/audience", routes_default7);
-router25.use("/ai-command-center", routes_default8);
-router25.use("/agents", routes_default9);
-router25.use("/workflow-engine", routes_default10);
-router25.use("/creative-studio", routes_default11);
-router25.use("/competitive-intelligence", routes_default12);
-router25.use("/finance", routes_default13);
-router25.use("/reports", routes_default14);
-router25.use("/monitoring", routes_default15);
-router25.use("/audit-logs", routes_default16);
-router25.use("/brand-profile", routes_default17);
-router25.use("/campaign", routes_default18);
-router25.use("/whatsapp", routes_default19);
-router25.use("/phone", routes_default20);
-router25.use("/sms", routes_default21);
-router25.use("/email-channel", routes_default22);
-router25.use("/history", routes_default23);
-router25.use("/telegram", routes_default24);
-var routes_default25 = router25;
+var router26 = (0, import_express27.Router)();
+router26.use("/auth", routes_default);
+router26.use("/settings", routes_default2);
+router26.use("/dashboard", routes_default3);
+router26.use("/campaigns", routes_default4);
+router26.use("/campaign-detail", routes_default5);
+router26.use("/analytics", routes_default6);
+router26.use("/audience", routes_default7);
+router26.use("/ai-command-center", routes_default8);
+router26.use("/agents", routes_default9);
+router26.use("/workflow-engine", routes_default10);
+router26.use("/creative-studio", routes_default11);
+router26.use("/competitive-intelligence", routes_default12);
+router26.use("/finance", routes_default13);
+router26.use("/reports", routes_default14);
+router26.use("/monitoring", routes_default15);
+router26.use("/audit-logs", routes_default16);
+router26.use("/brand-profile", routes_default17);
+router26.use("/campaign", routes_default18);
+router26.use("/whatsapp", routes_default19);
+router26.use("/phone", routes_default20);
+router26.use("/sms", routes_default21);
+router26.use("/email-channel", routes_default22);
+router26.use("/history", routes_default23);
+router26.use("/telegram", routes_default24);
+var routes_default25 = router26;
