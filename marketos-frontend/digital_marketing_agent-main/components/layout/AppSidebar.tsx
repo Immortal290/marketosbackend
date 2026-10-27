@@ -1,18 +1,19 @@
+
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  List, 
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  List,
   Palette,
-  BarChart2, 
-  TrendingUp, 
+  BarChart2,
+  TrendingUp,
   Users,
-  Contact, 
-  DollarSign, 
-  Bell, 
+  Contact,
+  DollarSign,
+  Bell,
   Settings as SettingsIcon,
   LogOut,
   Linkedin,
@@ -23,7 +24,7 @@ import {
   Mail,
   MessageSquare,
   Phone,
-  Send
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -32,7 +33,7 @@ const sidebarGroups = [
     title: "Overview",
     items: [
       { href: "/dashboard", label: "Mission Control", icon: LayoutDashboard },
-    ]
+    ],
   },
   {
     title: "Channels",
@@ -46,14 +47,14 @@ const sidebarGroups = [
       { href: "/channels/email", label: "Email", icon: Mail },
       { href: "/channels/sms", label: "SMS", icon: MessageSquare },
       { href: "/channels/phone", label: "Phone", icon: Phone },
-    ]
+    ],
   },
   {
     title: "Campaigns",
     items: [
       { href: "/campaigns", label: "All Campaigns", icon: List },
       { href: "/creative-studio", label: "Creative Studio", icon: Palette },
-    ]
+    ],
   },
   {
     title: "Insights & Analytics",
@@ -61,7 +62,7 @@ const sidebarGroups = [
       { href: "/reports", label: "Reports", icon: BarChart2 },
       { href: "/analytics", label: "Overview", icon: TrendingUp },
       { href: "/audience", label: "Audience", icon: Users },
-    ]
+    ],
   },
   {
     title: "Management",
@@ -70,17 +71,51 @@ const sidebarGroups = [
       { href: "/finance", label: "Finance & ROI", icon: DollarSign },
       { href: "/monitoring", label: "Monitoring", icon: Bell },
       { href: "/settings", label: "Settings", icon: SettingsIcon },
-    ]
-  }
+    ],
+  },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = React.useState(false);
   const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "MarketOS";
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(href);
+  };
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+
+    const accessToken = localStorage.getItem("marketos_token");
+    const refreshToken = localStorage.getItem("marketos_refresh_token");
+
+    try {
+      if (accessToken && refreshToken) {
+        // Use the frontend API proxy so local and deployed routing
+        // can follow the same API configuration.
+        await fetch("/api/v1/auth/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (error) {
+      console.error("Logout request failed:", error);
+    } finally {
+      localStorage.removeItem("marketos_token");
+      localStorage.removeItem("marketos_refresh_token");
+
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   return (
@@ -100,24 +135,30 @@ export function AppSidebar() {
             <h3 className="font-mono text-[10px] font-bold uppercase text-black/50 px-2">
               {group.title}
             </h3>
+
             <div className="flex flex-col gap-1">
               {group.items.map((item) => {
                 const active = isActive(item.href);
+
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
                       "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-bold text-black transition-all hover:bg-neo-pink hover:translate-x-1",
-                      active && "bg-neo-yellow translate-x-1 shadow-[2px_2px_0_0_#000] border-black border-2"
+                      active &&
+                        "bg-neo-yellow translate-x-1 shadow-[2px_2px_0_0_#000] border-black border-2"
                     )}
                   >
-                    <div className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded border-2 border-black bg-white shadow-[1px_1px_0_0_#000] group-hover:bg-neo-cyan group-hover:shadow-[2px_2px_0_0_#000]",
-                      active && "bg-neo-cyan"
-                    )}>
+                    <div
+                      className={cn(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded border-2 border-black bg-white shadow-[1px_1px_0_0_#000] group-hover:bg-neo-cyan group-hover:shadow-[2px_2px_0_0_#000]",
+                        active && "bg-neo-cyan"
+                      )}
+                    >
                       <item.icon size={14} />
                     </div>
+
                     {item.label}
                   </Link>
                 );
@@ -128,13 +169,15 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t-[3px] border-black p-4 bg-neo-bg">
-        <Link
-          href="/"
-          className="flex w-full items-center justify-center gap-3 border-[2px] border-black bg-white px-3 py-2 text-sm font-bold text-black shadow-[2px_2px_0_0_#000] transition-all hover:translate-x-[-2px] hover:translate-y-[-2px] hover:bg-neo-lime hover:shadow-[4px_4px_0_0_#000]"
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex w-full items-center justify-center gap-3 border-[2px] border-black bg-white px-3 py-2 text-sm font-bold text-black shadow-[2px_2px_0_0_#000] transition-all hover:translate-x-[-2px] hover:translate-y-[-2px] hover:bg-neo-lime hover:shadow-[4px_4px_0_0_#000] disabled:opacity-60"
         >
           <LogOut size={16} />
-          Exit to Website
-        </Link>
+          {loggingOut ? "Logging out..." : "Logout"}
+        </button>
       </div>
     </aside>
   );

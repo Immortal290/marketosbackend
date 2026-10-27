@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AuthController } from './controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { registerSchema, loginSchema } from './validator';
+import { requireJwtAuth } from '../../middlewares/jwt-auth.middleware';
 
 const router = Router();
 const controller = new AuthController();
@@ -94,6 +95,8 @@ router.post('/register', validate(registerSchema), controller.register);
  */
 router.post('/login', validate(loginSchema), controller.login);
 
+router.post('/google', controller.google);
+
 /**
  * @openapi
  * /auth/refresh:
@@ -157,7 +160,7 @@ router.post('/refresh', controller.refresh);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.post('/logout', controller.logout);
+router.post('/logout', requireJwtAuth, controller.logout);
 
 /**
  * @openapi
@@ -184,6 +187,6 @@ router.post('/logout', controller.logout);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
-router.get('/me', controller.me);
+router.get('/me', requireJwtAuth, controller.me);
 
 export default router;
