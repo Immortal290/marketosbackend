@@ -1,19 +1,22 @@
 """
 MarketOS — Image Agent (AI-Generated Visual Engine)
-Pipeline:
-  1. Gemini Imagen (gemini-2.0-flash-exp)         — best quality, needs GEMINI_API_KEY
-  2. FLUX.1-schnell (HuggingFace Inference API)   — free Apache-2.0 model, needs HF_TOKEN
-  3. Pollinations.ai (FLUX backend, no key)       — always-available free fallback
-  4. Stability AI (Stable Diffusion 3)            — paid fallback, needs STABILITY_API_KEY
-  5. HTML injection of the winning image into the selected copy variant
+Primary provider: Meta Muse Image 1.0 (meta/muse-image-1.0-eval-20260824) via OpenRouter.
 
-FLUX.1-schnell is the official open-weight model from Black Forest Labs:
-  https://github.com/black-forest-labs/flux
-  HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-schnell
-  License: Apache-2.0 (free for commercial use)
+Key design principles:
+  - The OpenRouter API key is sourced ONLY from the per-session `image_api_key` state field
+    (entered in the Target Audience popup). It is never read from environment variables,
+    ensuring each user's key stays isolated and never leaks.
+  - Exactly ONE image is generated per campaign run (1600×1600 at MetaMuse's native resolution).
+  - No Pollinations.ai or any other free-tier fallback — if the key/model fails, the agent
+    raises a clear error so the user can fix the configuration.
 
-No stock photography is used. Every image is generated from the campaign's
-own creative prompt, so it is always on-brand and on-concept.
+Supported providers (all require key from Target Audience popup):
+  1. OpenRouter — meta/muse-image-1.0-eval-20260824 (default, ~$0.01/img, 22 s)
+  2. OpenRouter — google/gemini-2.0-flash-exp:free and any other OpenRouter model
+  3. Native Gemini API  (AIza... key)
+  4. OpenAI DALL-E       (sk-... key)
+  5. Together AI FLUX    (Together key)
+  6. HuggingFace FLUX    (hf_... token)
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from datetime import datetime, timezone
 from agents.llm.llm_provider import get_llm  # noqa: F401 — kept for future use
 from utils.logger import agent_log, step_banner, divider, kv
 from utils.kafka_bus import publish_event, Topics
+from agents.creative.poster_engine import run_poster_pipeline
 
 
 # ── Agent Node ────────────────────────────────────────────────────────────────
@@ -87,95 +91,126 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Image Generation — Ordered by cost (cheapest first) ─────────────────
-    image_model = state.get("image_model") or "pollinations-flux"
-    image_api_key = state.get("image_api_key") or ""
+    # ── Image model selection (same as before) ──────────────────────────────
+    image_model   = state.get("image_model")   or "google/gemini-2.5-flash-image"
+    image_api_key = (state.get("image_api_key") or "").strip()
 
-    if "pollinations" in image_model.lower() or image_model == "pollinations-flux":
-        # FREE — no API key required
-        agent_log("IMAGE", "Generating with Pollinations.ai FLUX (free)...")
-        img_b64 = _generate_pollinations_image(full_prompt)
-        source = "pollinations"
+    agent_log("IMAGE", f"Model: {image_model}")
 
-    elif "together" in image_model.lower():
-        # Together AI — FLUX.1-schnell-Free (free tier) or paid models
-        api_key = image_api_key or os.getenv("TOGETHER_API_KEY", "")
-        if not api_key:
-            agent_log("IMAGE", "No Together API key — falling back to free Pollinations.ai")
-            img_b64 = _generate_pollinations_image(full_prompt)
-            source = "pollinations"
+    # ── Dispatch to the correct image generation backend ──────────────────
+    def _dispatch_image(prompt_str: str, api_key: str, model: str) -> str | None:
+        """Route to the correct backend based on model name."""
+        ml = model.lower()
+        if (
+            ml.startswith("meta/") or ml.startswith("google/")
+            or "openrouter" in ml
+            or ("/" in model and "black-forest" not in ml)
+        ):
+            if not api_key:
+                agent_log("IMAGE", "⚠ OpenRouter key missing — skipping image")
+                return None
+            return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
+        elif "gemini" in ml:
+            if not api_key: return None
+            b64, _ = _generate_gemini_image(prompt_str, api_key=api_key, model=model)
+            return b64
+        elif "dall-e" in ml:
+            if not api_key: return None
+            return _generate_openai_image(prompt_str, api_key=api_key, model=model)
+        elif "together" in ml:
+            if not api_key: return None
+            return _generate_together_image(prompt_str, api_key=api_key, model=model)
+        elif "black-forest" in ml or "flux" in ml:
+            if not api_key: return None
+            return _generate_flux_schnell_image(prompt_str, api_key=api_key, model=model)
         else:
-            agent_log("IMAGE", f"Generating with Together AI ({image_model})...")
-            img_b64 = _generate_together_image(full_prompt, api_key=api_key, model=image_model)
-            source = "together"
-            if not img_b64:
-                agent_log("IMAGE", "Together AI failed — falling back to Pollinations.ai")
-                img_b64 = _generate_pollinations_image(full_prompt)
-                source = "pollinations"
+            if not api_key: return None
+            return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
 
-    elif "dall-e" in image_model.lower():
-        api_key = image_api_key or os.getenv("OPENAI_API_KEY", "")
-        if not api_key:
-            agent_log("IMAGE", "No OpenAI key for DALL-E — falling back to free Pollinations.ai")
-            img_b64 = _generate_pollinations_image(full_prompt)
-            source = "pollinations"
-        else:
-            agent_log("IMAGE", f"Generating with OpenAI {image_model}...")
-            img_b64 = _generate_openai_image(full_prompt, api_key=api_key, model=image_model)
-            source = "openai"
-            if not img_b64:
-                agent_log("IMAGE", "OpenAI DALL-E failed — falling back to Pollinations.ai")
-                img_b64 = _generate_pollinations_image(full_prompt)
-                source = "pollinations"
+    # ── 3-STEP POSTER PIPELINE ────────────────────────────────────────────
+    # Step 1: Creative Director LLM  → JSON poster brief (copy + layout + image_prompt)
+    # Step 2: Image model             → background art (no text/logo)
+    # Step 3: Pillow compositor       → overlays headline / subheadline / CTA / badge / logo
+    # Falls back to direct image generation if Creative Director is unavailable.
+    poster_b64 = None
+    poster_brief = None
+    logo_b64 = state.get("brand_logo_base64") or None  # optional user-uploaded logo
 
-    elif "openrouter" in image_model.lower() or image_model.lower().startswith("google/"):
-        api_key = image_api_key or os.getenv("OPENROUTER_API_KEY", "")
-        if not api_key:
-            agent_log("IMAGE", "No OpenRouter key — falling back to free Pollinations.ai")
-            img_b64 = _generate_pollinations_image(full_prompt)
-            source = "pollinations"
-        else:
-            agent_log("IMAGE", f"Generating with OpenRouter ({image_model})...")
-            img_b64 = _generate_openrouter_image(full_prompt, api_key=api_key, model=image_model)
-            source = "openrouter"
-            if not img_b64:
-                agent_log("IMAGE", "OpenRouter failed — falling back to Pollinations.ai")
-                img_b64 = _generate_pollinations_image(full_prompt)
-                source = "pollinations"
-
-    elif "gemini" in image_model.lower():
-        agent_log("IMAGE", f"Generating with Gemini ({image_model})...")
-        img_b64, total_token_usage = _generate_gemini_image(full_prompt, model=image_model)
-        source = "gemini"
-        if not img_b64:
-            img_b64 = _generate_pollinations_image(full_prompt)
-            source = "pollinations"
-
-    elif "black-forest" in image_model.lower() or "flux" in image_model.lower():
-        # HuggingFace FLUX (needs hf_ token)
-        api_key = image_api_key or os.getenv("HF_TOKEN", "")
-        if not api_key:
-            agent_log("IMAGE", "No HF token — using free Pollinations.ai")
-            img_b64 = _generate_pollinations_image(full_prompt)
-            source = "pollinations"
-        else:
-            img_b64 = _generate_flux_schnell_image(full_prompt, api_key=api_key, model=image_model)
-            source = "flux-hf"
-            if not img_b64:
-                img_b64 = _generate_pollinations_image(full_prompt)
-                source = "pollinations"
-
+    if state.get("llm_api_key") and image_api_key:
+        agent_log("IMAGE", "Running 3-step poster pipeline (Creative Director → BG image → Compose)...")
+        try:
+            poster_b64, poster_brief = run_poster_pipeline(
+                state=state,
+                image_gen_fn=_dispatch_image,
+                image_model=image_model,
+                image_api_key=image_api_key,
+                logo_b64=logo_b64,
+            )
+        except Exception as pe:
+            agent_log("IMAGE", f"Poster pipeline exception: {pe} — falling back to direct gen")
+            poster_b64 = None
+            poster_brief = None
     else:
-        # Unknown model — use free Pollinations.ai
-        agent_log("IMAGE", f"Unknown model '{image_model}' — using free Pollinations.ai")
-        img_b64 = _generate_pollinations_image(full_prompt)
-        source = "pollinations"
+        agent_log("IMAGE", "Skipping Creative Director (no LLM key or image key) — direct image gen")
 
-    if not img_b64:
-        raise ValueError(f"{image_model} image generation failed or returned empty. No fallback allowed.")
-        
-    agent_log("IMAGE", f"✅ {image_model} generation successful")
-    img_type = "CID"
+    # ── Use poster result if successful ──────────────────────────────────
+    if poster_b64:
+        img_b64  = poster_b64
+        img_type = "CID"
+        source   = f"poster-pipeline/{image_model}"
+        # Enrich creative_concept from brief if available
+        if poster_brief:
+            creative_concept = poster_brief.get("big_idea", creative_concept)
+            style    = poster_brief.get("concept_type", style)
+            palette  = list(poster_brief.get("palette", {}).values())
+            agent_log("IMAGE", f"✅ Poster pipeline success — {poster_brief.get('size_px','?')} "
+                               f"[{style}] '{poster_brief.get('copy',{}).get('headline','')}' ")
+    else:
+        # ── Fallback: direct image generation (original behaviour) ────────
+        agent_log("IMAGE", "Poster pipeline unavailable — direct image generation")
+
+        if not image_api_key:
+            err_msg = (
+                f"Image generation with '{image_model}' requires an API key. "
+                "Please enter your key in the Target Audience popup → Image API Key field."
+            )
+            agent_log("IMAGE", f"⚠ {err_msg}")
+            return {
+                **state,
+                "image_result": {"has_image": False, "source": "none", "error": err_msg,
+                                  "image_url": None, "image_preview_url": None,
+                                  "image_base64": None, "image_type": None,
+                                  "banner_options": [],
+                                  "generated_at": datetime.now(timezone.utc).isoformat()},
+                "current_step": "compliance_agent",
+                "trace": state.get("trace", []) + [{"agent": "image_agent", "status": "warning", "error": err_msg}],
+            }
+
+        img_b64 = _dispatch_image(full_prompt, image_api_key, image_model)
+        source  = "openrouter"
+        img_type = "CID"
+
+        if not img_b64:
+            err_msg = (
+                f"Image generation with '{image_model}' returned no result. "
+                "Possible causes: (1) Model not enabled in your OpenRouter account — "
+                "go to openrouter.ai, find the model and click 'Enable'. "
+                "(2) Insufficient credits. (3) Model ID typo. "
+                "The campaign will continue without an image."
+            )
+            agent_log("IMAGE", f"⚠ {err_msg}")
+            return {
+                **state,
+                "image_result": {"has_image": False, "source": "none", "error": err_msg,
+                                  "image_url": None, "image_preview_url": None,
+                                  "image_base64": None, "image_type": None,
+                                  "banner_options": [],
+                                  "generated_at": datetime.now(timezone.utc).isoformat()},
+                "current_step": "compliance_agent",
+                "trace": state.get("trace", []) + [{"agent": "image_agent", "status": "warning", "error": err_msg}],
+            }
+
+    agent_log("IMAGE", f"✅ Final image ready — source={source}")
 
     return _finalize(
         state, copy_data, winner, variants,
@@ -210,9 +245,9 @@ def _generate_visual_concept_specs(
     default_palette = ["#0F172A", "#3B82F6", "#F59E0B", "#10B981"]
 
     # Generates 2 specific banner options tailored directly to user_intent
+    # One image only — MetaMuse native output is 1600×1600
     angles = [
-        ("v1", "1. Product Hero Banner (1200x628)", f"Luxury high-end studio hero shot of {product_prompt}, sleek reflective surface, dark dramatic backdrop, volumetric lighting, photorealistic 8k detail", copy_headline[:40], "LinkedIn / Meta Landscape (1200x628)", 1200, 628),
-        ("v2", "2. Lifestyle Square (1080x1080)", f"Aspirational lifestyle photography of {product_prompt} in natural daylight setting, authentic mood, vibrant atmosphere", "✨ EXPERIENCE THE DIFFERENCE", "Instagram / Facebook Square (1080x1080)", 1080, 1080),
+        ("v1", "Campaign Visual (1600×1600)", f"Luxury high-end studio hero shot of {product_prompt}, sleek reflective surface, dark dramatic backdrop, volumetric lighting, photorealistic 8k detail", copy_headline[:40], "MetaMuse Square (1600×1600)", 1600, 1600),
     ]
 
     try:
@@ -285,7 +320,8 @@ def _generate_visual_concept_specs(
         agent_log("IMAGE", f"LLM visual concept extraction: {e}")
 
     banner_options = []
-    negative = "text, watermark, logo, words, letters, typography, blurry, low quality, pixelated, distorted, ugly, amateur, overexposed, underexposed, noisy, grain, jpeg artifacts, cartoon, anime, illustration"
+    # Images are generated via MetaMuse/OpenRouter API — no pre-built URLs.
+    # The actual base64 image is stored in image_base64 / hero_image_base64.
     for bid, title, prompt_desc, overlay, fmt, w, h in angles:
         clean_p = (
             f"{prompt_desc}, "
@@ -294,19 +330,11 @@ def _generate_visual_concept_specs(
             "cinematic composition, editorial quality, high production value, "
             "photorealistic, commercial product photography"
         )
-        q_str = _up.quote(clean_p[:800])
-        neg_str = _up.quote(negative)
-        seed = abs(hash(prompt_desc)) % 9999999
-        pollinations_url = (
-            f"https://image.pollinations.ai/prompt/{q_str}"
-            f"?width={w}&height={h}&model=flux&nologo=true&safe=true"
-            f"&negative={neg_str}&seed={seed}&enhance=true"
-        )
         banner_options.append({
             "id": bid,
             "title": title,
             "prompt": clean_p,
-            "url": pollinations_url,
+            "url": None,   # populated in _finalize once the image is generated
             "overlay": overlay,
             "format": fmt,
             "w": w,
@@ -347,13 +375,14 @@ def _finalize(
     elif not img_b64:
         agent_log("IMAGE", "⚠ No base64 CID image attached")
 
+    # Build a data-URI preview from the generated base64 image so the frontend
+    # can render it immediately without a separate network request.
     img_preview_url = None
-    if banner_options and len(banner_options) > 0:
-        img_preview_url = banner_options[0].get("url")
-    elif full_prompt:
-        import urllib.parse as _up
-        q = _up.quote(full_prompt[:500])
-        img_preview_url = f"https://image.pollinations.ai/prompt/{q}?width=1200&height=628&model=flux&nologo=true&safe=true"
+    if img_b64:
+        img_preview_url = f"data:image/jpeg;base64,{img_b64}"
+        # Also back-fill the first banner_option's url so the UI gallery shows it
+        if banner_options:
+            banner_options[0]["url"] = img_preview_url
 
     updated_variants = variants
     if isinstance(winner, dict) and variants:
@@ -514,16 +543,21 @@ def _build_generation_prompt(concept_prompt: str, plan_data: dict, user_intent: 
 
 # ── Provider 1: Gemini Imagen ─────────────────────────────────────────────────
 
-def _generate_gemini_image(full_prompt: str, model: str = "gemini-3.1-flash-image") -> tuple[str | None, int]:
+def _generate_gemini_image(
+    full_prompt: str,
+    model: str = "gemini-2.0-flash-exp",
+    api_key: str = "",
+) -> tuple[str | None, int]:
     """
-    Call Gemini's image generation endpoint.
+    Call Gemini's native image generation endpoint.
+    api_key must be supplied by the caller (from the Target Audience popup state).
     Returns (base64_string | None, token_count).
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_gemini", 100
 
-    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
+        agent_log("IMAGE", "_generate_gemini_image: no api_key supplied")
         return None, 0
 
     clean_model = model.replace("google/", "")
@@ -562,28 +596,185 @@ def _generate_gemini_image(full_prompt: str, model: str = "gemini-3.1-flash-imag
         return None, 0
 
 
-# ── Provider 2: OpenAI / OpenRouter ───────────────────────────────────────────────
+# ── OpenRouter Image Generation (primary provider) ──────────────────────────
+#
+# OpenRouter exposes image generation via TWO different endpoints:
+#
+#  A) /api/v1/images/generations  (OpenAI-style images API)
+#     → Used by: meta/, recraft/, black-forest-labs/flux*, x-ai/grok-imagine*,
+#                sourceful/riverflow*, krea/, bytedance-seed/seedream*
+#
+#  B) /api/v1/chat/completions  with  modalities: ["image"]
+#     → Used by: google/gemini-*-image, openai/gpt-image-*, qwen/qwen-image-*,
+#                microsoft/mai-image-*, tencent/hy-image-*
+#
+# _generate_openrouter_image() auto-detects which endpoint to use based on
+# model provider prefix, and falls back to the other endpoint if the first fails.
+# ———————————————————————————————————————————————————————————————————
+
+# Models that use Chat Completions + modalities:["image"]
+_CHAT_MODALITY_PREFIXES = (
+    "google/",
+    "openai/gpt-image",
+    "openai/gpt-5",
+    "qwen/qwen-image",
+    "microsoft/mai-image",
+    "tencent/hy-image",
+)
+
+# Models that use /images/generations endpoint
+_IMAGES_API_PREFIXES = (
+    "meta/",
+    "recraft/",
+    "black-forest-labs/flux",
+    "x-ai/grok-imagine",
+    "sourceful/riverflow",
+    "krea/",
+    "bytedance-seed/",
+)
+
 
 def _generate_openrouter_image(
     full_prompt: str,
     api_key: str,
-    model: str
+    model: str,
 ) -> str | None:
     """
-    Generate an image using OpenRouter's Images Generations API (OpenAI-compatible).
-    Endpoint: https://openrouter.ai/api/v1/images/generations
+    Smart router for OpenRouter image generation.
+    Automatically selects the correct endpoint (chat modalities vs images API)
+    based on model provider, with fallback to the alternative endpoint.
+
+    api_key is ALWAYS supplied by the caller (from the Target Audience popup) —
+    never read from environment variables.
     Returns base64-encoded image bytes, or None on failure.
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
         return "mock_base64_openrouter"
 
-    # Try OpenRouter /images/generations first
+    m_lower = model.lower()
+    use_chat = any(m_lower.startswith(p) for p in _CHAT_MODALITY_PREFIXES)
+
+    if use_chat:
+        agent_log("IMAGE", f"Routing {model} → chat/completions with modalities:[image]")
+        result = _openrouter_chat_modality(full_prompt, api_key, model)
+        if result:
+            return result
+        agent_log("IMAGE", f"{model}: chat modality failed, trying /images/generations fallback...")
+        return _openrouter_images_api(full_prompt, api_key, model)
+    else:
+        agent_log("IMAGE", f"Routing {model} → /images/generations")
+        result = _openrouter_images_api(full_prompt, api_key, model)
+        if result:
+            return result
+        agent_log("IMAGE", f"{model}: images/generations failed, trying chat modality fallback...")
+        return _openrouter_chat_modality(full_prompt, api_key, model)
+
+
+def _openrouter_chat_modality(full_prompt: str, api_key: str, model: str) -> str | None:
+    """
+    Generate an image via OpenRouter's Chat Completions endpoint with modalities:[image].
+    Used by: google/gemini-*-image, openai/gpt-image-*, qwen/qwen-image-*
+    Parses image data from content parts (image_url or inlineData).
+    """
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    payload = {
+        "model": model,
+        "modalities": ["image"],
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    f"Generate a high-quality professional marketing image for advertising use. "
+                    f"The image must be photorealistic, cinematic, and brand-ready. NO text, "
+                    f"watermarks, or logos in the image. Scene: {full_prompt[:1400]}"
+                ),
+            }
+        ],
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://marketos.ai",
+                "X-Title": "MarketOS",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode())
+
+        choices = data.get("choices", [])
+        if not choices:
+            agent_log("IMAGE", f"chat modality: no choices in response: {str(data)[:300]}")
+            return None
+
+        message   = choices[0].get("message", {})
+        content   = message.get("content", "")
+
+        # Content may be a list of typed parts, or a bare string
+        parts = content if isinstance(content, list) else []
+
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+
+            # Format 1: image_url with data URI  (OpenAI-style)
+            if part.get("type") == "image_url":
+                img_url = part.get("image_url", {}).get("url", "")
+                if img_url.startswith("data:"):
+                    # data:image/png;base64,BASE64DATA
+                    b64 = img_url.split(",", 1)[-1]
+                    agent_log("IMAGE", f"chat modality ({model}): got data-URI image ✅")
+                    return b64
+                elif img_url:
+                    agent_log("IMAGE", f"chat modality: downloading image from URL...")
+                    img_req = urllib.request.Request(img_url, headers={"User-Agent": "MarketOS/1.0"})
+                    with urllib.request.urlopen(img_req, timeout=60) as img_resp:
+                        return base64.b64encode(img_resp.read()).decode("utf-8")
+
+            # Format 2: inlineData  (Gemini-native via OpenRouter)
+            inline = part.get("inline_data") or part.get("inlineData") or {}
+            if inline.get("data"):
+                agent_log("IMAGE", f"chat modality ({model}): got inlineData image ✅")
+                return inline["data"]
+
+        agent_log("IMAGE", f"chat modality ({model}): no image found in parts: {str(data)[:400]}")
+        return None
+
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="ignore")[:500]
+        except Exception:
+            body = str(e)
+        agent_log("IMAGE", f"chat modality HTTP {e.code} for '{model}': {body}")
+        return None
+
+    except Exception as e:
+        agent_log("IMAGE", f"chat modality error for '{model}': {e}")
+        return None
+
+
+def _openrouter_images_api(full_prompt: str, api_key: str, model: str) -> str | None:
+    """
+    Generate an image via OpenRouter's /images/generations endpoint (OpenAI-style).
+    Used by: meta/, recraft/, black-forest-labs/flux*, x-ai/grok-imagine*, bytedance-seed/*
+    """
     url = "https://openrouter.ai/api/v1/images/generations"
+
+    # MetaMuse native output is 1600x1600; others default to 1024x1024
+    if "muse" in model.lower() or model.lower().startswith("meta/"):
+        size = "1600x1600"
+    else:
+        size = "1024x1024"
+
     payload = {
         "model": model,
         "prompt": full_prompt[:1000],
         "n": 1,
-        "size": "1024x1024",
+        "size": size,
         "response_format": "b64_json",
     }
 
@@ -596,37 +787,36 @@ def _generate_openrouter_image(
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://marketos.ai",
                 "X-Title": "MarketOS",
-            }
+            },
         )
-        with urllib.request.urlopen(req, timeout=90) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode())
 
-        # Try b64_json first
         b64 = data.get("data", [{}])[0].get("b64_json")
         if b64:
-            agent_log("IMAGE", f"OpenRouter ({model}) returned b64 image ✅")
+            agent_log("IMAGE", f"/images/generations ({model}) returned b64 image ✅ ({size})")
             return b64
 
-        # Try URL fallback
         img_url = data.get("data", [{}])[0].get("url")
         if img_url:
-            agent_log("IMAGE", f"OpenRouter returned image URL: {img_url[:80]}")
+            agent_log("IMAGE", f"/images/generations: downloading from URL...")
             img_req = urllib.request.Request(img_url, headers={"User-Agent": "MarketOS/1.0"})
-            with urllib.request.urlopen(img_req, timeout=30) as img_resp:
+            with urllib.request.urlopen(img_req, timeout=60) as img_resp:
                 return base64.b64encode(img_resp.read()).decode("utf-8")
 
-        agent_log("IMAGE", f"OpenRouter images API returned no data: {str(data)[:200]}")
+        agent_log("IMAGE", f"/images/generations ({model}): no usable data: {str(data)[:300]}")
+        return None
+
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="ignore")[:500]
+        except Exception:
+            body = str(e)
+        agent_log("IMAGE", f"/images/generations HTTP {e.code} for '{model}': {body}")
         return None
 
     except Exception as e:
-        agent_log("IMAGE", f"OpenRouter images API error: {e}")
-
-    # Fallback: free Pollinations.ai (no key needed)
-    agent_log("IMAGE", "Falling back to Pollinations.ai for image generation...")
-    try:
-        return _generate_pollinations_image(full_prompt)
-    except Exception as e2:
-        agent_log("IMAGE", f"Pollinations fallback also failed: {e2}")
+        agent_log("IMAGE", f"/images/generations error for '{model}': {e}")
         return None
 
 def _generate_openai_image(
@@ -703,7 +893,7 @@ def _generate_flux_schnell_image(
         return None
 
 
-# ── Provider 3: Pollinations.ai ───────────────────────────────────────────────
+# ── Together AI Image Generation ─────────────────────────────────────────────
 
 def _generate_together_image(
     full_prompt: str,
@@ -765,48 +955,10 @@ def _generate_together_image(
         return None
 
 
-def _generate_pollinations_image(
-    full_prompt: str,
-    width:  int = 1200,
-    height: int = 628,
-) -> str | None:
-    """
-    Generate an image via Pollinations.ai — free, open-source, no API key,
-    no signup. Uses Flux under the hood.
-
-    https://image.pollinations.ai  — no SLA; used as fallback, not primary.
-    Returns base64-encoded image bytes, or None on failure.
-    """
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return "mock_base64_pollinations"
-
-    # Build high-quality Pollinations URL with flux model (free tier — flux-pro requires payment)
-    negative = (
-        "text, watermark, logo, words, letters, typography, blurry, low resolution, "
-        "pixelated, distorted, deformed, ugly, amateur, overexposed, underexposed, "
-        "noise, grain, jpeg artifacts, cartoon, anime, illustration, painting"
-    )
-    q       = urllib.parse.quote(full_prompt[:1000])
-    neg_q   = urllib.parse.quote(negative)
-    seed    = abs(hash(full_prompt[:100])) % 9999999
-    url = (
-        f"https://image.pollinations.ai/prompt/{q}"
-        f"?width={width}&height={height}&model=flux&nologo=true&safe=true"
-        f"&seed={seed}"
-    )
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "MarketOS/1.0"})
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            raw = resp.read()
-        return base64.b64encode(raw).decode("utf-8")
-
-    except urllib.error.HTTPError as e:
-        agent_log("IMAGE", f"Pollinations HTTP {e.code}: {e.reason}")
-        return None
-    except Exception as e:
-        agent_log("IMAGE", f"Pollinations exception: {e}")
-        return None
+# _generate_pollinations_image has been removed.
+# All image generation now goes through MetaMuse (meta/muse-image-1.0-eval-20260824)
+# or another provider selected in the Target Audience popup, using the
+# OpenRouter API key entered there. There is no free fallback.
 
 
 # ── Provider 4: Stability AI (Stable Diffusion 3) ────────────────────────────

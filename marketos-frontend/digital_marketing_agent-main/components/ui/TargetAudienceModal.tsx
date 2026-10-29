@@ -121,7 +121,7 @@ export function TargetAudienceModal({
   const [llmModel, setLlmModel]             = useState("gpt-4o-mini");
   const [customModel, setCustomModel]       = useState("");
   const [llmApiKey, setLlmApiKey]           = useState("");
-  const [imageModel, setImageModel]         = useState("pollinations-flux");
+  const [imageModel, setImageModel]         = useState("google/gemini-2.5-flash-image");
   const [customImageModel, setCustomImageModel] = useState("");
   const [imageApiKey, setImageApiKey]       = useState("");
   const [sameKeyForImage, setSameKeyForImage] = useState(true); // auto-sync image key from LLM key
@@ -178,9 +178,12 @@ export function TargetAudienceModal({
     if (userEditedImageKey.current) return;
 
     let autoKey = "";
-    if (imageModel.includes("riverflow") || imageModel.includes("sourceful"))  autoKey = savedApiKeys.openrouter ?? "";
-    else if (imageModel.includes("google/"))                                    autoKey = savedApiKeys.openrouter ?? "";
-    else if (imageModel.includes("dall-e"))                                    autoKey = savedApiKeys.openai     ?? "";
+    // OpenRouter models (meta/, google/, muse, slash-separated)
+    if (imageModel.includes("meta/") || imageModel.includes("google/") || imageModel.includes("muse") || (imageModel.includes("/") && !imageModel.includes("black-forest")))
+      autoKey = savedApiKeys.openrouter ?? "";
+    else if (imageModel.includes("dall-e"))
+      autoKey = savedApiKeys.openai ?? "";
+    // FLUX/HF and Together don't have a saved key slot by default
 
     setImageApiKey(autoKey);
   }, [imageModel, savedApiKeys, llmApiKey, sameKeyForImage]);
@@ -325,10 +328,12 @@ export function TargetAudienceModal({
       const effectiveImageKey = sameKeyForImage ? llmApiKey : imageApiKey;
 
       // 3. Verify Image Key only if different from already-verified LLM key
-      let imgProvider = "openai"; // default for dall-e
-      if (imageModel.includes("dall-e"))                                         imgProvider = "openai";
+      // Image provider detection
+      let imgProvider = "openrouter"; // MetaMuse and all OpenRouter models use openrouter
+      if (imageModel.includes("dall-e"))                                           imgProvider = "openai";
       else if (imageModel.includes("FLUX") || imageModel.includes("black-forest")) imgProvider = "black-forest-labs";
-      else if (imageModel.includes("riverflow") || imageModel.includes("sourceful") || imageModel.includes("google/")) imgProvider = "openrouter";
+      else if (imageModel.includes("together"))                                    imgProvider = "together";
+      // meta/, google/, muse, and any slash-model → openrouter (already set as default)
 
       if (!sameKeyForImage && effectiveImageKey) {
         toast.info("Verifying Image API Key...");
@@ -675,19 +680,31 @@ export function TargetAudienceModal({
                   }}
                   className="w-full bg-white border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs shadow-[2px_2px_0_0_#000] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2"
                 >
-                  <optgroup label="🆓 Free — No API Key Required">
-                    <option value="pollinations-flux">Pollinations.ai FLUX — Free ✓ (No Key Needed)</option>
+                  {/* ── FREE Models ──────────────────────────────── */}
+                  <optgroup label="🆕 FREE — No Cost (OpenRouter Key Required)">
+                    <option value="google/gemini-2.5-flash-image">Google Gemini 2.5 Flash Image — ~$0.0000003/img ⚡★ Default</option>
+                    <option value="google/gemini-3-pro-image">Google Gemini 3 Pro Image — ~$0.000002/img 🏆</option>
+                    <option value="bytedance-seed/seedream-5-0-flash">ByteDance Seedream 5.0 Flash — FREE 🆓</option>
+                    <option value="bytedance-seed/seedream-5-0-lite">ByteDance Seedream 5.0 Lite — FREE 🆓</option>
+                    <option value="qwen/qwen-image-2.1-turbo">Qwen Image 2.1 Turbo — FREE 🆓</option>
+                    <option value="qwen/qwen-image-2.1-pro">Qwen Image 2.1 Pro — FREE 🆓</option>
                   </optgroup>
-                  <optgroup label="🔗 OpenRouter — Gemini">
-                    <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (via OpenRouter)</option>
+                  {/* ── Paid OpenRouter Models ────────────────────── */}
+                  <optgroup label="💰 Paid — OpenRouter Key Required">
+                    <option value="meta/muse-image-1.0-eval-20260824">Meta Muse Image 1.0 — ~$0.010/img · 1600×1600 (needs enabling)</option>
+                    <option value="qwen/qwen-image-3">Qwen Image 3 — ~$0.003/img</option>
+                    <option value="x-ai/grok-imagine-image-2.0">X-AI Grok Imagine 2.0 — ~$0.01/img</option>
                   </optgroup>
-                  <optgroup label="🆓 Free Tier — Together API Key">
-                    <option value="together-flux-free">Together AI — FLUX.1-schnell (Free Tier)</option>
-                  </optgroup>
+                  {/* ── OpenAI Key ────────────────────────────────── */}
                   <optgroup label="💰 Low Cost — OpenAI Key">
                     <option value="dall-e-2">DALL-E 2 (~$0.018/image)</option>
                     <option value="dall-e-3">DALL-E 3 (~$0.040/image)</option>
                   </optgroup>
+                  {/* ── Together Free Tier ────────────────────────── */}
+                  <optgroup label="🆓 Free Tier — Together API Key">
+                    <option value="together-flux-free">Together AI — FLUX.1-schnell (Free Tier)</option>
+                  </optgroup>
+                  {/* ── HuggingFace ───────────────────────────────── */}
                   <optgroup label="HuggingFace — hf_ Token">
                     <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell via HuggingFace</option>
                     <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev via HuggingFace</option>
@@ -729,28 +746,34 @@ export function TargetAudienceModal({
                 <input
                   type="password"
                   value={sameKeyForImage ? llmApiKey : imageApiKey}
-                  disabled={sameKeyForImage || imageModel === "pollinations-flux"}
+                  disabled={sameKeyForImage}
                   onChange={(e) => {
-                    if (!sameKeyForImage && imageModel !== "pollinations-flux") {
+                    if (!sameKeyForImage) {
                       userEditedImageKey.current = true;
                       setImageApiKey(e.target.value);
                     }
                   }}
                   placeholder={
-                    imageModel === "pollinations-flux" ? "No key needed — Pollinations.ai is free! ✓" :
                     sameKeyForImage ? "(Using same key as LLM above)" :
+                    (imageModel.includes("meta/") || imageModel.includes("muse") || imageModel.includes("google/") || imageModel.includes("qwen/") || imageModel.includes("bytedance") || imageModel.includes("x-ai/")) ? "Paste OpenRouter API Key (sk-or-v1-...)" :
                     imageModel.includes("together") ? "Paste Together AI Key (from api.together.xyz)" :
                     imageModel.includes("dall-e") ? "Paste OpenAI API Key (sk-...)" :
                     (imageModel.includes("FLUX") || imageModel.includes("black-forest")) ? "Paste HuggingFace Token (hf_...)" :
-                    "Enter API key for image generation..."
+                    "Paste OpenRouter API Key (sk-or-v1-...)"
                   }
-                  className={`w-full border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2 ${(sameKeyForImage || imageModel === "pollinations-flux") ? "bg-gray-100 cursor-not-allowed opacity-70" : "bg-white"}`}
+                  className={`w-full border-[3px] border-black rounded-none px-3 py-2 font-medium font-mono text-xs text-black shadow-[2px_2px_0_0_#000] placeholder:text-gray-400 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[#00E0FF] focus-visible:outline-offset-2 ${sameKeyForImage ? "bg-gray-100 cursor-not-allowed opacity-70" : "bg-white"}`}
                 />
                 {sameKeyForImage && llmApiKey && (
                   <p className="font-mono text-[8px] text-green-700 font-bold">✓ Image key synced from LLM key above</p>
                 )}
-                {imageModel === "pollinations-flux" && (
-                  <p className="font-mono text-[8px] text-blue-600 font-bold">✓ Pollinations.ai is completely free — no key needed</p>
+                {!sameKeyForImage && (imageModel.includes("google/") && imageModel.includes("gemini-2.5-flash-image")) && (
+                  <p className="font-mono text-[8px] text-green-700 font-bold">⚡ Gemini 2.5 Flash Image · ~$0.0000003/img · No enabling needed · via OpenRouter</p>
+                )}
+                {!sameKeyForImage && (imageModel.includes("bytedance") || imageModel.includes("qwen/qwen-image-2")) && (
+                  <p className="font-mono text-[8px] text-green-700 font-bold">🆓 This model is completely FREE via OpenRouter (no per-image cost)</p>
+                )}
+                {!sameKeyForImage && (imageModel.includes("meta/") || imageModel.includes("muse")) && (
+                  <p className="font-mono text-[8px] text-orange-600 font-bold">⚠ Meta Muse requires enabling on openrouter.ai first</p>
                 )}
               </div>
 

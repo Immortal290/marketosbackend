@@ -59,17 +59,10 @@ function extractSubjectFromPrompt(prompt: string): string {
   return "Featured Product";
 }
 
-/** Build a Pollinations.ai URL for AI-generated on-brand images. Free, no API key, Flux model. */
-function pollinationsUrl(prompt: string, width: number, height: number): string {
-  const cleanPrompt = prompt.slice(0, 450);
-  const encoded = encodeURIComponent(
-    `${cleanPrompt}. High production commercial visual, professional studio lighting. NO text, words, or letters in image.`
-  );
-  return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&safe=true&seed=${Math.floor(Math.random() * 99999)}`;
-}
-
 /**
- * Generate 6 campaign-specific banner options dynamically derived from user intent.
+ * Generate a single campaign-specific banner spec for the MetaMuse agent output.
+ * Real image URLs are filled in by the Python image agent (OpenRouter/MetaMuse);
+ * the mock payload uses url:null so the UI shows a loading placeholder.
  */
 function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   const cleanSubject = subject || "Featured Product";
@@ -79,32 +72,27 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   const isTech = /tech|app|software|ai|saas|digital|mobile|phone|laptop|code|data|cloud|platform|gadget/i.test(promptContext);
   const isOrganic = /organic|green|tea|nature|herbal|natural|eco|clean|skincare|wellness|food|vegan|beauty/i.test(promptContext);
   const isFashion = /fashion|style|wear|cloth|apparel|watch|jewel|luxury|shoes|bag|design/i.test(promptContext);
-
   const isCar = /car|automobile|vehicle|automotive|sedan|suv|truck|bike|motorcycle|ev|electric vehicle|sports car/i.test(promptContext);
 
-  let visualContext = "";
-  if (isCar) {
-    visualContext = "premium automotive photography, gleaming showroom, dramatic side-profile or 3/4 angle, studio backlighting with motion blur background";
-  } else if (isFestive) {
-    visualContext = "festive celebration atmosphere, elegant holiday decorative background";
-  } else if (isTech) {
-    visualContext = "modern high-tech studio environment, sleek lighting";
-  } else if (isOrganic) {
-    visualContext = "natural botanical setting, soft fresh ambient daylight";
-  } else if (isFashion) {
-    visualContext = "high-fashion editorial studio setting, premium texture and lighting";
-  } else {
-    visualContext = "professional commercial advertisement setup, balanced studio lighting";
-  }
+  let visualContext = "professional commercial advertisement setup, balanced studio lighting";
+  if (isCar)     visualContext = "premium automotive photography, gleaming showroom, dramatic studio backlighting";
+  else if (isFestive)  visualContext = "festive celebration atmosphere, elegant holiday decorative background";
+  else if (isTech)     visualContext = "modern high-tech studio environment, sleek lighting";
+  else if (isOrganic)  visualContext = "natural botanical setting, soft fresh ambient daylight";
+  else if (isFashion)  visualContext = "high-fashion editorial studio setting, premium texture and lighting";
 
-  const angles = [
-    { prompt: `${cleanSubject}, hero product photograph, ${promptContext}, ${visualContext}`, w: 1200, h: 628 },
-    { prompt: `${cleanSubject} in real-life lifestyle scene, ${promptContext}, authentic natural mood`, w: 1080, h: 1080 },
-  ];
-
+  // One banner — MetaMuse native 1600×1600
   return [
-    { id: "v1", title: "1. Official Product Banner (1200x628)", url: pollinationsUrl(angles[0].prompt, angles[0].w, angles[0].h), overlay: `🔥 INTRODUCING ${cleanSubject.toUpperCase()} — CLAIM OFFER`,   format: "LinkedIn / Meta Landscape (1200x628)" },
-    { id: "v2", title: "2. Lifestyle Square (1080x1080)",        url: pollinationsUrl(angles[1].prompt, angles[1].w, angles[1].h), overlay: `✨ THE ${cleanSubject.toUpperCase()} EXPERIENCE`,             format: "Instagram / Facebook Square (1080x1080)" },
+    {
+      id: "v1",
+      title: "Campaign Visual (1600×1600)",
+      url: null,   // populated by MetaMuse/OpenRouter image agent at runtime
+      overlay: `🔥 ${cleanSubject.toUpperCase()} — CLAIM OFFER`,
+      format: "MetaMuse Square (1600×1600)",
+      prompt: `${cleanSubject}, hero product photograph, ${promptContext}, ${visualContext}`,
+      w: 1600,
+      h: 1600,
+    },
   ];
 }
 
@@ -143,17 +131,17 @@ async function getAgentMockPayload(
       campaign_concept: `${subject}: Visual Campaign Assets`,
       creative_direction: `High-Impact Brand Visuals for ${subject}`,
       visual_theme: `Commercial Photography for ${subject}`,
-      image_preview_url: banner_options[0].url,
+      image_preview_url: banner_options[0].url,   // null until real agent runs
       ad_banner_specs: {
-        dimensions: "1200x628 (Landscape) | 1080x1080 (Square) | 1080x1920 (Story)",
+        dimensions: "1600x1600 (MetaMuse native)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: `AI-generated brand visual for ${subject}`,
+        primary_visual: `Meta Muse AI-generated brand visual for ${subject}`,
       },
       color_palette: ["#111827 (Obsidian)", "#3B82F6 (Vibrant Blue)", "#F59E0B (Amber Gold)", "#FFFFFF (Pure White)"],
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
-      total_variants_generated: 2,
-      source: "pollinations-flux (AI-generated, on-brand)",
+      total_variants_generated: 1,
+      source: "meta/muse-image-1.0-eval-20260824 via OpenRouter (AI-generated, on-brand)",
     };
   }
 
@@ -574,7 +562,7 @@ export async function POST(req: NextRequest) {
       console.log(`[AI Stream Proxy] Trying targetUrl: ${targetUrl}`);
       const abortCtrl = new AbortController();
       // 30s timeout — Python agents need 8-10s just for intent classification
-      const timeoutId = setTimeout(() => abortCtrl.abort(), 30000);
+      const timeoutId = setTimeout(() => abortCtrl.abort(), 300000); // 5 min — LLM calls take 30-80s each
       let res: Response;
       try {
         res = await fetch(targetUrl, {

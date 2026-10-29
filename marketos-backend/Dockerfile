@@ -38,6 +38,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install OpenSSL — required by Prisma to detect libssl version at runtime
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+
 # Production-only Node deps
 COPY package.json        ./
 COPY package-lock.json   ./

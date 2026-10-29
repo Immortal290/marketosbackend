@@ -435,7 +435,13 @@ async def run_query_stream(request: QueryRequest):
     active_llm_api_key.set(request.llm_api_key)
     active_llm_model.set(request.llm_model)
 
-    def event_generator():
+    async def event_generator():
+        # Emit an immediate heartbeat so the HTTP connection is established
+        # before any LLM calls (which can take 30-80 s each).
+        import json
+        yield (
+            f"data: {json.dumps({'stage': 'INIT', 'agent': 'MarketOS AI', 'status': 'starting', 'detail': 'Pipeline initialising...', 'data': {}, 'timestamp': __import__('datetime').datetime.utcnow().isoformat()})}\n\n"
+        )
         try:
             for event in orchestrate_query_stream(
                 user_query=request.query,
@@ -453,7 +459,6 @@ async def run_query_stream(request: QueryRequest):
             ):
                 yield event
         except Exception as e:
-            import json
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(

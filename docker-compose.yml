@@ -81,6 +81,9 @@ services:
       COMPOSIO_API_KEY:       ${COMPOSIO_API_KEY:-}
       TELEGRAM_BOT_TOKEN:     ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHANNEL_ID:    ${TELEGRAM_CHANNEL_ID:-}
+      # ── Google OAuth ────────────────────────────────────────────────────────
+      GOOGLE_CLIENT_ID:       ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET:   ${GOOGLE_CLIENT_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
@@ -207,13 +210,17 @@ services:
       start_period: 20s
     mem_limit: 512m
 
-  # ── Frontend (nginx static) ─────────────────────────────────────────────────
+  # ── Frontend (Next.js) ──────────────────────────────────────────────────────
   frontend:
     build:
       context: ./marketos-frontend/digital_marketing_agent-main
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: marketos_frontend
     restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:3000
     ports:
       - "8080:3000"
     depends_on:
