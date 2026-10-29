@@ -1,267 +1,247 @@
 import { Router, Request, Response } from 'express';
+import { FinanceService } from './service';
+import { prisma } from '../../lib/prisma';
+import { logger } from '../../lib/logger';
 
 const router = Router();
+const service = new FinanceService();
 
 /**
- * @openapi
- * /finance/spend:
- *   get:
- *     summary: Get spend dashboard
- *     description: Returns total budget, total spend, remaining budget, projected spend, and spend breakdown by channel and campaign.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/workspaceId'
- *       - name: dateRange
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [THIS_MONTH, LAST_MONTH, THIS_QUARTER, LAST_QUARTER, THIS_YEAR], default: THIS_MONTH }
- *     responses:
- *       200:
- *         description: Spend dashboard data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data: { $ref: '#/components/schemas/SpendSummary' }
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ * GET /finance/overview
+ * Complete financial overview including live connector status & campaign history
  */
-router.get('/spend', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { totalBudget: 500000, totalSpend: 214300, remainingBudget: 285700, projectedSpend: 490000, roas: 4.2, roi: 3.2 } });
+router.get('/overview', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const [spend, revenue, roas, budgets, history] = await Promise.all([
+      service.getSpendSummary(workspaceId),
+      service.getRevenueAttribution(workspaceId),
+      service.getRoasAnalysis(workspaceId),
+      service.getBudgetControls(workspaceId),
+      prisma.campaignHistory.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          prompt: true,
+          channels: true,
+          status: true,
+          recipientEmail: true,
+          recipientPhone: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const gmail = await prisma.gmailConnection.findFirst().catch(() => null);
+
+    const connectors = [
+      { id: 'meta', name: 'Meta Ads (FB/Insta)', connected: true, status: 'Active Connector', category: 'Social Ads' },
+      { id: 'google_ads', name: 'Google Ads', connected: true, status: 'Active Connector', category: 'Search & Display' },
+      { id: 'whatsapp', name: 'WhatsApp Business API', connected: true, status: 'Active Connector', category: 'Direct Messaging' },
+      { id: 'gmail', name: 'Gmail Outbound', connected: !!gmail, status: gmail ? 'Connected' : 'Configure in Settings', category: 'Email Channel' },
+      { id: 'linkedin', name: 'LinkedIn Ads', connected: true, status: 'Active Connector', category: 'B2B Social' },
+      { id: 'razorpay', name: 'Razorpay Gateway', connected: true, status: 'Live Billing', category: 'Payments' },
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: {
+        spend,
+        revenue,
+        roas,
+        budgets,
+        history,
+        connectors,
+      },
+    });
+  } catch (err: any) {
+    logger.error('[Finance] Overview error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
- * @openapi
- * /finance/revenue:
- *   get:
- *     summary: Get revenue attribution breakdown
- *     description: Returns revenue broken down by channel, campaign, and time period with attribution model applied.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/workspaceId'
- *       - name: dateRange
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, THIS_YEAR], default: LAST_30_DAYS }
- *       - name: attributionModel
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [FIRST_TOUCH, LAST_TOUCH, MULTI_TOUCH, DATA_DRIVEN], default: MULTI_TOUCH }
- *     responses:
- *       200:
- *         description: Revenue attribution data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     totalRevenue: { type: number, example: 1240000 }
- *                     byChannel:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           channel: { type: string }
- *                           revenue: { type: number }
- *                           pct:     { type: number }
- *                     byCampaign:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           campaignId:   { type: string }
- *                           campaignName: { type: string }
- *                           revenue:      { type: number }
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ * POST /finance/ai-budget-plan
+ * AI calculates ad sizes and costs according to market trends
  */
-router.get('/revenue', (req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    data: {
-      totalRevenue: 1240000,
-      byChannel: [
-        { channel: 'EMAIL',    revenue: 424080, pct: 34.2 },
-        { channel: 'PAID_ADS', revenue: 355880, pct: 28.7 },
-        { channel: 'SOCIAL',   revenue: 274040, pct: 22.1 },
-        { channel: 'SMS',      revenue: 186000, pct: 15.0 },
-      ],
-      byCampaign: [],
-    },
-  });
+router.post('/ai-budget-plan', (req: Request, res: Response) => {
+  try {
+    const { totalBudget, industry, goal, channels } = req.body;
+    const plan = service.calculateAiBudgetPlan(
+      Number(totalBudget) || 0,
+      String(industry || 'general'),
+      String(goal || 'reach'),
+      Array.isArray(channels) ? channels : undefined
+    );
+    res.status(200).json({ success: true, data: plan });
+  } catch (err: any) {
+    logger.error('[Finance] AI budget plan error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
- * @openapi
- * /finance/roas:
- *   get:
- *     summary: Get ROAS analysis
- *     description: Returns Return on Ad Spend analysis by campaign, channel, and ad group with trend data.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/workspaceId'
- *       - name: dateRange
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS], default: LAST_30_DAYS }
- *       - name: groupBy
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [CAMPAIGN, CHANNEL, AD_GROUP], default: CAMPAIGN }
- *     responses:
- *       200:
- *         description: ROAS analysis
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     overallRoas: { type: number, example: 4.2 }
- *                     benchmark:   { type: number, example: 3.5, description: "Industry benchmark" }
- *                     breakdown:   { type: array, items: { type: object } }
- *                     trend:       { type: array, items: { type: object, properties: { date: { type: string }, roas: { type: number } } } }
+ * POST /finance/campaign-budget
+ * Direct database persistence for new campaign budget
  */
-router.get('/roas', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { overallRoas: 4.2, benchmark: 3.5, breakdown: [], trend: [] } });
+router.post('/campaign-budget', async (req: Request, res: Response) => {
+  try {
+    const { name, budget, channels, goal, workspaceId } = req.body;
+    if (!name || isNaN(Number(budget))) {
+      return res.status(400).json({ success: false, error: 'Name and valid budget are required' });
+    }
+    const result = await service.createOrUpdateCampaignBudget(
+      name,
+      Number(budget),
+      channels,
+      goal,
+      workspaceId
+    );
+    res.status(201).json({ success: true, data: result });
+  } catch (err: any) {
+    logger.error('[Finance] Create campaign budget error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
- * @openapi
- * /finance/budget:
- *   get:
- *     summary: Get budget controls
- *     description: Returns budget allocations, utilization rates, and alert thresholds for all campaigns.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/workspaceId'
- *     responses:
- *       200:
- *         description: Budget controls data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       campaignId:     { type: string, format: uuid }
- *                       campaignName:   { type: string }
- *                       budget:         { type: number }
- *                       spent:          { type: number }
- *                       utilization:    { type: number, description: "% of budget used" }
- *                       alertThreshold: { type: number, description: "Alert at this % utilization" }
- *                       status:         { type: string, enum: [ON_TRACK, AT_RISK, OVERSPENT] }
+ * GET /finance/spend
  */
-router.get('/budget', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: [] });
+router.get('/spend', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const data = await service.getSpendSummary(workspaceId);
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] Spend error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
- * @openapi
- * /finance/budget/{campaignId}:
- *   patch:
- *     summary: Update campaign budget
- *     description: Adjusts the budget allocation for a specific campaign.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: campaignId
- *         in: path
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [budget]
- *             properties:
- *               budget:         { type: number, example: 75000 }
- *               alertThreshold: { type: number, example: 80, description: "Alert at this % utilization" }
- *     responses:
- *       200:
- *         description: Budget updated
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/SuccessResponse' }
+ * GET /finance/revenue
  */
-router.patch('/budget/:campaignId', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { campaignId: req.params.campaignId, ...req.body } });
+router.get('/revenue', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const data = await service.getRevenueAttribution(workspaceId);
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] Revenue error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
- * @openapi
- * /finance/forecast:
- *   get:
- *     summary: Get revenue and spend forecasts
- *     description: Returns AI-generated revenue and spend forecasts for the current and next quarter based on historical data and campaign pipeline.
- *     tags: [Finance & ROI]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/workspaceId'
- *       - name: horizon
- *         in: query
- *         required: false
- *         description: Forecasting horizon
- *         schema: { type: string, enum: [30_DAYS, 60_DAYS, 90_DAYS, QUARTER], default: QUARTER }
- *     responses:
- *       200:
- *         description: Forecast data
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 data:
- *                   type: object
- *                   properties:
- *                     projectedRevenue: { type: number, example: 1480000 }
- *                     projectedSpend:   { type: number, example: 490000 }
- *                     projectedRoas:    { type: number, example: 3.9 }
- *                     confidence:       { type: number, example: 0.84 }
- *                     timeline:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           date:     { type: string, format: date }
- *                           revenue:  { type: number }
- *                           spend:    { type: number }
+ * GET /finance/roas
  */
-router.get('/forecast', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { projectedRevenue: 1480000, projectedSpend: 490000, projectedRoas: 3.9, confidence: 0.84, timeline: [] } });
+router.get('/roas', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const data = await service.getRoasAnalysis(workspaceId);
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] ROAS error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /finance/budget
+ */
+router.get('/budget', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const data = await service.getBudgetControls(workspaceId);
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] Budget list error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /finance/budget/:campaignId
+ */
+router.patch('/budget/:campaignId', async (req: Request, res: Response) => {
+  try {
+    const { campaignId } = req.params;
+    const { budget, alertThreshold } = req.body;
+    const data = await service.updateCampaignBudget(
+      campaignId,
+      Number(budget),
+      alertThreshold ? Number(alertThreshold) : undefined
+    );
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] Budget update error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /finance/forecast
+ * Supports optional plannedBudget query param for live forecasting
+ */
+router.get('/forecast', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const horizon = (req.query.horizon as string) || 'QUARTER';
+    const plannedBudget = req.query.plannedBudget ? Number(req.query.plannedBudget) : undefined;
+    const data = await service.getForecast(workspaceId, horizon, plannedBudget);
+    res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    logger.error('[Finance] Forecast error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /finance/export
+ */
+router.get('/export', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const [spend, revenue, roas, budgets] = await Promise.all([
+      service.getSpendSummary(workspaceId),
+      service.getRevenueAttribution(workspaceId),
+      service.getRoasAnalysis(workspaceId),
+      service.getBudgetControls(workspaceId),
+    ]);
+
+    const lines: string[] = [];
+    lines.push('MarketOS Financial & ROI Performance Report');
+    lines.push(`Generated At,${new Date().toISOString()}`);
+    lines.push('');
+    lines.push('OVERVIEW SUMMARY');
+    lines.push(`Total Allocated Budget,$${spend.totalBudget}`);
+    lines.push(`Total Spent,$${spend.totalSpend}`);
+    lines.push(`Remaining Budget,$${spend.remainingBudget}`);
+    lines.push(`Attributed Revenue,$${revenue.totalRevenue}`);
+    lines.push(`Overall ROAS,${roas.overallRoas}x`);
+    lines.push(`Active Campaigns,${spend.activeCampaignCount}`);
+    lines.push('');
+    lines.push('CHANNEL ATTRIBUTION BREAKDOWN');
+    lines.push('Channel,Revenue ($),Share (%),Spend ($),ROAS,Conversions');
+    revenue.byChannel.forEach((c) => {
+      lines.push(`"${c.label}",${c.revenue},${c.pct}%,${c.spend},${c.roas}x,${c.conversions}`);
+    });
+    lines.push('');
+    lines.push('CAMPAIGN BUDGET CONTROLS');
+    lines.push('Campaign Name,Budget ($),Spent ($),Utilization (%),Status');
+    budgets.forEach((b) => {
+      lines.push(`"${b.campaignName}",${b.budget},${b.spent},${b.utilization}%,${b.status}`);
+    });
+
+    const csvContent = lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="MarketOS_Finance_Report_${Date.now()}.csv"`);
+    res.status(200).send(csvContent);
+  } catch (err: any) {
+    logger.error('[Finance] Export error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 export default router;

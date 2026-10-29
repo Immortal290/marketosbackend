@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+ENV PYTHONDONTWRITEBYTECODE=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies
+COPY marketos-agents/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy Python modules
+COPY marketos-agents/agents/ ./agents/
+COPY marketos-agents/core/ ./core/
+COPY marketos-agents/schemas/ ./schemas/
+COPY marketos-agents/utils/ ./utils/
+COPY marketos-agents/graph/ ./graph/
+COPY marketos-agents/models/ ./models/
+COPY marketos-agents/api.py ./
+COPY marketos-agents/main.py ./
+COPY marketos-agents/worker.py ./
+COPY marketos-agents/start.sh ./start.sh
+RUN chmod +x ./start.sh
+
+# Expose the API server port
+EXPOSE 8000
+
+CMD ["sh", "./start.sh"]
