@@ -30,7 +30,7 @@ const defaultBrandProfile: Partial<BrandProfile> = {
 const defaultCampaignBrief: Partial<CampaignBrief> = {
   channels: [],
   goal: 'awareness',
-  imageModel: 'pollinations-flux',
+  imageModel: 'google/gemini-2.0-flash-exp:free',
   imageApiKey: '',
 };
 

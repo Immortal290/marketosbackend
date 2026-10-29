@@ -8,9 +8,22 @@ const router = Router();
 async function getUserId(req: Request): Promise<string | null> {
   const userId = (req as any).user?.userId;
   if (userId) return userId;
-  // Fallback for unauthenticated dev mode — use first user
-  const user = await prisma.user.findFirst().catch(() => null);
-  return user?.id ?? null;
+  // Fallback for unauthenticated dev mode — use first user, creating one if absent
+  try {
+    let user = await prisma.user.findFirst();
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: 'dev@marketos.local',
+          name: 'Dev User',
+          role: 'admin',
+        },
+      });
+    }
+    return user.id;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── GET /history — List all saved campaign runs for the user ─────────────────

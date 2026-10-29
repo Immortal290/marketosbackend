@@ -97,7 +97,22 @@ function EmailPreview({ variant }: { variant: any }) {
           {showHtml && (
             <div className="border-2 border-cyan-200 rounded overflow-hidden">
               <iframe
-                srcDoc={variant.body_html}
+                srcDoc={(() => {
+                  let html = variant.body_html || "";
+                  const fallbackSvg = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="240" viewBox="0 0 600 240"><rect width="600" height="240" fill="#1e1b4b"/><text x="300" y="125" fill="#facc15" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle">Campaign Hero Visual</text></svg>`
+                  )}`;
+                  const heroDataUri =
+                    variant.hero_image_url ||
+                    (variant.hero_image_base64
+                      ? `data:image/jpeg;base64,${variant.hero_image_base64}`
+                      : fallbackSvg);
+                  html = html.replace(/src=["']cid:hero_image["']/gi, `src="${heroDataUri}"`);
+                  // Sanitize to prevent sandboxed iframe script execution warnings
+                  html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+                  html = html.replace(/\s+on\w+="[^"]*"/gi, "");
+                  return html;
+                })()}
                 className="w-full h-72 bg-white"
                 sandbox="allow-same-origin"
                 title="Email HTML Preview"
@@ -114,58 +129,66 @@ function EmailPreview({ variant }: { variant: any }) {
 function CreativeView({ result }: { result: any }) {
   const creativeConcept = result?.creative_concept || result?.campaign_concept || result?.user_intent || "Product Advertising Campaign";
   const productSubject = result?.product_name || result?.user_intent || creativeConcept;
+  const mainHeadline = result?.main_ad_headline || result?.headline || result?.ad_banner_specs?.headline_overlay || result?.creative_concept || productSubject;
+  const supportingTagline = result?.supporting_tagline || result?.tagline || result?.promotional_copy || "";
+  const ctaText = result?.call_to_action || "EXPLORE OFFER";
 
-  const buildBannerUrl = (promptText: string, w: number, h: number) => {
-    const cleanPrompt = `${promptText}, photorealistic advertising photography, studio lighting, product visual focus, 8k resolution, no text`;
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt.slice(0, 400))}?width=${w}&height=${h}&model=flux&nologo=true&safe=true`;
+  const realImageUrl = result?.image_url || result?.image_preview_url || (result?.image_base64 ? `data:image/jpeg;base64,${result.image_base64}` : null) || (result?.hero_image_base64 ? `data:image/jpeg;base64,${result.hero_image_base64}` : null);
+
+  const buildSvgFallback = (title: string, overlay: string, w: number, h: number) => {
+    const colors = ["#1a1a2e", "#16213e", "#0f3460", "#533483"];
+    const grad = colors[Math.abs(title.length) % colors.length];
+    const displayOverlay = (overlay || mainHeadline || "FEATURED OFFER").replace(/[<>&"]/g, " ").slice(0, 45);
+    const displayTitle = (title || supportingTagline || productSubject).replace(/[<>&"]/g, " ").slice(0, 65);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${grad};stop-opacity:1"/>
+          <stop offset="100%" style="stop-color:#0f0f1a;stop-opacity:1"/>
+        </linearGradient>
+        <linearGradient id="scrim" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:transparent"/>
+          <stop offset="100%" style="stop-color:rgba(0,0,0,0.7)"/>
+        </linearGradient>
+      </defs>
+      <rect width="${w}" height="${h}" fill="url(#bg)"/>
+      <rect width="${w}" height="${h}" fill="url(#scrim)"/>
+      <circle cx="${w * 0.75}" cy="${h * 0.3}" r="${Math.min(w, h) * 0.35}" fill="rgba(255,255,255,0.04)"/>
+      <circle cx="${w * 0.2}" cy="${h * 0.7}" r="${Math.min(w, h) * 0.25}" fill="rgba(255,255,255,0.03)"/>
+      <text x="${w / 2}" y="${h / 2 - 20}" font-family="system-ui,sans-serif" font-size="${Math.min(w / 14, 48)}" font-weight="900" fill="#FACC15" text-anchor="middle" dominant-baseline="middle" letter-spacing="1">${displayOverlay}</text>
+      <text x="${w / 2}" y="${h / 2 + 30}" font-family="system-ui,sans-serif" font-size="${Math.min(w / 28, 20)}" fill="rgba(255,255,255,0.85)" text-anchor="middle">${displayTitle}</text>
+      <rect x="${w / 2 - 90}" y="${h - 70}" width="180" height="40" rx="8" fill="#FACC15"/>
+      <text x="${w / 2}" y="${h - 44}" font-family="system-ui,sans-serif" font-size="14" font-weight="800" fill="#000000" text-anchor="middle">${ctaText}</text>
+    </svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   };
 
   const rawOptions = result?.banner_options;
   const options = (Array.isArray(rawOptions) && rawOptions.length > 0) ? rawOptions.map((opt: any) => ({
     ...opt,
-    url: opt.url || buildBannerUrl(opt.prompt || `${productSubject} ${opt.title}`, opt.w || 1200, opt.h || 628)
+    url: opt.url || realImageUrl || buildSvgFallback(opt.title || productSubject, opt.overlay || mainHeadline, opt.w || 1200, opt.h || 628),
+    overlay: opt.overlay || mainHeadline,
   })) : [
     {
       id: "v1",
       title: "1. Product Hero Banner (1200x628)",
-      url: buildBannerUrl(`Luxury studio hero advertising shot of ${productSubject}, sleek surface, dramatic dark background`, 1200, 628),
-      overlay: result?.ad_banner_specs?.headline_overlay || "🔥 CLAIM YOUR EXCLUSIVE OFFER",
+      url: realImageUrl || buildSvgFallback(productSubject, mainHeadline, 1200, 628),
+      overlay: mainHeadline,
       format: "LinkedIn / Meta Landscape (1200x628)"
     },
     {
       id: "v2",
-      title: "2. Lifestyle Square (1080x1080)",
-      url: buildBannerUrl(`Aspirational lifestyle advertisement photo showcasing ${productSubject} in natural daylight setting`, 1080, 1080),
-      overlay: "✨ EXPERIENCE THE DIFFERENCE",
-      format: "Instagram / Facebook Square (1080x1080)"
+      title: "2. Social Story Poster (1080x1350)",
+      url: realImageUrl || buildSvgFallback(supportingTagline || productSubject, mainHeadline, 1080, 1350),
+      overlay: mainHeadline,
+      format: "Instagram Stories & Reels (1080x1350)"
     },
     {
       id: "v3",
-      title: "3. Mobile Story (1080x1920)",
-      url: buildBannerUrl(`Vertical macro detail close-up shot of ${productSubject}, shallow depth of field, premium textures`, 1080, 1920),
-      overlay: "🚀 LIMITED TIME — SHOP NOW",
-      format: "Instagram Stories & Reels (1080x1920)"
-    },
-    {
-      id: "v4",
-      title: "4. Minimalist Flat Lay (1200x628)",
-      url: buildBannerUrl(`Clean minimalist product flat lay presentation of ${productSubject} on neutral matte surface`, 1200, 628),
-      overlay: "⚡ PURE QUALITY",
-      format: "Clean Minimalist Layout"
-    },
-    {
-      id: "v5",
-      title: "5. Editorial Square (1080x1080)",
-      url: buildBannerUrl(`Vibrant high-contrast editorial magazine photo of ${productSubject}, dramatic fashion lighting`, 1080, 1080),
-      overlay: "💡 SEE WHAT IS POSSIBLE",
-      format: "Vibrant Editorial Spotlight"
-    },
-    {
-      id: "v6",
-      title: "6. Cinematic Wide (1200x628)",
-      url: buildBannerUrl(`Cinematic wide action angle shot of ${productSubject}, golden hour atmospheric landscape`, 1200, 628),
-      overlay: "📈 BUILT TO PERFORM",
-      format: "Cinematic Wide Format"
+      title: "3. Feed Square (1080x1080)",
+      url: realImageUrl || buildSvgFallback(productSubject, ctaText, 1080, 1080),
+      overlay: ctaText,
+      format: "Instagram / Facebook Square (1080x1080)"
     }
   ];
 
@@ -211,7 +234,7 @@ function CreativeView({ result }: { result: any }) {
                 alt={opt.title} 
                 className="w-full h-14 object-cover rounded-lg shadow-sm"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = buildBannerUrl(`professional product advertising ${productSubject}`, 1200, 628);
+                  (e.target as HTMLImageElement).src = buildSvgFallback(productSubject, opt.overlay || mainHeadline, 1200, 628);
                 }}
               />
               <span className="text-[10px] font-bold truncate w-full text-center">{opt.title.split('.')[1] || opt.title}</span>
@@ -227,7 +250,7 @@ function CreativeView({ result }: { result: any }) {
           alt={activeBanner.title}
           className="w-full h-72 sm:h-80 object-cover transition-all duration-300 group-hover:scale-105"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = buildBannerUrl(`professional product advertising ${productSubject}`, 1200, 628);
+            (e.target as HTMLImageElement).src = buildSvgFallback(productSubject, activeBanner.overlay || mainHeadline, 1200, 628);
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-between p-6">

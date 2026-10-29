@@ -34,6 +34,52 @@ from utils.kafka_bus import publish_event, Topics
 from agents.creative.poster_engine import run_poster_pipeline
 
 
+# ── Dispatch to the correct image generation backend ──────────────────
+def _dispatch_image(prompt_str: str, api_key: str, model: str) -> str | None:
+    """
+    Route to the correct backend.
+
+    Routing rules (in priority order):
+      1. Any model with a "/" that starts with "google/", "meta/", "qwen/",
+         "openai/gpt-image", "microsoft/", "tencent/", "recraft/", "krea/",
+         "bytedance-seed/", "black-forest-labs/flux"  → OpenRouter
+      2. Plain "gemini-*" (no slash) → native Gemini API
+      3. "dall-e-*"                  → OpenAI direct
+      4. "together-*"                → Together AI
+      5. Anything with "flux" but no "/"  → HuggingFace FLUX
+      6. Everything else             → OpenRouter (best guess)
+    """
+    if not api_key:
+        agent_log("IMAGE", f"⚠ No API key for '{model}' — skipping image generation")
+        return None
+
+    ml = model.lower()
+
+    # Rule 1: any slash model → OpenRouter (covers google/, meta/, qwen/, etc.)
+    if "/" in model:
+        return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
+
+    # Rule 2: plain gemini model name (native API)
+    if ml.startswith("gemini-"):
+        b64, _ = _generate_gemini_image(prompt_str, api_key=api_key, model=model)
+        return b64
+
+    # Rule 3: OpenAI DALL-E
+    if "dall-e" in ml:
+        return _generate_openai_image(prompt_str, api_key=api_key, model=model)
+
+    # Rule 4: Together AI
+    if "together" in ml:
+        return _generate_together_image(prompt_str, api_key=api_key, model=model)
+
+    # Rule 5: HuggingFace FLUX (bare name, no slash)
+    if "flux" in ml or "black-forest" in ml:
+        return _generate_flux_schnell_image(prompt_str, api_key=api_key, model=model)
+
+    # Rule 6: default → OpenRouter
+    return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
+
+
 # ── Agent Node ────────────────────────────────────────────────────────────────
 
 def image_agent_node(state: dict) -> dict:
@@ -91,41 +137,20 @@ def image_agent_node(state: dict) -> dict:
     source             = None
     total_token_usage  = 0
 
-    # ── Image model selection (same as before) ──────────────────────────────
-    image_model   = state.get("image_model")   or "google/gemini-2.5-flash-image"
-    image_api_key = (state.get("image_api_key") or "").strip()
+    # ── Image model selection ──────────────────────────────────────────────
+    image_model   = (
+        state.get("image_model")
+        or os.getenv("IMAGE_MODEL")
+        or "google/gemini-2.0-flash-exp:free"
+    )
+    # Key resolution: state → OPENROUTER_API_KEY env → GEMINI_API_KEY env
+    image_api_key = (
+        (state.get("image_api_key") or "").strip()
+        or os.getenv("OPENROUTER_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY", "").strip()
+    )
 
-    agent_log("IMAGE", f"Model: {image_model}")
-
-    # ── Dispatch to the correct image generation backend ──────────────────
-    def _dispatch_image(prompt_str: str, api_key: str, model: str) -> str | None:
-        """Route to the correct backend based on model name."""
-        ml = model.lower()
-        if (
-            ml.startswith("meta/") or ml.startswith("google/")
-            or "openrouter" in ml
-            or ("/" in model and "black-forest" not in ml)
-        ):
-            if not api_key:
-                agent_log("IMAGE", "⚠ OpenRouter key missing — skipping image")
-                return None
-            return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
-        elif "gemini" in ml:
-            if not api_key: return None
-            b64, _ = _generate_gemini_image(prompt_str, api_key=api_key, model=model)
-            return b64
-        elif "dall-e" in ml:
-            if not api_key: return None
-            return _generate_openai_image(prompt_str, api_key=api_key, model=model)
-        elif "together" in ml:
-            if not api_key: return None
-            return _generate_together_image(prompt_str, api_key=api_key, model=model)
-        elif "black-forest" in ml or "flux" in ml:
-            if not api_key: return None
-            return _generate_flux_schnell_image(prompt_str, api_key=api_key, model=model)
-        else:
-            if not api_key: return None
-            return _generate_openrouter_image(prompt_str, api_key=api_key, model=model)
+    agent_log("IMAGE", f"Model: {image_model} | Key present: {bool(image_api_key)}")
 
     # ── 3-STEP POSTER PIPELINE ────────────────────────────────────────────
     # Step 1: Creative Director LLM  → JSON poster brief (copy + layout + image_prompt)
@@ -136,11 +161,18 @@ def image_agent_node(state: dict) -> dict:
     poster_brief = None
     logo_b64 = state.get("brand_logo_base64") or None  # optional user-uploaded logo
 
-    if state.get("llm_api_key") and image_api_key:
+    # Resolve the LLM key the same way — state first, then env
+    _llm_api_key = (
+        (state.get("llm_api_key") or "").strip()
+        or os.getenv("OPENROUTER_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY", "").strip()
+    )
+
+    if _llm_api_key and image_api_key:
         agent_log("IMAGE", "Running 3-step poster pipeline (Creative Director → BG image → Compose)...")
         try:
             poster_b64, poster_brief = run_poster_pipeline(
-                state=state,
+                state={**state, "llm_api_key": _llm_api_key},
                 image_gen_fn=_dispatch_image,
                 image_model=image_model,
                 image_api_key=image_api_key,
@@ -172,7 +204,8 @@ def image_agent_node(state: dict) -> dict:
         if not image_api_key:
             err_msg = (
                 f"Image generation with '{image_model}' requires an API key. "
-                "Please enter your key in the Target Audience popup → Image API Key field."
+                "Please enter your OpenRouter or Gemini API key in the Target Audience popup → Image API Key field. "
+                "Get a free OpenRouter key at openrouter.ai (Gemini 2.0 Flash is free)."
             )
             agent_log("IMAGE", f"⚠ {err_msg}")
             return {
@@ -380,9 +413,11 @@ def _finalize(
     img_preview_url = None
     if img_b64:
         img_preview_url = f"data:image/jpeg;base64,{img_b64}"
-        # Also back-fill the first banner_option's url so the UI gallery shows it
+        # Back-fill all banner options with the generated image preview
         if banner_options:
-            banner_options[0]["url"] = img_preview_url
+            for b in banner_options:
+                if not b.get("url"):
+                    b["url"] = img_preview_url
 
     updated_variants = variants
     if isinstance(winner, dict) and variants:
@@ -435,7 +470,7 @@ def _finalize(
         "image_preview_url":  img_preview_url,
         "image_base64":       img_b64,
         "image_type":         img_type,
-        "source":             source or "pollinations-flux",
+        "source":             source or "gemini-openrouter",
         "prompt_used":        full_prompt[:200] if full_prompt else None,
         "generated_at":       datetime.now(timezone.utc).isoformat(),
     }
@@ -582,7 +617,7 @@ def _generate_gemini_image(
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:
             data = json.loads(resp.read().decode())
 
         total_tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
@@ -853,7 +888,6 @@ def _generate_flux_schnell_image(
     HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-schnell
 
     Requires HF_TOKEN environment variable (free HuggingFace account token).
-    Falls back gracefully to Pollinations if unavailable.
     Returns base64-encoded image bytes, or None on failure.
     """
     if os.getenv("PYTEST_CURRENT_TEST"):

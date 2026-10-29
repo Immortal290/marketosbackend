@@ -24,6 +24,8 @@ const BACKEND_CANDIDATES = [
   "http://marketos-backend.railway.internal",
   "https://marketosbackend-production.up.railway.app",
   "http://marketos_agents:8000",
+  "http://agents:8000",
+  "http://backend:3000",
   "http://localhost:8000",
   "http://localhost:3001",
   "http://localhost:3000",
@@ -42,7 +44,7 @@ function buildSSELine(stage: string, agent: string, status: string, detail: stri
 
 function extractSubjectFromPrompt(prompt: string): string {
   if (!prompt || typeof prompt !== "string") return "Featured Product";
-  
+
   let cleaned = prompt
     .replace(/^(create|generate|launch|build|make|run|design|write|plan|start|execute)\s+(a|an|the)?\s*/i, "")
     .replace(/^(multi-channel|marketing|ad|ad campaign|campaign|promo|promotion|drip|email|social|visual)\s+(for|about|on|targeting)?\s*/i, "")
@@ -75,11 +77,11 @@ function getBrandImageGallery(subject: string, fullPrompt: string): any[] {
   const isCar = /car|automobile|vehicle|automotive|sedan|suv|truck|bike|motorcycle|ev|electric vehicle|sports car/i.test(promptContext);
 
   let visualContext = "professional commercial advertisement setup, balanced studio lighting";
-  if (isCar)     visualContext = "premium automotive photography, gleaming showroom, dramatic studio backlighting";
-  else if (isFestive)  visualContext = "festive celebration atmosphere, elegant holiday decorative background";
-  else if (isTech)     visualContext = "modern high-tech studio environment, sleek lighting";
-  else if (isOrganic)  visualContext = "natural botanical setting, soft fresh ambient daylight";
-  else if (isFashion)  visualContext = "high-fashion editorial studio setting, premium texture and lighting";
+  if (isCar) visualContext = "premium automotive photography, gleaming showroom, dramatic studio backlighting";
+  else if (isFestive) visualContext = "festive celebration atmosphere, elegant holiday decorative background";
+  else if (isTech) visualContext = "modern high-tech studio environment, sleek lighting";
+  else if (isOrganic) visualContext = "natural botanical setting, soft fresh ambient daylight";
+  else if (isFashion) visualContext = "high-fashion editorial studio setting, premium texture and lighting";
 
   // One banner — MetaMuse native 1600×1600
   return [
@@ -104,8 +106,8 @@ async function getAgentMockPayload(
 ): Promise<Record<string, any>> {
   const name = agentName.toLowerCase();
   const subject = extractSubjectFromPrompt(prompt);
-  const toEmail  = recipientEmail || "[no email provided]";
-  const toPhone  = recipientPhone || "[no phone provided]";
+  const toEmail = recipientEmail || "[no email provided]";
+  const toPhone = recipientPhone || "[no phone provided]";
 
   if (name.includes("supervisor")) {
     return {
@@ -127,21 +129,36 @@ async function getAgentMockPayload(
 
   if (name.includes("creative") || name.includes("image")) {
     const banner_options = getBrandImageGallery(subject, prompt);
+    const isFestive = /diwali|christmas|holiday|festival|new year|eid|black friday|sale|discount/i.test(prompt);
+    const isLuxury = /luxury|premium|watch|gold|diamond|designer/i.test(prompt);
+    const palette = isFestive
+      ? ["#D97706 (Amber Gold)", "#F59E0B (Warm Glow)", "#78350F (Deep Cinnamon)", "#FFFBEB (Festive Ivory)"]
+      : isLuxury
+        ? ["#0A0A0A (Obsidian)", "#D4AF37 (Metallic Gold)", "#262626 (Charcoal)", "#F5F5F0 (Warm Alabaster)"]
+        : ["#0F172A (Deep Navy)", "#2563EB (Electric Blue)", "#38BDF8 (Vibrant Cyan)", "#F8FAFC (Pure Clean)"];
+
     return {
-      campaign_concept: `${subject}: Visual Campaign Assets`,
-      creative_direction: `High-Impact Brand Visuals for ${subject}`,
-      visual_theme: `Commercial Photography for ${subject}`,
-      image_preview_url: banner_options[0].url,   // null until real agent runs
+      campaign_name: isFestive ? `${subject} Festive Celebration` : `${subject} Launch Campaign`,
+      creative_concept: `A distinctive visual campaign positioning ${subject} at the intersection of design, performance, and emotional audience connection.`,
+      main_ad_headline: `Experience the Standard of ${subject}`,
+      supporting_tagline: `Designed to deliver real impact every single day.`,
+      promotional_copy: `Introducing ${subject}. Crafted for discerning users who expect uncompromising quality. [Special introductory offer available upon launch].`,
+      visual_design_direction: `Editorial commercial photography with ${subject} as the central hero. Volumetric studio key lighting, subtle negative space reserved in top third for clean headline typography, and refined modern margins.`,
+      image_generation_prompt: banner_options[0].prompt,
+      social_media_caption: `Elevate your standard with ${subject}. ✨ Engineered for excellence, built for you.\n\n👉 Tap the link in bio to explore the collection.`,
+      call_to_action: "Explore the Collection",
+      relevant_hashtags: [`#${subject.replace(/\s+/g, "")}`, "#DigitalMarketing", "#CreativeDirector", "#BrandCampaign"],
+      color_palette: palette,
       ad_banner_specs: {
         dimensions: "1600x1600 (MetaMuse native)",
         headline_overlay: banner_options[0].overlay,
-        primary_visual: `Meta Muse AI-generated brand visual for ${subject}`,
+        primary_visual: `AI-generated brand visual for ${subject}`,
       },
-      color_palette: ["#111827 (Obsidian)", "#3B82F6 (Vibrant Blue)", "#F59E0B (Amber Gold)", "#FFFFFF (Pure White)"],
+      image_preview_url: banner_options[0].url,
       asset_preview: banner_options[0].url,
       banner_options: banner_options,
       total_variants_generated: 1,
-      source: "meta/muse-image-1.0-eval-20260824 via OpenRouter (AI-generated, on-brand)",
+      source: "AI Creative Director Engine (Commercial Grade)",
     };
   }
 
@@ -198,10 +215,10 @@ async function getAgentMockPayload(
     return {
       platforms: ["Instagram", "LinkedIn", "Facebook"],
       post_copy: [
-        `🚀 Introducing ${subject}! Experience the difference. #${subject.replace(/\s+/g,"")} #MarketOS`,
+        `🚀 Introducing ${subject}! Experience the difference. #${subject.replace(/\s+/g, "")} #MarketOS`,
         `✨ ${subject} is here — and it's everything you've been waiting for. Tap to explore.`,
       ],
-      hashtags: [`#${subject.replace(/\s+/g,"")}`, "#MarketOS", "#NewLaunch"],
+      hashtags: [`#${subject.replace(/\s+/g, "")}`, "#MarketOS", "#NewLaunch"],
       best_post_time: "Tuesday 9am / Thursday 6pm"
     };
   }
@@ -276,7 +293,7 @@ async function generateComprehensiveReport(
   const agentDetailsPromises = agents.map(async (agentName) => {
     const mock = await getAgentMockPayload(agentName, prompt);
     let body = "";
-    
+
     if (agentName.toLowerCase().includes("email") && mock.email_draft_1) {
       const draft = mock.email_draft_1;
       body += `**Campaign Sequence:** \`${mock.email_campaign_name}\`\n\n`;
@@ -298,7 +315,25 @@ async function generateComprehensiveReport(
       });
       body += `- **Segment Length:** ${mock.segment_length}\n`;
       body += `- **Compliance:** ${mock.tcpa_compliance}\n`;
-    } else if ((agentName.toLowerCase().includes("creative") || agentName.toLowerCase().includes("image")) && mock.banner_options) {
+    } else if (agentName.toLowerCase().includes("creative") && mock.main_ad_headline) {
+      body += `#### 1. CAMPAIGN NAME\n**${mock.campaign_name}**\n\n`;
+      body += `#### 2. CREATIVE CONCEPT\n${mock.creative_concept}\n\n`;
+      body += `#### 3. MAIN AD HEADLINE\n> **"${mock.main_ad_headline}"**\n\n`;
+      body += `#### 4. SUPPORTING TAGLINE\n*${mock.supporting_tagline}*\n\n`;
+      body += `#### 5. PROMOTIONAL COPY\n${mock.promotional_copy}\n\n`;
+      body += `#### 6. VISUAL DESIGN DIRECTION\n${mock.visual_design_direction}\n\n`;
+      body += `#### 7. IMAGE GENERATION PROMPT\n\`\`\`text\n${mock.image_generation_prompt}\n\`\`\`\n\n`;
+      body += `#### 8. SOCIAL MEDIA CAPTION\n${mock.social_media_caption}\n\n`;
+      body += `#### 9. CALL TO ACTION\n**[ ${mock.call_to_action} ]**\n\n`;
+      body += `#### 10. RELEVANT HASHTAGS\n${(mock.relevant_hashtags || []).join(" ")}\n\n`;
+      body += `- **Color Palette:** ${(mock.color_palette || []).join(" | ")}\n`;
+      if (mock.banner_options && mock.banner_options.length > 0) {
+        body += `\n##### Visual Placement Specs:\n`;
+        mock.banner_options.forEach((opt: any) => {
+          body += `* **Format:** ${opt.format} | **Overlay:** "${opt.overlay}"\n`;
+        });
+      }
+    } else if (agentName.toLowerCase().includes("image") && mock.banner_options) {
       body += `- **Campaign Concept:** ${mock.campaign_concept}\n`;
       body += `- **Creative Direction:** ${mock.creative_direction}\n`;
       body += `- **Visual Theme:** ${mock.visual_theme}\n\n`;
@@ -375,19 +410,19 @@ function classifyLocally(prompt: string, channels?: string[]) {
   const subject = extractSubjectFromPrompt(prompt);
 
   // ── Intent detection ──────────────────────────────────────────────────────
-  const isEmail     = channels?.includes("email")     || /\bemail|gmail|inbox|newsletter|drip|sendgrid|smtp\b/i.test(p);
-  const isSMS       = channels?.includes("sms")       || /\bsms|text|twilio|msg91|whatsapp\b/i.test(p);
-  const isSocial    = channels?.includes("social")    || /\bsocial|instagram|linkedin|facebook|twitter|post|reel|story\b/i.test(p);
+  const isEmail = channels?.includes("email") || /\bemail|gmail|inbox|newsletter|drip|sendgrid|smtp\b/i.test(p);
+  const isSMS = channels?.includes("sms") || /\bsms|text|twilio|msg91|whatsapp\b/i.test(p);
+  const isSocial = channels?.includes("social") || /\bsocial|instagram|linkedin|facebook|twitter|post|reel|story\b/i.test(p);
   // Creative: explicit visual keywords OR "generate/create/make + images/visuals/creative/banner/ad" pattern
-  const hasVisualNoun   = /\b(image|images|banner|visual|visuals|creative|design|graphic|photo|ad creative|artwork|mockup|render)\b/i.test(p);
+  const hasVisualNoun = /\b(image|images|banner|visual|visuals|creative|design|graphic|photo|ad creative|artwork|mockup|render)\b/i.test(p);
   const hasGenerateVerb = /\b(generate|create|make|produce|design|build|render)\b/i.test(p);
-  const isCreative  = hasVisualNoun || (hasGenerateVerb && /\b(car|vehicle|automobile|product|brand|campaign|ad|advertisement|marketing)\b/i.test(p));
-  const isSEO       = /\bseo|search|keyword|rank|google|organic|meta|schema\b/i.test(p);
-  const isCopy      = /\bcopy|headline|tagline|script|ad text|write|content|blog|landing\b/i.test(p);
+  const isCreative = hasVisualNoun || (hasGenerateVerb && /\b(car|vehicle|automobile|product|brand|campaign|ad|advertisement|marketing)\b/i.test(p));
+  const isSEO = /\bseo|search|keyword|rank|google|organic|meta|schema\b/i.test(p);
+  const isCopy = /\bcopy|headline|tagline|script|ad text|write|content|blog|landing\b/i.test(p);
   const isAnalytics = /\banalytic|report|performance|kpi|metric|track|insight|dashboard\b/i.test(p);
-  const isCampaign  = /\bcampaign|launch|promote|offer|promo|market\b/i.test(p);
-  const isFinance   = /\bbudget|spend|roas|cost|revenue|profit|pricing|finance\b/i.test(p);
-  const isCompliance= /\bcompliance|gdpr|can.spam|legal|privacy|regulation\b/i.test(p);
+  const isCampaign = /\bcampaign|launch|promote|offer|promo|market\b/i.test(p);
+  const isFinance = /\bbudget|spend|roas|cost|revenue|profit|pricing|finance\b/i.test(p);
+  const isCompliance = /\bcompliance|gdpr|can.spam|legal|privacy|regulation\b/i.test(p);
 
   // ── Intent label ──────────────────────────────────────────────────────────
   let intent = "GENERAL_QUERY";
@@ -414,15 +449,15 @@ function classifyLocally(prompt: string, channels?: string[]) {
   // ── Build agent list — only what the prompt needs ─────────────────────────
   const agents: string[] = ["Supervisor Agent"]; // always included
 
-  if (isCopy    || isCampaign)  agents.push("Copy Agent");
+  if (isCopy || isCampaign) agents.push("Copy Agent");
   if (isCreative || isCampaign) agents.push("Creative Agent");
-  if (isEmail   || isCampaign)  agents.push("Email Agent");
-  if (isSMS)                    agents.push("SMS Agent");
-  if (isSocial  || isCampaign)  agents.push("Social Media Agent");
-  if (isSEO)                    agents.push("SEO Agent");
-  if (isFinance)                agents.push("Finance Agent");
+  if (isEmail || isCampaign) agents.push("Email Agent");
+  if (isSMS) agents.push("SMS Agent");
+  if (isSocial || isCampaign) agents.push("Social Media Agent");
+  if (isSEO) agents.push("SEO Agent");
+  if (isFinance) agents.push("Finance Agent");
   if (isCompliance || isCampaign) agents.push("Compliance Agent");
-  if (isAnalytics || isCampaign)  agents.push("Analytics Agent");
+  if (isAnalytics || isCampaign) agents.push("Analytics Agent");
 
   // Always end with a reporting agent if more than 2 agents ran
   if (agents.length > 2) agents.push("Reporting Agent");
@@ -464,9 +499,9 @@ async function buildLocalStream(
   // Build the ordered stream stages — agents stream ONE AT A TIME
   const stages: { line: string; delay: number }[] = [
     { line: buildSSELine("INIT", "MarketOS AI", "starting", `Session initialised — receiving query: "${prompt}"`), delay: 300 },
-    { line: buildSSELine("GLM_REASONING", "AI Engine", "running",   `Analysing intent: "${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}"`), delay: 700 },
+    { line: buildSSELine("GLM_REASONING", "AI Engine", "running", `Analysing intent: "${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}"`), delay: 700 },
     { line: buildSSELine("GLM_REASONING", "AI Engine", "completed", `Intent: ${intent} (${Math.round(confidence * 100)}% confidence) — routing ${agents.length} agents`, { intent, confidence, summary, agents, routeTo }), delay: 500 },
-    { line: buildSSELine("AB_TEST", "A/B Test Agent", "running",   "Running mandatory Bayesian A/B analysis gate..."), delay: 600 },
+    { line: buildSSELine("AB_TEST", "A/B Test Agent", "running", "Running mandatory Bayesian A/B analysis gate..."), delay: 600 },
     { line: buildSSELine("AB_TEST", "A/B Test Agent", "completed", "Decision: WINNER_DECLARED | P(best)=0.96 | Variant A leads", { ab_result: { decision: "winner_declared", winner_id: "V-001", confidence: 0.96 } }), delay: 400 },
   ];
 
@@ -484,7 +519,7 @@ async function buildLocalStream(
     });
   }
 
-  stages.push({ line: buildSSELine("SYNTHESIS", "Document Generator", "running",   "Synthesising all outputs into structured documentation..."), delay: 800 });
+  stages.push({ line: buildSSELine("SYNTHESIS", "Document Generator", "running", "Synthesising all outputs into structured documentation..."), delay: 800 });
   stages.push({ line: buildSSELine("SYNTHESIS", "Document Generator", "completed", "Documentation ready", { documentation: fullReport }), delay: 400 });
   stages.push({
     line: buildSSELine("COMPLETE", "MarketOS AI", "completed", `Workflow complete — ${agents.length + 1} agents executed`, {
@@ -527,7 +562,7 @@ function buildErrorStream(message: string): ReadableStream {
 
 export async function POST(req: NextRequest) {
   let bodyText: string | null = null;
-  try { bodyText = await req.text(); } catch (_e) {}
+  try { bodyText = await req.text(); } catch (_e) { }
 
   let bodyPayload: {
     prompt?: string; query?: string;
@@ -536,12 +571,12 @@ export async function POST(req: NextRequest) {
     recipient_email?: string; recipient_phone?: string;
   } = {};
   if (bodyText) {
-    try { bodyPayload = JSON.parse(bodyText); } catch (_e) {}
+    try { bodyPayload = JSON.parse(bodyText); } catch (_e) { }
   }
 
-  const userQuery   = bodyPayload.query || bodyPayload.prompt || "";
+  const userQuery = bodyPayload.query || bodyPayload.prompt || "";
   const workspaceId = bodyPayload.workspace_id || bodyPayload.workspaceId || "default";
-  const channels    = bodyPayload.channels;
+  const channels = bodyPayload.channels;
 
   // Try candidate backend servers
   for (const base of BACKEND_CANDIDATES) {

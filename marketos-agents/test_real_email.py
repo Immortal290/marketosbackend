@@ -37,10 +37,10 @@ for event in events:
                 print("\n[🖼️  IMAGE ENGINE OUTPUTS]")
                 print(f"Creative Concept: {result.get('creative_concept', 'N/A')}")
                 print(f"Direction: {result.get('creative_direction', 'N/A')}")
-                print("Generated Banner Options (Pollinations URLs):")
-                angles = result.get("angles", [])
-                for angle in angles:
-                    print(f"  - [{angle.get('title')}] {angle.get('pollinations_url')}")
+                print("Generated Banner Options (AI-generated via OpenRouter/Gemini):")
+                banner_options = result.get("banner_options", [])
+                for opt in banner_options:
+                    print(f"  - [{opt.get('title')}] has_image={bool(opt.get('url'))}")
                     
             elif agent == "email_agent":
                 print("\n[✉️  EMAIL ENGINE OUTPUTS]")

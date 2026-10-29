@@ -123,6 +123,8 @@ async def _kafka_setup_background():
 
 AGENT_REGISTRY: dict[str, dict] = {
     "supervisor":       {"module": "agents.supervisor.supervisor_agent",       "func": "supervisor_node",          "skills": ["product-marketing-context","launch-strategy","marketing-ideas","marketing-psychology"], "temperature": 0.0, "sla": "<500ms"},
+    "creative":         {"module": "agents.creative.creative_agent",          "func": "creative_agent_node",        "skills": ["marketing-ideas", "marketing-psychology", "copywriting"],                                "temperature": 0.7, "sla": "<5s"},
+    "creative_agent":   {"module": "agents.creative.creative_agent",          "func": "creative_agent_node",        "skills": ["marketing-ideas", "marketing-psychology", "copywriting"],                                "temperature": 0.7, "sla": "<5s"},
     "competitor":       {"module": "agents.competitor.competitor_agent",       "func": "competitor_agent_node",    "skills": ["competitor-alternatives","customer-research","pricing-strategy"],                      "temperature": 0.1, "sla": "daily"},
     "seo":              {"module": "agents.seo.seo_agent",                    "func": "seo_agent_node",           "skills": ["seo-audit","ai-seo","programmatic-seo","schema-markup","site-architecture"],              "temperature": 0.0, "sla": "weekly"},
     "copy":             {"module": "agents.copy.copy_agent",                  "func": "copy_agent_node",          "skills": ["copywriting","copy-editing","email-sequence","cold-email","content-strategy","marketing-psychology"], "temperature": 0.7, "sla": "<8s"},

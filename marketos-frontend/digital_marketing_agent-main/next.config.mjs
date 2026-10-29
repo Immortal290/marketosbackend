@@ -2,7 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    remotePatterns: [{ protocol: "https", hostname: "image.pollinations.ai" }],
+    remotePatterns: [
+      { protocol: "https", hostname: "*.openrouter.ai" },
+      { protocol: "https", hostname: "generativelanguage.googleapis.com" },
+    ],
   },
   eslint: {
     ignoreDuringBuilds: true,

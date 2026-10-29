@@ -100,8 +100,21 @@ var router = (0, import_express.Router)();
 async function getUserId(req) {
   const userId = req.user?.userId;
   if (userId) return userId;
-  const user = await prisma.user.findFirst().catch(() => null);
-  return user?.id ?? null;
+  try {
+    let user = await prisma.user.findFirst();
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: "dev@marketos.local",
+          name: "Dev User",
+          role: "admin"
+        }
+      });
+    }
+    return user.id;
+  } catch (e) {
+    return null;
+  }
 }
 router.get("/", async (req, res) => {
   try {

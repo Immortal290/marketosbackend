@@ -73,7 +73,7 @@ def main():
     )
     copy_output = copy_state.get("copy_output") if copy_state else None
 
-    # 3. Creative / Image Engine (Uses Gemini & Pollinations)
+    # 3. Creative / Image Engine (Uses Gemini & OpenRouter)
     img_state = run_live_test(
         "Creative Image Agent",
         "agents.creative.image_engine",

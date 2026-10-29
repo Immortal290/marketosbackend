@@ -27,6 +27,7 @@ from langgraph.graph import StateGraph, END, START
 
 # ── Import all agent nodes ─────────────────────────────────────────────────────
 from agents.supervisor.supervisor_agent             import supervisor_node
+from agents.creative.creative_agent                 import creative_agent_node
 from agents.copy.copy_agent                         import copy_agent_node
 from agents.creative.image_engine                   import image_agent_node
 from agents.compliance.compliance_agent             import compliance_agent_node, compliance_router
@@ -51,7 +52,7 @@ from schemas.campaign import (
     CampaignPlan, CopyOutput, ComplianceResult, BudgetCheck, SendResult, 
     ABTestResult, LeadScore, CompetitorResult, SEOResult, AnalyticsResult, 
     MonitorResult, ReportingResult, OnboardingResult, VoiceResult, 
-    WhatsappResult, SocialResult, ImageResult, TelegramResult
+    WhatsappResult, SocialResult, ImageResult, TelegramResult, CreativeResult
 )
 
 # ── Graph State ────────────────────────────────────────────────────────────────
@@ -84,6 +85,7 @@ class CampaignState(TypedDict):
 
     # ── Agent outputs ────────────────────────────────────────────────────────────
     campaign_plan:           Optional[CampaignPlan]
+    creative_result:         Optional[CreativeResult]
     copy_output:             Optional[CopyOutput]
     image_result:            Optional[ImageResult]
     compliance_result:       Optional[ComplianceResult]
@@ -203,6 +205,7 @@ def build_campaign_graph() -> StateGraph:
 
     # Register all nodes
     g.add_node("supervisor",          supervisor_node)
+    g.add_node("creative_agent",      creative_agent_node)
     g.add_node("copy_agent",          copy_agent_node)
     g.add_node("image_agent",         image_agent_node)
     g.add_node("compliance_agent",    compliance_agent_node)
@@ -227,8 +230,10 @@ def build_campaign_graph() -> StateGraph:
         {"supervisor": "supervisor", "onboarding_agent": "onboarding_agent"})
 
     # ── Pipeline A: Campaign Execution ────────────────────────────────────
+    g.add_edge("supervisor",         "creative_agent")
     g.add_edge("supervisor",         "competitor_agent")
     g.add_edge("supervisor",         "seo_agent")
+    g.add_edge("creative_agent",     "copy_agent")
     g.add_edge("competitor_agent",   "copy_agent")
     g.add_edge("seo_agent",          "copy_agent")
     g.add_edge("copy_agent",         "image_agent")

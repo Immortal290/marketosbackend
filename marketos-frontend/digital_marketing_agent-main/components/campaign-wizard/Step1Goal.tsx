@@ -96,25 +96,30 @@ export function Step1Goal() {
             <label className="font-mono text-sm font-bold uppercase">Model</label>
             <select 
               className="border-neo border-neo-ink p-3 font-mono text-sm bg-white"
-              value={campaignBrief.imageModel || 'pollinations-flux'}
+              value={campaignBrief.imageModel || 'google/gemini-2.0-flash-exp:free'}
               onChange={e => updateCampaignBrief({ imageModel: e.target.value })}
             >
-              <optgroup label="🆓 Free — No API Key Required">
-                <option value="pollinations-flux">Pollinations.ai FLUX — Free (No Key Needed)</option>
+              <optgroup label="🔗 OpenRouter — Gemini (Recommended)">
+                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp — Free (OpenRouter Key)</option>
+                <option value="google/gemini-2.5-flash-image">Gemini 2.5 Flash Image (OpenRouter Key)</option>
+                <option value="google/gemini-flash-1.5-image">Gemini Flash 1.5 Image (OpenRouter Key)</option>
               </optgroup>
-              <optgroup label="🔗 OpenRouter — Gemini">
-                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (via OpenRouter)</option>
+              <optgroup label="🔗 OpenRouter — Qwen">
+                <option value="qwen/qwen-image">Qwen Image (OpenRouter Key)</option>
               </optgroup>
-              <optgroup label="💰 Low Cost — OpenAI Key">
-                <option value="dall-e-2">DALL-E 2 (~$0.018/image)</option>
+              <optgroup label="🔗 OpenRouter — Meta">
+                <option value="meta/muse-image-1.0-eval-20260824">Meta Muse Image 1.0 (OpenRouter Key)</option>
+              </optgroup>
+              <optgroup label="🔗 OpenRouter — FLUX">
+                <option value="black-forest-labs/flux-schnell">FLUX Schnell (OpenRouter Key)</option>
+                <option value="black-forest-labs/flux-1.1-pro">FLUX 1.1 Pro (OpenRouter Key)</option>
+              </optgroup>
+              <optgroup label="💰 OpenAI — Direct Key">
                 <option value="dall-e-3">DALL-E 3 (~$0.040/image)</option>
+                <option value="dall-e-2">DALL-E 2 (~$0.018/image)</option>
               </optgroup>
-              <optgroup label="HuggingFace — hf_ Token">
+              <optgroup label="🤗 HuggingFace — hf_ Token">
                 <option value="black-forest-labs/FLUX.1-schnell">FLUX.1-schnell via HuggingFace</option>
-                <option value="black-forest-labs/FLUX.1-dev">FLUX.1-dev via HuggingFace</option>
-              </optgroup>
-              <optgroup label="🆓 Free Tier — Together API Key">
-                <option value="together-flux-free">Together AI — FLUX.1-schnell (Free Tier)</option>
               </optgroup>
             </select>
           </div>
@@ -124,9 +129,8 @@ export function Step1Goal() {
               type="password"
               className="border-neo border-neo-ink p-3 font-mono text-sm bg-white"
               value={campaignBrief.imageApiKey || ''}
-              placeholder={(campaignBrief.imageModel === 'pollinations-flux') ? 'No key needed — Pollinations is free' : 'Paste your image API key...'}
+              placeholder="Paste your OpenRouter / API key..."
               onChange={e => updateCampaignBrief({ imageApiKey: e.target.value })}
-              disabled={campaignBrief.imageModel === 'pollinations-flux'}
             />
           </div>
         </div>

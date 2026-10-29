@@ -32,25 +32,27 @@ from utils.kafka_bus import publish_event, Topics
 # ── Intent → Agent mapping ────────────────────────────────────────────────────
 
 INTENT_AGENT_MAP: dict[str, list[str]] = {
-    "CREATE_CAMPAIGN":      ["supervisor", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
-    "GENERATE_CONTENT":     ["copy", "image", "compliance", "seo"],
-    "VISUAL_CAMPAIGN":      ["supervisor", "copy", "image", "compliance", "social_media", "analytics", "reporting"],
+    "CREATE_CAMPAIGN":      ["supervisor", "creative", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
+    "GENERATE_CONTENT":     ["creative", "copy", "image", "compliance", "seo"],
+    "VISUAL_CAMPAIGN":      ["supervisor", "creative", "image", "compliance", "social_media", "analytics", "reporting"],
     "ANALYZE_PERFORMANCE":  ["analytics", "monitor", "reporting"],
     "AB_TEST_ANALYSIS":     ["analytics", "reporting"],
     "SEO_AUDIT":            ["seo", "competitor"],
     "LEAD_SCORING":         ["lead_scoring", "analytics"],
-    "EMAIL_CAMPAIGN":       ["copy", "image", "compliance", "email", "analytics"],
-    "SMS_CAMPAIGN":         ["copy", "sms", "analytics"],
-    "SOCIAL_CAMPAIGN":      ["copy", "image", "social_media", "analytics"],
+    "EMAIL_CAMPAIGN":       ["creative", "copy", "image", "compliance", "email", "analytics"],
+    "SMS_CAMPAIGN":         ["creative", "copy", "sms", "analytics"],
+    "SOCIAL_CAMPAIGN":      ["creative", "copy", "image", "social_media", "analytics"],
     "COMPETITOR_ANALYSIS":  ["competitor", "seo", "reporting"],
     "FINANCE_REVIEW":       ["finance", "analytics", "reporting"],
     "ONBOARDING":           ["onboarding"],
     # GENERAL_QUERY is treated as a full campaign — supervisor decomposes & routes
-    "GENERAL_QUERY":        ["supervisor", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
+    "GENERAL_QUERY":        ["supervisor", "creative", "copy", "image", "compliance", "finance", "email", "sms", "social_media", "analytics", "monitor", "lead_scoring", "reporting"],
 }
 
 AGENT_DISPLAY_NAMES: dict[str, str] = {
     "supervisor":    "Supervisor Agent",
+    "creative":      "Creative Director Agent",
+    "creative_agent":"Creative Director Agent",
     "copy":          "Copy Agent",
     "image":         "Image Engine",
     "compliance":    "Compliance Agent",
@@ -136,24 +138,62 @@ STRICT CONTENT SERVICE POLICY:
 4. Your output MUST be strictly derived from the provided input parameters.
 """
 
-DOCUMENTATION_SYNTHESIZER_PROMPT = """You are the Documentation Synthesizer for MarketOS.
-You receive the structured outputs from multiple specialist AI agents and produce a refined, structured, 
-actionable response document for the user.
+DOCUMENTATION_SYNTHESIZER_PROMPT = """# SYSTEM PROMPT: AI DIGITAL MARKETING & AD CREATIVE DIRECTOR (Campaign Synthesizer)
 
-RULES:
-- Be precise, specific, and data-driven. No filler content.
-- Structure the document with clear sections.
-- Surface the most critical insights and recommendations prominently.
-- If A/B test results exist, highlight the winner and key learning prominently.
-- End with a concrete NEXT STEPS section with 3-5 prioritized actions.
+You are an expert AI Digital Marketing Creative Director, Advertising Copywriter, Brand Strategist, Social Media Marketer, and Visual Ad Designer.
+Your role: Transform user intents and specialist agent outputs into an executive-ready, high-converting digital advertising campaign report.
 
-OUTPUT FORMAT: A well-structured Markdown document with:
-  ## Executive Summary
-  ## Key Findings
-  ## Agent Outputs (one sub-section per agent)
-  ## A/B Test Results (if available)
-  ## Recommendations
-  ## Next Steps
+You think and work like a premium digital marketing agency combining creative direction, brand strategy, persuasive copywriting, social media marketing, and conversion rate optimization.
+
+Every output must be professional, engaging, brand-appropriate, visually descriptive, and ready for practical marketing use.
+Never invent factual business information, customer reviews, product certifications, discount rates, prices, shipping policies, guarantees, or deadlines. Use placeholders or clearly labelled suggestions for unconfirmed details.
+
+REQUIRED OUTPUT FORMAT (adhere strictly to this 10-point standard followed by multi-channel execution):
+
+# [CAMPAIGN NAME]
+*Campaign Concept & Omnichannel Creative Execution Brief*
+
+### 1. CAMPAIGN NAME
+A memorable, strategic campaign title capturing the brand's core message.
+
+### 2. CREATIVE CONCEPT
+The central creative idea, narrative angle, and why it cuts through market clutter.
+
+### 3. MAIN AD HEADLINE
+A short, powerful, visually prominent headline suitable for high-converting ads.
+
+### 4. SUPPORTING TAGLINE
+An emotionally engaging secondary line explaining the product value or campaign benefit.
+
+### 5. PROMOTIONAL COPY
+Clear offer hierarchy and verified benefits (use placeholders for unconfirmed discounts/deadlines).
+
+### 6. VISUAL DESIGN DIRECTION
+Detailed art direction: composition, visual hierarchy, layout safe-zones, lighting, color palette with hex codes, typography pairing, texture, and styling (tailored to luxury, tech, beauty, festive, food, or lifestyle).
+
+### 7. IMAGE GENERATION PROMPT
+A production-ready prompt for visual image generation specifying subject, composition, negative space for text, lighting, color palette, camera/lens styling, and aspect ratio (e.g., 4:5 or 1:1).
+
+### 8. SOCIAL MEDIA CAPTION
+Platform-optimized promotional copy with a compelling hook, key benefits, and strong CTA.
+
+### 9. CALL TO ACTION
+A specific, action-oriented conversion CTA (e.g., Shop Now, Explore the Collection, Claim Offer).
+
+### 10. RELEVANT HASHTAGS
+A curated set of brand, niche, and discovery hashtags.
+
+---
+
+## Omnichannel Channel Execution
+- **Email Sequence:** Subject lines, preview text, and email copy from Copy/Email Agents.
+- **SMS & Instant Messaging:** Punchy mobile messaging from SMS Agent with compliance notes.
+- **Compliance & Deliverability Audit:** GDPR, CAN-SPAM, and advertising standards audit status.
+- **Performance & Analytics:** Channel budget allocation, target KPIs, and projected ROAS.
+
+## Actionable Next Steps
+1. Prioritized action items for deployment.
+2. Channel launch schedule.
 
 STRICT CONTENT SERVICE POLICY:
 1. You MUST analyze and use ONLY the provided context and original user prompt.
@@ -197,22 +237,24 @@ def _run_agent_node(agent_key: str, state: dict, intent_data: dict) -> dict:
         active_llm_model.set(state["llm_model"])
 
     AGENT_REGISTRY_LOCAL = {
-        "supervisor":   ("agents.supervisor.supervisor_agent",        "supervisor_node"),
-        "copy":         ("agents.copy.copy_agent",                    "copy_agent_node"),
-        "image":        ("agents.creative.image_engine",              "image_agent_node"),
-        "compliance":   ("agents.compliance.compliance_agent",        "compliance_agent_node"),
-        "finance":      ("agents.finance.finance_agent",              "finance_agent_node"),
-        "email":        ("agents.email.email_agent",                  "email_agent_node"),
-        "sms":          ("agents.sms.sms_agent",                      "sms_agent_node"),
-        "social_media": ("agents.social.social_media_agent",          "social_media_agent_node"),
-        "analytics":    ("agents.analytics.analytics_agent",          "analytics_agent_node"),
-        "monitor":      ("agents.monitor.monitor_agent",              "monitor_agent_node"),
-        "ab_test":      ("agents.ab_test.ab_test_agent",              "ab_test_agent_node"),
-        "lead_scoring": ("agents.lead_scoring.lead_scoring_agent",    "lead_scoring_agent_node"),
-        "competitor":   ("agents.competitor.competitor_agent",        "competitor_agent_node"),
-        "seo":          ("agents.seo.seo_agent",                      "seo_agent_node"),
-        "reporting":    ("agents.reporting.reporting_agent",          "reporting_agent_node"),
-        "onboarding":   ("agents.onboarding.onboarding_agent",        "onboarding_agent_node"),
+        "supervisor":     ("agents.supervisor.supervisor_agent",        "supervisor_node"),
+        "creative":       ("agents.creative.creative_agent",          "creative_agent_node"),
+        "creative_agent": ("agents.creative.creative_agent",          "creative_agent_node"),
+        "copy":           ("agents.copy.copy_agent",                    "copy_agent_node"),
+        "image":          ("agents.creative.image_engine",              "image_agent_node"),
+        "compliance":     ("agents.compliance.compliance_agent",        "compliance_agent_node"),
+        "finance":        ("agents.finance.finance_agent",              "finance_agent_node"),
+        "email":          ("agents.email.email_agent",                  "email_agent_node"),
+        "sms":            ("agents.sms.sms_agent",                      "sms_agent_node"),
+        "social_media":   ("agents.social.social_media_agent",          "social_media_agent_node"),
+        "analytics":      ("agents.analytics.analytics_agent",          "analytics_agent_node"),
+        "monitor":        ("agents.monitor.monitor_agent",              "monitor_agent_node"),
+        "ab_test":        ("agents.ab_test.ab_test_agent",              "ab_test_agent_node"),
+        "lead_scoring":   ("agents.lead_scoring.lead_scoring_agent",    "lead_scoring_agent_node"),
+        "competitor":     ("agents.competitor.competitor_agent",        "competitor_agent_node"),
+        "seo":            ("agents.seo.seo_agent",                      "seo_agent_node"),
+        "reporting":      ("agents.reporting.reporting_agent",          "reporting_agent_node"),
+        "onboarding":     ("agents.onboarding.onboarding_agent",        "onboarding_agent_node"),
     }
 
     mod_path, func_name = AGENT_REGISTRY_LOCAL[agent_key]
@@ -561,12 +603,36 @@ def _build_synthesis_input(query: str, intent: str, summary: str, outputs: dict[
 
 
 def _fallback_documentation(query: str, intent: str, summary: str, outputs: dict) -> str:
-    agent_sections = "\n".join(
+    creative_data = outputs.get("creative") or outputs.get("creative_agent") or {}
+    creative_markdown = creative_data.get("formatted_markdown") if isinstance(creative_data, dict) else ""
+
+    agent_sections = "\n\n".join(
         f"### {AGENT_DISPLAY_NAMES.get(k, k.title())}\n{_summarise_result(v)}"
         for k, v in outputs.items()
+        if k not in ("creative", "creative_agent")
     )
+
+    if creative_markdown:
+        return f"""# {creative_data.get('campaign_name', 'Digital Marketing Campaign')}
+*AI Digital Marketing & Ad Creative Director Execution Brief*
+
+{creative_markdown}
+
+---
+
+## Omnichannel Specialist Agent Outputs
+{agent_sections}
+
+---
+
+## Actionable Next Steps
+1. Review the creative headline, visual direction, and image generation prompt.
+2. Deploy approved copy to Email, SMS, and Social media channels.
+3. Track real-time engagement and telemetry across target segments.
+"""
+
     return f"""## Executive Summary
-Your query has been processed by the MarketOS AI agent pipeline.
+Your query has been processed by the MarketOS AI Digital Marketing Agent Pipeline.
 
 **Intent:** {intent}
 **Summary:** {summary}

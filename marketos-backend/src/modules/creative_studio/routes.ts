@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../../lib/logger';
+import agentClient from '../../lib/agentClient';
 
 const router = Router();
 
@@ -193,8 +195,33 @@ router.patch('/brand-kit', (req: Request, res: Response) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ValidationError' }
  */
-router.post('/generate', (req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { taskId: 'gen-task-uuid', status: 'QUEUED', estimatedMs: 8000 } });
+router.post('/generate', async (req: Request, res: Response) => {
+  const { prompt, type, workspaceId } = req.body || {};
+  try {
+    const result = await agentClient.runAgent('creative', {
+      user_intent: prompt || 'Product Campaign',
+      type: type || 'AD_CREATIVE',
+      workspace_id: workspaceId || 'default',
+    });
+    res.status(200).json({
+      success: true,
+      data: {
+        taskId: `gen-${Date.now()}`,
+        status: 'COMPLETED',
+        creative: result.data,
+      },
+    });
+  } catch (err: any) {
+    logger.warn(`[CreativeStudio] Agent run fallback: ${err.message}`);
+    res.status(200).json({
+      success: true,
+      data: {
+        taskId: `gen-${Date.now()}`,
+        status: 'QUEUED',
+        estimatedMs: 8000,
+      },
+    });
+  }
 });
 
 /**

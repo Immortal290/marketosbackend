@@ -54,7 +54,7 @@ class CopyVariant(BaseModel):
 
     # Image fields — populated by Copy Agent, used by Image Agent
     hero_image_query: Optional[str] = None     # Image search query / concept (2-3 words)
-    hero_image_prompt: Optional[str] = None    # Gemini Imagen / Pollinations prompt (fallback visual)
+    hero_image_prompt: Optional[str] = None    # AI Image prompt (Gemini/OpenRouter)
     hero_image_url: Optional[str] = None       # Generated image URL
 
     # Scoring
@@ -72,8 +72,8 @@ class CopyOutput(BaseModel):
     brand_voice_notes: str
 
     # Image fields — populated by Image Agent after copy_agent runs
-    hero_image_url: Optional[str] = None       # Pollinations photo URL (if generated)
-    hero_image_base64: Optional[str] = None    # Gemini Imagen base64 bytes (fallback)
+    hero_image_url: Optional[str] = None       # AI photo URL (if generated)
+    hero_image_base64: Optional[str] = None    # Image base64 bytes (Gemini/OpenRouter)
     hero_image_type: Optional[str] = None      # "URL" | "CID" | None
 
 
@@ -455,3 +455,28 @@ class OnboardingResult(BaseModel):
     plan: Dict[str, Any] = {}
     milestones_done: List[str] = []
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+# ── Creative Director Agent ──────────────────────────────────────────────────
+
+class CreativeResult(BaseModel):
+    campaign_name: str
+    creative_concept: str
+    main_ad_headline: str
+    supporting_tagline: str
+    promotional_copy: str
+    visual_design_direction: str
+    image_generation_prompt: str
+    social_media_caption: str
+    call_to_action: str
+    relevant_hashtags: List[str] = []
+    palette: Optional[List[str]] = []
+    aspect_ratio: Optional[str] = "4:5"
+    platform: Optional[str] = "Instagram"
+    formatted_markdown: Optional[str] = None
+    image_url: Optional[str] = None
+    image_preview_url: Optional[str] = None
+    image_base64: Optional[str] = None
+    banner_options: Optional[List[Dict[str, Any]]] = []
+    has_image: Optional[bool] = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+

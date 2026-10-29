@@ -3,7 +3,7 @@ MarketOS — Pipeline Flow Verification Test
 Validates:
   1. LLM provider returns Groq with Gemini+Mock fallback chains
   2. Orchestrator uses Groq for intent classification (not hardcoded)
-  3. Image engine generates real images via Gemini + Pollinations fallback
+  3. Image engine generates images via OpenRouter / Gemini with SVG fallback
   4. Email agent receives and uses recipient_email from state
   5. SMS agent receives and uses recipient_phone from state
   6. Context flows from user_intent through all agents
@@ -54,7 +54,7 @@ def test_orchestrator_intent_classification():
 
 
 def test_image_engine_context_and_fallback():
-    """Verify image engine receives campaign context and has Pollinations fallback."""
+    """Verify image engine receives campaign context and generates banner options."""
     from agents.creative.image_engine import image_agent_node
 
     state = {
@@ -86,12 +86,11 @@ def test_image_engine_context_and_fallback():
     assert img_result.get("creative_concept"), "Missing creative_concept"
     assert img_result.get("creative_direction"), "Missing creative_direction"
     assert img_result.get("color_palette"), "Missing color_palette"
-    assert len(img_result.get("banner_options", [])) > 0, "banner_options is EMPTY — Pollinations URLs not generated"
+    assert len(img_result.get("banner_options", [])) > 0, "banner_options is EMPTY — Banner options not generated"
 
-    # Verify banner options have URLs (not hardcoded images)
+    # Verify banner options have valid structure
     for banner in img_result.get("banner_options", []):
-        assert banner.get("url"), f"Banner {banner.get('id')} missing URL"
-        assert "pollinations.ai" in banner.get("url", ""), f"Banner URL not from Pollinations: {banner.get('url', '')[:80]}"
+        assert banner.get("title"), f"Banner {banner.get('id')} missing title"
         assert banner.get("overlay"), f"Banner {banner.get('id')} missing overlay text"
 
     # Verify context is in the prompt
@@ -102,7 +101,7 @@ def test_image_engine_context_and_fallback():
     # Verify image_preview_url is set
     assert img_result.get("image_preview_url"), "Missing image_preview_url"
 
-    print(f"✅ Image Engine: {len(img_result.get('banner_options', []))} banners with Pollinations URLs")
+    print(f"✅ Image Engine: {len(img_result.get('banner_options', []))} banner options generated")
     print(f"  Creative concept: {img_result.get('creative_concept', '')[:80]}")
     print(f"  Preview URL: {img_result.get('image_preview_url', '')[:80]}...")
 

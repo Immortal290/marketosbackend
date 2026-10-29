@@ -1,7 +1,6 @@
 import os
 import requests
 import base64
-from agents.creative.image_engine import _generate_pollinations_image
 from utils.sendgrid_mailer import send_email
 
 print("\n" + "="*70)
@@ -11,15 +10,10 @@ print("="*70)
 recipient = "samriddharoy0804@gmail.com"
 print(f"Generating Image Engine outputs for ZenLeaf Organic Green Tea...")
 
-# 1. Generate Image Engine outputs via Pollinations (no API key needed)
-hero_base64 = _generate_pollinations_image(
-    full_prompt="A beautiful, calming lifestyle ad banner for ZenLeaf organic green tea, featuring a serene natural landscape with a steaming cup of green tea at its center.",
-    width=1200,
-    height=628
-)
-
-print("\n[🖼️  IMAGE ENGINE OUTPUTS]")
-print(f"Image Source: AI-generated (pollinations-flux)")
+# Image generation now requires an OpenRouter or Gemini API key
+# Set IMAGE_API_KEY env var or pass via the UI before running this test
+hero_base64 = None
+print("[⚠️  Image generation requires an OpenRouter/Gemini API key in IMAGE_API_KEY env var]")
 print(f"Image Base64 Length: {len(hero_base64) if hero_base64 else 0} bytes")
 
 # 2. Send Real Email
