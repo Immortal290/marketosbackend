@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, XCircle, Bot, AlertTriangle, ShieldCheck, Mail, Cpu, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { getApiBaseUrl } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 
 export interface PendingApprovalData {
   runId: string;
@@ -27,16 +27,13 @@ export function AgentApprovalModal({ data, isOpen, onClose, onDecision }: AgentA
   const handleAction = async (decision: "approved" | "rejected") => {
     setSubmitting(true);
     try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/workflows/${data.runId}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to submit decision: HTTP ${res.status}`);
-      }
+      await apiRequest(
+        `/workflows/${encodeURIComponent(data.runId)}/approve`,
+        {
+          method: "POST",
+          body: JSON.stringify({ decision }),
+        }
+      );
 
       toast.success(
         decision === "approved"

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
 // Dynamic routing for all API requests
@@ -22,20 +22,20 @@ let fallbackBillingSettings = {
 };
 
 
-// ── Backend URL resolution (priority order) ─────────────────────────────────
+// â”€â”€ Backend URL resolution (priority order) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Set NEXT_PUBLIC_API_BASE_URL in the Railway frontend service's Variables tab
 // to your backend's public Railway URL, e.g.:
 //   https://marketosbackend-production.up.railway.app
 //
 // Railway Private Networking (internal) also works if enabled:
 //   http://marketos-backend.railway.internal:3000
-// Enable it in Railway → Project Settings → Private Networking
+// Enable it in Railway â†’ Project Settings â†’ Private Networking
 const BACKEND_CANDIDATES = [
-  process.env.NEXT_PUBLIC_API_BASE_URL,   // ← Set this in Railway frontend Variables
+  process.env.NEXT_PUBLIC_API_BASE_URL,   // â† Set this in Railway frontend Variables
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
   process.env.API_URL,
-  "http://localhost:3001",                // ← Local backend (primary)
+  "http://localhost:3001",                // â† Local backend (primary)
   "http://localhost:3002",
   "http://marketos-backend.railway.internal:3000",  // Railway private network
   "http://localhost:3000",
@@ -61,6 +61,7 @@ async function handleRequest(req: NextRequest, { params }: { params: { path?: st
   if (
     fullPath === "/settings/gmail" ||
     fullPath.startsWith("/settings/gmail/") ||
+    fullPath.startsWith("/settings/oauth/") ||
     fullPath.startsWith("/auth/")
   ) {
     const backendUrl =
@@ -478,13 +479,13 @@ async function serveIntelligentFallback(
       if (r.ok) {
         const pd = await r.json();
         if (pd.method === "card" && pd.card) {
-          paymentLabel = `Razorpay • ${pd.card.network || "Card"} ending in ${pd.card.last4 || "••••"}`;
+          paymentLabel = `Razorpay â€¢ ${pd.card.network || "Card"} ending in ${pd.card.last4 || "â€¢â€¢â€¢â€¢"}`;
         } else if (pd.method === "upi") {
-          paymentLabel = `Razorpay • UPI (${pd.vpa || "Verified"})`;
+          paymentLabel = `Razorpay â€¢ UPI (${pd.vpa || "Verified"})`;
         } else if (pd.method === "netbanking") {
-          paymentLabel = `Razorpay • Netbanking (${pd.bank || "Verified"})`;
+          paymentLabel = `Razorpay â€¢ Netbanking (${pd.bank || "Verified"})`;
         } else {
-          paymentLabel = `Razorpay • ${pd.method || "Online"}`;
+          paymentLabel = `Razorpay â€¢ ${pd.method || "Online"}`;
         }
       }
     } catch (_e) {}
@@ -624,7 +625,7 @@ async function serveIntelligentFallback(
     });
   }
 
-  // ── Phone / Twilio Verify (server-side, no CORS) ─────────────────────────
+  // â”€â”€ Phone / Twilio Verify (server-side, no CORS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/phone/verify') && method === 'POST') {
     const { accountSid, authToken, phoneNumber } = bodyPayload;
     if (!accountSid || !authToken) return NextResponse.json({ success: false, error: 'accountSid and authToken required' }, { status: 400 });
@@ -637,7 +638,7 @@ async function serveIntelligentFallback(
     } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
   }
 
-  // ── Phone / Voice Call ────────────────────────────────────────────────────
+  // â”€â”€ Phone / Voice Call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/phone/call') && method === 'POST') {
     const { accountSid, authToken, from, to, url } = bodyPayload;
     if (!accountSid || !authToken || !from || !to) return NextResponse.json({ success: false, error: 'accountSid, authToken, from, to required' }, { status: 400 });
@@ -651,7 +652,7 @@ async function serveIntelligentFallback(
     } catch (e: any) { return NextResponse.json({ success: false, error: e.message }, { status: 502 }); }
   }
 
-  // ── SMS / Twilio Verify ───────────────────────────────────────────────────
+  // â”€â”€ SMS / Twilio Verify â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/sms/verify') && method === 'POST') {
     const { accountSid, authToken, fromNumber } = bodyPayload;
     if (!accountSid || !authToken) return NextResponse.json({ success: false, error: 'accountSid and authToken required' }, { status: 400 });
@@ -664,7 +665,7 @@ async function serveIntelligentFallback(
     } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
   }
 
-  // ── SMS / Send ────────────────────────────────────────────────────────────
+  // â”€â”€ SMS / Send â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/sms/send') && method === 'POST') {
     const { accountSid, authToken, from, to, body: msgBody } = bodyPayload;
     if (!accountSid || !authToken || !from || !to || !msgBody) return NextResponse.json({ success: false, error: 'accountSid, authToken, from, to, body required' }, { status: 400 });
@@ -682,7 +683,7 @@ async function serveIntelligentFallback(
     return NextResponse.json({ success: true, sent: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, total: results.length, results });
   }
 
-  // ── Email / Verify / Clerk ────────────────────────────────────────────────
+  // â”€â”€ Email / Verify / Clerk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/email-channel/verify/clerk') && method === 'POST') {
     const { secretKey, fromEmail } = bodyPayload;
     if (!secretKey || !secretKey.startsWith('sk_')) return NextResponse.json({ success: false, error: 'Valid Clerk secretKey (sk_...) required' }, { status: 400 });
@@ -693,7 +694,7 @@ async function serveIntelligentFallback(
     } catch (e: any) { return NextResponse.json({ success: false, verified: false, error: e.message }, { status: 502 }); }
   }
 
-  // ── Email / Verify / Google OAuth ─────────────────────────────────────────
+  // â”€â”€ Email / Verify / Google OAuth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/email-channel/verify/google') && method === 'POST') {
     const { clientId, clientSecret, redirectUri, scopes } = bodyPayload;
     if (!clientId || !clientSecret || !redirectUri) return NextResponse.json({ success: false, error: 'clientId, clientSecret, redirectUri required' }, { status: 400 });
@@ -703,7 +704,7 @@ async function serveIntelligentFallback(
     return NextResponse.json({ success: true, verified: true, provider: 'google', credentials: { clientId, redirectUri, scopes: scopeList, formatValid: true }, authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
   }
 
-  // ── Email / Health ─────────────────────────────────────────────────────────
+  // â”€â”€ Email / Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (path.includes('/email-channel/health')) {
     return NextResponse.json({ success: true, module: 'email-channel', providers: ['clerk', 'google'], status: 'operational' });
   }

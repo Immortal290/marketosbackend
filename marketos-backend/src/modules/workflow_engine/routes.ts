@@ -1,7 +1,19 @@
 import { Router, Request, Response } from 'express';
+import {
+  requireJwtAuth,
+  AuthenticatedRequest,
+} from '../../middlewares/jwt-auth.middleware';
 import { startWorkflow, getWorkflowRun, approveWorkflowStep } from './orchestrator';
 
 const router = Router();
+
+router.use(requireJwtAuth);
+
+function authenticatedUserId(req: Request): string {
+  const userId = (req as AuthenticatedRequest).user?.userId;
+  if (!userId) throw new Error('Authentication required');
+  return userId;
+}
 
 /**
  * @openapi
@@ -30,7 +42,7 @@ router.post('/workflows', async (req: Request, res: Response) => {
       return;
     }
 
-    const run = await startWorkflow(command);
+    const run = await startWorkflow(command, authenticatedUserId(req));
     res.status(200).json({
       success: true,
       data: {
@@ -54,7 +66,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const run = await startWorkflow(command);
+    const run = await startWorkflow(command, authenticatedUserId(req));
     res.status(200).json({
       success: true,
       data: {
@@ -78,7 +90,7 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.get('/workflows/:runId', async (req: Request, res: Response) => {
   try {
-    const run = await getWorkflowRun(req.params.runId);
+    const run = await getWorkflowRun(String(req.params.runId), authenticatedUserId(req));
     if (!run) {
       res.status(404).json({ success: false, error: 'Workflow run not found' });
       return;
@@ -91,7 +103,7 @@ router.get('/workflows/:runId', async (req: Request, res: Response) => {
 
 router.get('/:runId', async (req: Request, res: Response) => {
   try {
-    const run = await getWorkflowRun(req.params.runId);
+    const run = await getWorkflowRun(String(req.params.runId), authenticatedUserId(req));
     if (!run) {
       res.status(404).json({ success: false, error: 'Workflow run not found' });
       return;
@@ -126,7 +138,7 @@ router.post('/workflows/:runId/approve', async (req: Request, res: Response) => 
       return;
     }
 
-    const updatedRun = await approveWorkflowStep(req.params.runId, decision);
+    const updatedRun = await approveWorkflowStep(String(req.params.runId), decision, authenticatedUserId(req));
     res.status(200).json({ success: true, data: updatedRun });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
@@ -141,7 +153,7 @@ router.post('/:runId/approve', async (req: Request, res: Response) => {
       return;
     }
 
-    const updatedRun = await approveWorkflowStep(req.params.runId, decision);
+    const updatedRun = await approveWorkflowStep(String(req.params.runId), decision, authenticatedUserId(req));
     res.status(200).json({ success: true, data: updatedRun });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });

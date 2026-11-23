@@ -30,12 +30,14 @@ export function determineAgentPlan(command: string): string[] {
 /**
  * Creates a new WorkflowRun with all planned steps in PostgreSQL
  */
-export async function startWorkflow(command: string) {
+export async function startWorkflow(command: string, userId: string) {
+  if (!userId?.trim()) throw new Error('Authentication required');
   const agentPlan = determineAgentPlan(command);
 
   const run = await prisma.workflowRun.create({
     data: {
       command,
+      userId,
       status: 'running',
       steps: {
         create: agentPlan.map((agentName) => ({
@@ -86,6 +88,11 @@ export async function executeWorkflowLoop(runId: string) {
     return;
   }
 
+  if (!run.userId) {
+    logger.error(`[WorkflowEngine] Ownerless workflow blocked: ${runId}`);
+    return;
+  }
+
   if (run.status === 'completed' || run.status === 'failed' || run.status === 'awaiting_approval') {
     logger.info(`[WorkflowEngine] Run ${runId} is currently in state '${run.status}', skipping execution loop.`);
     return;
@@ -101,7 +108,7 @@ export async function executeWorkflowLoop(runId: string) {
 
   for (const step of run.steps) {
     // Skip already completed steps
-    if (step.status === 'done' || step.status === 'approved') {
+    if (step.status === 'done') {
       continue;
     }
 
@@ -114,6 +121,97 @@ export async function executeWorkflowLoop(runId: string) {
     }
 
     // ── STEP 1: Mark step RUNNING ──
+    if (
+      step.status === 'awaiting_approval' ||
+      step.status === 'running'
+    ) {
+      return;
+    }
+
+    if (step.requiresApproval && step.status === 'pending') {
+      const preview = {
+        approval_required: true,
+        agent: step.agentName,
+        command: run.command,
+        note: 'Approval required before agent execution',
+      };
+
+      const claim = await prisma.workflowStep.updateMany({
+        where: {
+          id: step.id,
+          runId,
+          status: 'pending',
+        },
+        data: {
+          status: 'awaiting_approval',
+          output: preview,
+        },
+      });
+
+      if (claim.count !== 1) return;
+
+      const pause = await prisma.workflowRun.updateMany({
+        where: { id: runId, status: 'running' },
+        data: { status: 'awaiting_approval' },
+      });
+
+      if (pause.count !== 1) {
+        logger.error(`Workflow pause failed: ${runId}`);
+        return;
+      }
+
+      if (io) {
+        io.emit('workflow:step_update', {
+          runId,
+          stepId: step.id,
+          agentName: step.agentName,
+          status: 'awaiting_approval',
+          output: preview,
+          requiresApproval: true,
+        });
+
+        io.emit('workflow:awaiting_approval', {
+          runId,
+          step: {
+            ...step,
+            status: 'awaiting_approval',
+            output: preview,
+          },
+          output: preview,
+          agentName: step.agentName,
+        });
+      }
+
+      return;
+    }
+
+    if (step.requiresApproval && step.status !== 'approved') {
+      return;
+    }
+
+    if (!step.requiresApproval && step.status !== 'pending') {
+      return;
+    }
+
+    // Gmail OAuth sends must never run through the generic Python
+    // agent dispatcher or its simulated-success fallback.
+    // A dedicated approval-bound dispatcher must handle them.
+    if (step.agentName === 'GmailOAuthSend') {
+      logger.warn(
+        `[WorkflowEngine] Gmail OAuth send blocked from generic agent execution: ${runId}`
+      );
+      return;
+    }
+    const executionClaim = await prisma.workflowStep.updateMany({
+      where: {
+        id: step.id,
+        runId,
+        status: step.status,
+      },
+      data: { status: 'running' },
+    });
+
+    if (executionClaim.count !== 1) return;
     const updatedStep = await prisma.workflowStep.update({
       where: { id: step.id },
       data: { status: 'running' },
@@ -173,48 +271,6 @@ export async function executeWorkflowLoop(runId: string) {
     previousOutputs[step.agentName] = agentResultData;
 
     // ── STEP 3: Check Approval Gate ──
-    if (step.requiresApproval) {
-      logger.info(`[WorkflowEngine] Run ${runId} -> Agent ${step.agentName} REQUIRES HUMAN APPROVAL. Pausing workflow.`);
-
-      // Update Step & Run status to awaiting_approval
-      const pausedStep = await prisma.workflowStep.update({
-        where: { id: step.id },
-        data: {
-          status: 'awaiting_approval',
-          output: agentResultData as any,
-        },
-      });
-
-      const pausedRun = await prisma.workflowRun.update({
-        where: { id: runId },
-        data: { status: 'awaiting_approval' },
-      });
-
-      // Broadcast live pause & approval required event via WebSockets
-      if (io) {
-        io.emit('workflow:step_update', {
-          runId,
-          stepId: pausedStep.id,
-          agentName: pausedStep.agentName,
-          status: 'awaiting_approval',
-          output: agentResultData,
-          requiresApproval: true,
-          elapsedMs,
-        });
-
-        io.emit('workflow:awaiting_approval', {
-          runId,
-          step: pausedStep,
-          output: agentResultData,
-          agentName: pausedStep.agentName,
-        });
-      }
-
-      // Stop the execution loop — wait for user /approve endpoint call
-      return;
-    }
-
-    // ── STEP 4: Auto-run completion for non-approval steps ──
     const completedStep = await prisma.workflowStep.update({
       where: { id: step.id },
       data: {
@@ -267,67 +323,70 @@ export async function executeWorkflowLoop(runId: string) {
 /**
  * Resumes or fails a workflow run when the user submits an approval decision
  */
-export async function approveWorkflowStep(runId: string, decision: 'approved' | 'rejected') {
-  const run = await prisma.workflowRun.findUnique({
-    where: { id: runId },
-    include: { steps: { orderBy: { createdAt: 'asc' } } },
-  });
-
-  if (!run) {
-    throw new Error(`Workflow run ${runId} not found`);
+export async function approveWorkflowStep(
+  runId: string,
+  decision: 'approved' | 'rejected',
+  userId: string
+) {
+  if (!userId?.trim()) {
+    throw new Error('Authentication required');
   }
 
-  const awaitingStep = run.steps.find((s) => s.status === 'awaiting_approval');
-
-  if (!awaitingStep) {
-    throw new Error(`Workflow run ${runId} has no step awaiting approval`);
-  }
-
-  if (decision === 'rejected') {
-    logger.info(`[WorkflowEngine] User REJECTED step ${awaitingStep.agentName} for run ${runId}`);
-
-    const rejectedStep = await prisma.workflowStep.update({
-      where: { id: awaitingStep.id },
-      data: { status: 'rejected' },
+  const approvedStep = await prisma.$transaction(async (tx) => {
+    const run = await tx.workflowRun.findFirst({
+      where: {
+        id: runId,
+        userId,
+        status: 'awaiting_approval',
+      },
+      include: {
+        steps: { orderBy: { createdAt: 'asc' } },
+      },
     });
 
-    const failedRun = await prisma.workflowRun.update({
-      where: { id: runId },
-      data: { status: 'failed' },
-      include: { steps: true },
-    });
-
-    if (io) {
-      io.emit('workflow:step_update', {
-        runId,
-        stepId: rejectedStep.id,
-        agentName: rejectedStep.agentName,
-        status: 'rejected',
-      });
-
-      io.emit('workflow:update', {
-        event: 'FAILED',
-        runId,
-        status: 'failed',
-        steps: failedRun.steps,
-        reason: `Step ${awaitingStep.agentName} was rejected by user.`,
-      });
+    if (!run) {
+      throw new Error('Workflow not found or not awaiting approval');
     }
 
-    return failedRun;
-  }
+    const step = run.steps.find(
+      (s) => s.status === 'awaiting_approval' && s.requiresApproval
+    );
 
-  // Decision is APPROVED
-  logger.info(`[WorkflowEngine] User APPROVED step ${awaitingStep.agentName} for run ${runId}. Resuming execution loop.`);
+    if (!step) {
+      throw new Error('No authorized approval step');
+    }
 
-  const approvedStep = await prisma.workflowStep.update({
-    where: { id: awaitingStep.id },
-    data: { status: 'done' },
-  });
+    const updatedStep = await tx.workflowStep.updateMany({
+      where: {
+        id: step.id,
+        runId,
+        status: 'awaiting_approval',
+      },
+      data: {
+        status: decision === 'approved' ? 'approved' : 'rejected',
+      },
+    });
 
-  await prisma.workflowRun.update({
-    where: { id: runId },
-    data: { status: 'running' },
+    if (updatedStep.count !== 1) {
+      throw new Error('Approval already processed');
+    }
+
+    const updatedRun = await tx.workflowRun.updateMany({
+      where: {
+        id: runId,
+        userId,
+        status: 'awaiting_approval',
+      },
+      data: {
+        status: decision === 'approved' ? 'running' : 'failed',
+      },
+    });
+
+    if (updatedRun.count !== 1) {
+      throw new Error('Approval already processed');
+    }
+
+    return step;
   });
 
   if (io) {
@@ -335,27 +394,34 @@ export async function approveWorkflowStep(runId: string, decision: 'approved' | 
       runId,
       stepId: approvedStep.id,
       agentName: approvedStep.agentName,
-      status: 'done',
+      status: decision === 'approved' ? 'approved' : 'rejected',
     });
   }
 
-  // Resume loop asynchronously
-  executeWorkflowLoop(runId).catch((err) => {
-    logger.error(`[WorkflowEngine] Error resuming execution loop for run ${runId}:`, err);
-  });
+  if (decision === 'approved') {
+    executeWorkflowLoop(runId).catch((error) => {
+      logger.error(`Approved workflow execution failed: ${runId}`, error);
+    });
+  }
 
-  return prisma.workflowRun.findUnique({
-    where: { id: runId },
+  return prisma.workflowRun.findFirst({
+    where: { id: runId, userId },
     include: { steps: true },
   });
 }
-
 /**
  * Retrieves full workflow run with all step outputs
  */
-export async function getWorkflowRun(runId: string) {
-  return prisma.workflowRun.findUnique({
-    where: { id: runId },
-    include: { steps: { orderBy: { createdAt: 'asc' } } },
+export async function getWorkflowRun(
+  runId: string,
+  userId: string
+) {
+  if (!userId?.trim()) return null;
+
+  return prisma.workflowRun.findFirst({
+    where: { id: runId, userId },
+    include: {
+      steps: { orderBy: { createdAt: 'asc' } },
+    },
   });
 }

@@ -1,6 +1,7 @@
 "use client";
+import OAuthAssetPicker from "./oauth-asset-picker";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Integration } from "@/lib/types";
 import { NeoCard } from "@/components/ui/NeoCard";
 import { NeoToggle } from "@/components/ui/NeoToggle";
@@ -11,12 +12,176 @@ import { toast } from "sonner";
 import { RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { PROVIDERS } from "@/lib/providers";
 
+type OAuthConnectionSummary = {
+  id: string;
+  provider: string;
+  accountLabel?: string | null;
+  connectionStatus?: string;
+};
+
+const OAUTH_CONNECT_PROVIDERS = [
+  { id: "gmail", label: "Gmail" },
+  { id: "ga4", label: "Google Analytics 4" },
+  { id: "google_ads", label: "Google Ads" },
+  { id: "mailchimp", label: "Mailchimp" },
+  { id: "hubspot", label: "HubSpot" },
+  { id: "meta_ads", label: "Meta Ads" },
+  { id: "linkedin", label: "LinkedIn" },
+] as const;
+
+type OAuthConnectProvider =
+  (typeof OAUTH_CONNECT_PROVIDERS)[number]["id"];
+
+const OAUTH_AUTHORIZE_HOSTS: Record<OAuthConnectProvider, string> = {
+  gmail: "accounts.google.com",
+  ga4: "accounts.google.com",
+  google_ads: "accounts.google.com",
+  mailchimp: "login.mailchimp.com",
+  hubspot: "app.hubspot.com",
+  meta_ads: "www.facebook.com",
+  linkedin: "www.linkedin.com",
+};
 export default function IntegrationsSettingsPage() {
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [activeForm, setActiveForm] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [verifying, setVerifying] = useState(false);
+  const [oauthConnections, setOAuthConnections] =
+    useState<OAuthConnectionSummary[]>([]);
+
+  const [oauthLoading, setOAuthLoading] = useState(true);
+  const [oauthBusy, setOAuthBusy] = useState(false);
+  const [oauthError, setOAuthError] = useState<string | null>(null);
+
+  const loadOAuthConnections = useCallback(async () => {
+    setOAuthLoading(true);
+    setOAuthError(null);
+
+    try {
+      const response = await apiRequest<{
+        success: boolean;
+        data: OAuthConnectionSummary[];
+      }>("/settings/oauth/connections");
+
+      if (
+        response?.success !== true ||
+        !Array.isArray(response.data)
+      ) {
+        throw new Error("Invalid OAuth connection response");
+      }
+
+      setOAuthConnections(
+        response.data.filter(
+          (item) =>
+            item &&
+            typeof item.id === "string" &&
+            typeof item.provider === "string"
+        )
+      );
+    } catch (error) {
+      setOAuthConnections([]);
+      setOAuthError(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify OAuth connections"
+      );
+    } finally {
+      setOAuthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOAuthConnections();
+  }, [loadOAuthConnections]);
+
+  const startOAuthConnection = async (
+    provider: OAuthConnectProvider
+  ) => {
+    setOAuthBusy(true);
+    setOAuthError(null);
+
+    try {
+      const response = await apiRequest<{
+        success: boolean;
+        authorizationUrl: string;
+      }>(`/settings/oauth/${provider}/start`, {
+        method: "POST",
+      });
+
+      if (
+        response?.success !== true ||
+        typeof response.authorizationUrl !== "string"
+      ) {
+        throw new Error("OAuth authorization could not start");
+      }
+
+      const authorizationUrl = new URL(response.authorizationUrl);
+
+      if (
+        authorizationUrl.protocol !== "https:" ||
+        authorizationUrl.hostname !== OAUTH_AUTHORIZE_HOSTS[provider] ||
+        authorizationUrl.port !== "" ||
+        authorizationUrl.username !== "" ||
+        authorizationUrl.password !== "" ||
+        authorizationUrl.hash !== ""
+      ) {
+        throw new Error("Unexpected OAuth authorization destination");
+      }
+
+      window.location.assign(authorizationUrl.toString());
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to start OAuth authorization";
+
+      setOAuthError(message);
+      toast.error(message);
+    } finally {
+      setOAuthBusy(false);
+    }
+  };
+
+  const disconnectOAuthConnection = async (
+    connection: OAuthConnectionSummary
+  ) => {
+    const confirmed = window.confirm(
+      "Disconnect this OAuth account from MarketOS? " +
+      "This removes the stored connection but does not revoke " +
+      "access in your Google Account."
+    );
+
+    if (!confirmed) return;
+
+    setOAuthBusy(true);
+    setOAuthError(null);
+
+    try {
+      const response = await apiRequest<{ success: boolean }>(
+        `/settings/oauth/connections/${encodeURIComponent(connection.id)}`,
+        { method: "DELETE" }
+      );
+
+      if (response?.success !== true) {
+        throw new Error("OAuth disconnection was not confirmed");
+      }
+
+      await loadOAuthConnections();
+      toast.success("OAuth connection removed from MarketOS");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to disconnect OAuth account";
+
+      setOAuthError(message);
+      toast.error(message);
+    } finally {
+      setOAuthBusy(false);
+    }
+  };
+
 
   useEffect(() => {
     const loadIntegrations = async () => {
@@ -32,50 +197,15 @@ export default function IntegrationsSettingsPage() {
       }
 
       const combined = Object.values(PROVIDERS).map((p: any) => {
-        // Gmail must never trust the generic in-memory registry.
-        const backendState =
-          p.id === "gmail"
-            ? {}
-            : backendIntegrations.find((b: any) => b.id === p.id) || {};
+        const backendState = backendIntegrations.find((b: any) => b.id === p.id) || {};
 
         return {
           ...p,
           connected: !!(backendState as any).connected,
           accountLabel: (backendState as any).accountLabel || "",
           lastVerifiedAt: (backendState as any).lastVerifiedAt || null,
-          statusUnknown: p.id === "gmail",
         };
       });
-
-      try {
-          const response = await apiRequest<any>(
-            "/settings/gmail"
-          );
-
-          if (
-            response?.success !== true ||
-            typeof response.data?.connected !== "boolean"
-          ) {
-            throw new Error("Invalid Gmail connection status response");
-          }
-
-          const status = response.data;
-
-          const gmail = combined.find((i: any) => i.id === "gmail");
-
-          if (gmail) {
-            gmail.connected = status.connected;
-            gmail.accountLabel = status.gmailAddress || "";
-            gmail.lastVerifiedAt = status.lastVerifiedAt || null;
-            gmail.statusUnknown = false;
-          }
-      } catch (error) {
-        console.warn(
-          "Gmail connection status could not be verified:",
-          error
-        );
-      }
-
       setIntegrations(combined);
     };
 
@@ -88,42 +218,6 @@ export default function IntegrationsSettingsPage() {
       setActiveForm(id);
       setFormValues({});
     } else {
-      if (id === "gmail") {
-        try {
-          const response = await apiRequest<any>(
-            "/settings/gmail",
-            { method: "DELETE" }
-          );
-
-          if (
-            response?.success !== true ||
-            response.data?.connected !== false
-          ) {
-            throw new Error("Gmail disconnect was not confirmed");
-          }
-
-          setIntegrations((list) =>
-            list.map((i) =>
-              i.id === "gmail"
-                ? {
-                    ...i,
-                    connected: false,
-                    accountLabel: "",
-                    lastVerifiedAt: null,
-                    statusUnknown: false,
-                  }
-                : i
-            )
-          );
-
-          toast.success("Gmail disconnected");
-        } catch (error) {
-          console.error("Gmail disconnect failed:", error);
-          toast.error("Gmail disconnect failed. Connection unchanged.");
-        }
-
-        return;
-      }
 
       // Disconnect
       setIntegrations((list) =>
@@ -155,25 +249,14 @@ export default function IntegrationsSettingsPage() {
     e.preventDefault();
     setVerifying(true);
     try {
-      const response = providerId === "gmail"
-        ? await apiRequest<any>("/settings/gmail/connect", {
-            method: "POST",
-            body: JSON.stringify({
-              gmailAddress: formValues.gmailAddress?.trim(),
-              appPassword: formValues.appPassword || "",
-            }),
-          })
-        : await apiRequest<any>(`/settings/integrations/${providerId}/connect`, {
+      const response = await apiRequest<any>(`/settings/integrations/${providerId}/connect`, {
             method: "POST",
             body: JSON.stringify(formValues),
           });
 
       if (response && response.success) {
-        if (providerId === "gmail") {
-          setFormValues({});
-        }
         setIntegrations((list) =>
-          list.map((i) => (i.id === providerId ? { ...i, connected: true, accountLabel: response.accountLabel, lastVerifiedAt: new Date().toISOString(), statusUnknown: false } : i)),
+          list.map((i) => (i.id === providerId ? { ...i, connected: true, accountLabel: response.accountLabel, lastVerifiedAt: new Date().toISOString() } : i)),
         );
         toast.success(`Connected to ${response.accountLabel}`);
         setActiveForm(null);
@@ -198,6 +281,94 @@ export default function IntegrationsSettingsPage() {
           {syncing ? "Syncing..." : "Sync All Data Streams"}
         </NeoButton>
       </div>
+      <section className="mb-6 border-[3px] border-black bg-white p-4">
+        <div className="mb-3">
+          <h3 className="font-display text-lg font-black">
+            Connect Accounts with OAuth
+          </h3>
+          <p className="text-xs font-medium text-black/70">
+            Secure provider authorization. Credentials stay
+            on the MarketOS backend.
+          </p>
+        </div>
+
+        {oauthLoading && (
+          <p className="mb-3 text-sm">Checking OAuth connections...</p>
+        )}
+
+        {oauthError && (
+          <p role="alert" className="mb-3 text-sm font-bold text-red-700">
+            OAuth status: {oauthError}
+          </p>
+        )}
+
+        <div className="space-y-3">
+          {OAUTH_CONNECT_PROVIDERS.map((provider) => (
+            <div
+              key={provider.id}
+              className="border-[2px] border-black p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="font-bold">{provider.label}</span>
+
+                <button
+                  type="button"
+                  disabled={oauthBusy || oauthLoading}
+                  onClick={() => void startOAuthConnection(provider.id)}
+                  className="border-[2px] border-black bg-cyan-200 px-3 py-2 text-xs font-black disabled:opacity-50"
+                >
+                  Connect / Reconnect Account
+                </button>
+              </div>
+
+              {oauthConnections
+                .filter((connection) => connection.provider === provider.id)
+                .map((connection) => (
+                  <div
+                    key={connection.id}
+                    className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-black/20 pt-3"
+                  >
+                    <div className="order-last w-full">
+                      <OAuthAssetPicker
+                        connectionId={connection.id}
+                        provider={connection.provider}
+                        status={connection.connectionStatus}
+                      />
+                    </div>
+                    <div className="text-xs font-mono">
+                      <div className="font-bold">
+                        {connection.accountLabel || "Google account"}
+                      </div>
+                      <div>
+                        Status: {connection.connectionStatus || "UNKNOWN"}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={oauthBusy || oauthLoading}
+                      onClick={() =>
+                        void disconnectOAuthConnection(connection)
+                      }
+                      className="border-2 border-black px-3 py-2 text-xs font-bold disabled:opacity-50"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ))}
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          disabled={oauthBusy || oauthLoading}
+          onClick={() => void loadOAuthConnections()}
+          className="mt-4 text-xs font-bold underline disabled:opacity-50"
+        >
+          Refresh verified connection status
+        </button>
+      </section>
       <ul className="flex flex-col">
         {integrations.map((i) => (
           <li
@@ -210,9 +381,6 @@ export default function IntegrationsSettingsPage() {
                   <span className="font-display font-black text-lg">{i.label}</span>
                   <NeoBadge tone={i.connected ? "success" : "info"}>{i.category}</NeoBadge>
                   {i.advanced && <NeoBadge tone="warning">Advanced</NeoBadge>}
-                  {i.id === "gmail" && i.statusUnknown && (
-                    <NeoBadge tone="warning">Status not verified</NeoBadge>
-                  )}
                 </div>
                 <p className="font-medium text-black/70 mt-1">{i.description}</p>
                 {i.expireWarning && <p className="text-xs text-orange-600 mt-1">{i.expireWarning}</p>}
@@ -236,24 +404,6 @@ export default function IntegrationsSettingsPage() {
             {activeForm === i.id && !i.connected && (
               <div className="mt-4 p-4 border-[3px] border-black bg-blue-50">
                 <form onSubmit={(e) => handleConnect(e, i.id)} className="space-y-4">
-                  {i.id === "gmail" && (
-                    <div className="border-[2px] border-black bg-yellow-100 p-3 space-y-2">
-                      <p className="text-sm font-bold">
-                        Need a 16-character Google App Password?
-                      </p>
-                      <p className="text-xs">
-                        Enable Google 2-Step Verification, then generate a password for MarketOS.
-                      </p>
-                      <a
-                        href="https://myaccount.google.com/apppasswords"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block border-[2px] border-black bg-yellow-300 px-4 py-3 text-center text-sm font-black hover:bg-yellow-400"
-                      >
-                        Generate Google App Password ?
-                      </a>
-                    </div>
-                  )}
                   {i.fields.map((f: any) => (
                     <div key={f.key}>
                       <label className="block text-xs font-bold font-mono mb-1">{f.label}</label>
