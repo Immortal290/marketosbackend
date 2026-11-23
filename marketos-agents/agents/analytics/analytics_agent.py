@@ -29,6 +29,7 @@ from utils.kafka_bus import publish_event, Topics
 from utils.logger import agent_log, step_banner, kv, section, divider
 from utils.json_utils import extract_json, safe_float, safe_int
 from core.agent_base import AgentBase
+from agents.analytics.ga4_metrics import normalize_ga4_summary, format_ga4_context
 
 ANALYTICSAGENT_SKILLS = [
     "analytics-tracking","revops","ab-test-setup"
@@ -213,6 +214,47 @@ REQUIRED JSON SCHEMA:
 # ── Agent Node ────────────────────────────────────────────────────────────────
 
 def analytics_agent_node(state: dict) -> dict:
+    # Separate GA4 analysis path. Does not query ClickHouse,
+    # publish Kafka events, or execute campaign delivery.
+    if state.get("ga4_mode") == "standalone":
+        summary = normalize_ga4_summary(state.get("ga4_summary"))
+
+        if summary is None:
+            raise ValueError("Validated GA4 summary required")
+
+        context = format_ga4_context(summary)
+
+        response = get_llm(temperature=0).invoke([
+            SystemMessage(content=(
+                "You are a GA4 website analytics specialist. "
+                "Analyze website traffic only. Do not infer email "
+                "delivery performance or campaign causality. "
+                "Return JSON containing overall_health, top_insight, "
+                "and recommended_action."
+            )),
+            HumanMessage(content=context),
+        ])
+
+        insight = extract_json(response.content.strip())
+
+        if not isinstance(insight, dict):
+            raise ValueError("Invalid GA4 insight response")
+
+        return {
+            "analytics_result": {
+                "source": "ga4",
+                "ga4_summary": summary,
+                "insight": insight,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            "current_step": "complete",
+            "trace": state.get("trace", []) + [{
+                "agent": "analytics_agent",
+                "source": "ga4",
+                "status": "completed",
+            }],
+        }
+
     step_banner("ANALYTICS AGENT  ─  Campaign Performance Analysis")
 
     plan_data    = state.get("campaign_plan") or {}
@@ -253,6 +295,15 @@ REAL-TIME METRICS:
 - Unsubscribes:      {metrics.get('unsubscribes', 0):,}
 ANOMALIES DETECTED: {len(anomalies)} ({', '.join(a['metric'] for a in anomalies) or 'none'})
 """
+    # GA4 input is optional. The trusted Node backend must
+    # authorize and retrieve these metrics before passing them.
+    # Keep website metrics separate from email campaign metrics.
+    ga4_summary = normalize_ga4_summary(
+        state.get("ga4_summary")
+    )
+
+    if ga4_summary is not None:
+        metrics_context += format_ga4_context(ga4_summary)
     agent = AnalyticsAgent()
 
     messages = [SystemMessage(content=agent.build_prompt(ANALYTICSAGENT_EXPERTISE)), HumanMessage(content=metrics_context)]
@@ -319,6 +370,7 @@ ANOMALIES DETECTED: {len(anomalies)} ({', '.join(a['metric'] for a in anomalies)
     return {
         **state,
         "analytics_result": {
+            **({"ga4_summary": ga4_summary} if ga4_summary is not None else {}),
             "snapshot_id": snapshot_id,
             "metrics":     metrics,
             "anomalies":   anomalies,

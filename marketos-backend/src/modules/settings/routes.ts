@@ -1,4 +1,9 @@
 import gmailRoutes from './gmail-routes';
+import oauthRoutes from './oauth-routes';
+import oauthGmailWorkflowRoutes from './oauth-gmail-workflow-routes';
+import oauthAudienceCrmRoutes from './oauth-audience-crm-routes';
+import oauthMarketingListRoutes from './oauth-marketing-list-routes';
+import oauthAdCampaignRoutes from './oauth-ad-campaign-routes';
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
 import { PROVIDERS } from './providers';
@@ -18,6 +23,11 @@ const router = Router();
 
 // Protected, workspace-scoped Gmail integration.
 router.use('/gmail', gmailRoutes);
+router.use('/oauth', oauthAudienceCrmRoutes);
+router.use('/oauth', oauthMarketingListRoutes);
+router.use('/oauth', oauthAdCampaignRoutes);
+router.use('/oauth', oauthGmailWorkflowRoutes);
+router.use('/oauth', oauthRoutes);
 
 // In-memory fallback stores (linked and synced with Prisma when DB is available)
 let workspaceSettings = {

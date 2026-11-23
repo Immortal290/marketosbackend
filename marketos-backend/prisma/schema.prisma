@@ -22,6 +22,7 @@ model User {
   history    CampaignHistory[]
   authSessions   AuthSession[]
   authIdentities AuthIdentity[]
+  oauthConnections OAuthConnection[] @relation("OAuthConnectionCreator")
 }
 
 model Workspace {
@@ -34,6 +35,7 @@ model Workspace {
   campaigns     Campaign[]
   brandProfiles BrandProfile[]
   gmailConnection GmailConnection?
+  oauthConnections OAuthConnection[]
 }
 
 model WorkspaceMember {
@@ -249,4 +251,29 @@ model GmailConnection {
   updatedAt            DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model OAuthConnection {
+  id                    String    @id @default(uuid())
+  workspaceId           String
+  connectedByUserId     String
+  provider              String
+  providerAccountId     String
+  accountLabel          String?
+  encryptedAccessToken  String
+  encryptedRefreshToken String?
+  grantedScopes         String[]  @default([])
+  tokenExpiresAt        DateTime?
+  connectionStatus      String    @default("ACTIVE")
+  selectedAssets        Json?
+  lastVerifiedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedBy User @relation("OAuthConnectionCreator", fields: [connectedByUserId], references: [id])
+
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider])
+  @@index([connectedByUserId])
 }

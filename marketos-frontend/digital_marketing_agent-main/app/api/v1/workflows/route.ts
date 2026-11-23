@@ -2,80 +2,90 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const BACKEND_CANDIDATES = [
-  process.env.NEXT_PUBLIC_API_BASE_URL,
+const BACKENDS = [
   process.env.BACKEND_URL,
   process.env.RAILWAY_BACKEND_URL,
+  process.env.NEXT_PUBLIC_API_BASE_URL,
   "http://marketosbackend.railway.internal:3000",
   "http://marketos-backend.railway.internal:3000",
-  "http://localhost:3000",
-].filter((url): url is string => Boolean(url) && typeof url === "string");
+  "http://localhost:3001",
+].filter((url): url is string => Boolean(url));
 
-export async function POST(req: NextRequest) {
-  let bodyText = "";
-  try {
-    bodyText = await req.text();
-  } catch (_e) {}
+async function forward(
+  req: NextRequest,
+  method: "GET" | "POST",
+  path: string
+) {
+  const authorization = req.headers.get("authorization");
 
-  for (const base of BACKEND_CANDIDATES) {
-    if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
-    try {
-      const targetUrl = `${base.replace(/\/$/, "")}/api/v1/workflows`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: bodyText,
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        return NextResponse.json(data);
-      }
-    } catch (_err) {}
+  if (!authorization || !/^Bearer \S+$/.test(authorization)) {
+    return NextResponse.json(
+      { success: false, error: "Authentication required" },
+      { status: 401 }
+    );
   }
 
-  // Fallback response if backend offline
-  const payload = bodyText ? JSON.parse(bodyText) : {};
-  return NextResponse.json({
-    success: true,
-    data: {
-      runId: `run-${Date.now()}`,
-      command: payload.command || "Workflow",
-      status: "running",
-      steps: [
-        { id: `step-1`, agentName: "SupervisorAgent", status: "running" },
-        { id: `step-2`, agentName: "CopyAgent", status: "pending" },
-        { id: `step-3`, agentName: "ComplianceAgent", status: "pending", requiresApproval: true },
-      ],
-    },
-  });
+  const body = method === "POST" ? await req.text() : undefined;
+
+  for (const candidate of BACKENDS) {
+    const base = candidate
+      .replace(/\/+$/, "")
+      .replace(/\/api\/v1$/, "");
+
+    if (base === "http://localhost:3000" &&
+        process.env.PORT === "3000") {
+      continue;
+    }
+
+    try {
+      const response = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+          Authorization: authorization,
+          ...(method === "POST"
+            ? { "Content-Type": "application/json" }
+            : {}),
+        },
+        body,
+        signal: AbortSignal.timeout(4000),
+        cache: "no-store",
+      });
+
+      return new NextResponse(await response.text(), {
+        status: response.status,
+        headers: {
+          "Content-Type":
+            response.headers.get("content-type") || "application/json",
+        },
+      });
+    } catch {
+      // Try the next configured backend only if unreachable.
+    }
+  }
+
+  return NextResponse.json(
+    { success: false, error: "Workflow backend unavailable" },
+    { status: 502 }
+  );
+}
+
+export async function POST(req: NextRequest) {
+  return forward(req, "POST", "/api/v1/workflows");
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const runId = url.pathname.split("/").pop();
+  const runId = req.nextUrl.searchParams.get("runId");
 
-  for (const base of BACKEND_CANDIDATES) {
-    if (base.includes("localhost:3000") && process.env.PORT === "3000") continue;
-    try {
-      const targetUrl = `${base.replace(/\/$/, "")}/api/v1/workflows/${runId}`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(targetUrl, { signal: controller.signal });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        return NextResponse.json(data);
-      }
-    } catch (_err) {}
+  if (!runId || !/^[A-Za-z0-9_-]{1,128}$/.test(runId)) {
+    return NextResponse.json(
+      { success: false, error: "Valid runId required" },
+      { status: 400 }
+    );
   }
 
-  return NextResponse.json({ success: true, data: { id: runId, status: "completed", steps: [] } });
+  return forward(
+    req,
+    "GET",
+    `/api/v1/workflows/${encodeURIComponent(runId)}`
+  );
 }

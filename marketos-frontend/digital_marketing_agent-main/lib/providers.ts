@@ -1,45 +1,4 @@
 export const PROVIDERS: Record<string, any> = {
-  gmail: {
-    id: "gmail",
-    label: "Gmail",
-    category: "Email",
-    description: "Connect Gmail securely to send approved email campaigns.",
-    fields: [
-      {
-        key: "gmailAddress",
-        label: "Gmail Address",
-        placeholder: "youraccount@gmail.com",
-        secret: false,
-        regex: /^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/i,
-      },
-      {
-        key: "appPassword",
-        label: "16-Character Google App Password",
-        placeholder: "Enter your App Password",
-        secret: true,
-        regex: /^(?:[a-zA-Z0-9]\s*){16}$/,
-      },
-    ],
-    guide: [
-      {
-        field: "Step 1",
-        text: "Enable 2-Step Verification on your Google account.",
-      },
-      {
-        field: "Step 2",
-        text: "Open https://myaccount.google.com/apppasswords",
-      },
-      {
-        field: "Step 3",
-        text: "Generate an App Password and enter it above.",
-      },
-      {
-        field: "Security",
-        text: "Use a separate test Gmail account first. Never share the password.",
-      },
-    ],
-  },
-
   mailchimp: {
     id: "mailchimp",
     label: "Mailchimp",
@@ -50,8 +9,8 @@ export const PROVIDERS: Record<string, any> = {
       { key: "audienceId", label: "Audience ID", placeholder: "a1b2c3d4e5", secret: false, regex: /^[a-f0-9]{8,12}$/ },
     ],
     guide: [
-      { field: "API Key", text: "Account → Extras → API keys" },
-      { field: "Audience ID", text: "Audience → Settings → Audience name and defaults" }
+      { field: "API Key", text: "Account â†’ Extras â†’ API keys" },
+      { field: "Audience ID", text: "Audience â†’ Settings â†’ Audience name and defaults" }
     ],
     async verify({ apiKey, audienceId }: any) {
       const dc = apiKey.split("-")[1];
@@ -76,7 +35,7 @@ export const PROVIDERS: Record<string, any> = {
     ],
     guide: [
       { field: "Portal ID", text: "Shown in the HubSpot URL and account menu" },
-      { field: "Private App Token", text: "Settings → Integrations → Private Apps" }
+      { field: "Private App Token", text: "Settings â†’ Integrations â†’ Private Apps" }
     ],
     async verify({ portalId, token }: any) {
       const r = await fetch("https://api.hubapi.com/account-info/v3/details", { headers: { Authorization: `Bearer ${token}` } });
@@ -95,12 +54,12 @@ export const PROVIDERS: Record<string, any> = {
     fields: [
       { key: "adAccountId", label: "Ad Account ID", placeholder: "act_1234567890", secret: false, regex: /^act_\d{5,20}$/ },
       { key: "pixelId", label: "Pixel ID", placeholder: "123456789012345", secret: false, regex: /^\d{10,20}$/ },
-      { key: "token", label: "Access Token", placeholder: "EAAB••••••••", secret: true, regex: /^EA[A-Za-z0-9]{20,}$/ },
+      { key: "token", label: "Access Token", placeholder: "EAABâ€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢", secret: true, regex: /^EA[A-Za-z0-9]{20,}$/ },
     ],
     guide: [
-      { field: "Ad Account ID", text: "Ads Manager → Account overview" },
-      { field: "Pixel ID", text: "Events Manager → Data sources" },
-      { field: "Access Token", text: "Business Settings → System users → Generate token (needs ads_read, ads_management)" }
+      { field: "Ad Account ID", text: "Ads Manager â†’ Account overview" },
+      { field: "Pixel ID", text: "Events Manager â†’ Data sources" },
+      { field: "Access Token", text: "Business Settings â†’ System users â†’ Generate token (needs ads_read, ads_management)" }
     ],
     async verify({ adAccountId, pixelId, token }: any) {
       const q = (path: string, f: string) => fetch(`https://graph.facebook.com/v21.0/${path}?fields=${f}&access_token=${token}`);
@@ -123,13 +82,13 @@ export const PROVIDERS: Record<string, any> = {
       { key: "adAccountId", label: "Ad Account ID", placeholder: "512345678", secret: false, regex: /^\d{5,15}$/ },
       { key: "companyPageId", label: "Company Page ID", placeholder: "12345678", secret: false, regex: /^\d{5,15}$/ },
       { key: "insightPartnerId", label: "Insight Partner ID", placeholder: "1234567", secret: false, regex: /^\d{5,15}$/ },
-      { key: "token", label: "Access Token", placeholder: "AQV••••••••", secret: true, regex: /^AQV[a-zA-Z0-9_-]{10,}$/ },
+      { key: "token", label: "Access Token", placeholder: "AQVâ€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢", secret: true, regex: /^AQV[a-zA-Z0-9_-]{10,}$/ },
     ],
     guide: [
-      { field: "Ad Account ID", text: "Campaign Manager → Account assets" },
+      { field: "Ad Account ID", text: "Campaign Manager â†’ Account assets" },
       { field: "Company Page ID", text: "Admin view URL of the page" },
-      { field: "Insight Partner ID", text: "Campaign Manager → Insight Tag" },
-      { field: "Access Token", text: "LinkedIn Developer app → OAuth token tool" }
+      { field: "Insight Partner ID", text: "Campaign Manager â†’ Insight Tag" },
+      { field: "Access Token", text: "LinkedIn Developer app â†’ OAuth token tool" }
     ],
     async verify({ adAccountId, token }: any) {
       const r = await fetch(`https://api.linkedin.com/rest/adAccounts/${adAccountId}`, {
@@ -156,8 +115,8 @@ export const PROVIDERS: Record<string, any> = {
       { key: "serviceAccount", label: "Service account JSON", placeholder: '{"type":"service_account",...}', secret: true, regex: /"private_key":/ },
     ],
     guide: [
-      { field: "Property ID", text: "GA4 → Admin → Property details" },
-      { field: "Service account JSON", text: "Google Cloud → IAM → Service accounts → Keys → Add key (JSON). Then add the service account's email as Viewer in GA4 → Admin → Property access management" }
+      { field: "Property ID", text: "GA4 â†’ Admin â†’ Property details" },
+      { field: "Service account JSON", text: "Google Cloud â†’ IAM â†’ Service accounts â†’ Keys â†’ Add key (JSON). Then add the service account's email as Viewer in GA4 â†’ Admin â†’ Property access management" }
     ],
     async verify({ propertyId, serviceAccount }: any) {
       // Mocking verification since google-auth-library is heavy for frontend, we just regex check it and do a fake ok
@@ -187,8 +146,8 @@ export const PROVIDERS: Record<string, any> = {
     ],
     guide: [
       { field: "Customer ID", text: "Top right of Google Ads" },
-      { field: "Developer token", text: "Ads manager account → Tools → API Center" },
-      { field: "OAuth Client ID / Secret", text: "Google Cloud → APIs & Services → Credentials" },
+      { field: "Developer token", text: "Ads manager account â†’ Tools â†’ API Center" },
+      { field: "OAuth Client ID / Secret", text: "Google Cloud â†’ APIs & Services â†’ Credentials" },
       { field: "Refresh token", text: "Generated once via the OAuth Playground" }
     ],
     async verify({ customerId }: any) {
@@ -207,7 +166,7 @@ export const PROVIDERS: Record<string, any> = {
       { key: "keySecret", label: "Key Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxx", secret: true, regex: /^[a-zA-Z0-9]{16,32}$/ },
     ],
     guide: [
-      { field: "Key ID", text: "Razorpay Dashboard → Settings → API Keys" },
+      { field: "Key ID", text: "Razorpay Dashboard â†’ Settings â†’ API Keys" },
       { field: "Key Secret", text: "Generated alongside Key ID in Razorpay Dashboard" }
     ],
     async verify({ keyId, keySecret }: any) {
